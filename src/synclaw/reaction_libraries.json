@@ -1,0 +1,29 @@
+{
+  "description": "Bundled reaction-template sources under data/reaction_templates/; no SMARTS appears in more than one.",
+  "families": {
+    "file": "families.json",
+    "sha256": "f956267aba371d217ef085580e923451c2a4246eda72b37a2dcc55eb7046a1ac"
+  },
+  "sources": {
+    "synformer": {
+      "file": "synformer/templates.jsonl",
+      "templates": 114,
+      "sha256": "97bbb27a44f73af9d2218713e0843f448321686b0717e8194810d1fdcb8bb944"
+    },
+    "paroutes": {
+      "file": "paroutes/templates.jsonl",
+      "templates": 176,
+      "sha256": "ba939e9db6376f0ffd77132903b36ef071fab292da525bb260dcb816bd7d4e92"
+    },
+    "ord": {
+      "file": "ord/templates.jsonl",
+      "templates": 203,
+      "sha256": "3e7d18c47a1289c825bfe83813265b3eaf044e3382c5839e566aec36d977c335"
+    },
+    "nvidia": {
+      "file": "nvidia/templates.jsonl",
+      "templates": 8,
+      "sha256": "33a39c9f3463a251c67f0efd92fabf390e276bbf0e40dd1b420e0db07d75318f"
+    }
+  }
+}

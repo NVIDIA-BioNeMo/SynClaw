@@ -1,0 +1,67 @@
+[build-system]
+# 77 is the first release that accepts a PEP 639 SPDX `license` expression.
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "synclaw"
+dynamic = ["version"]
+description = "Agentic retrosynthesis planning toolkit."
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.11,<3.15"
+dependencies = [
+    "numpy>=2.0",
+    "rdkit==2026.3.2",
+]
+
+[project.optional-dependencies]
+mcp = ["mcp>=2,<3"]
+dev = [
+    "packaging",
+    "pytest",
+    "ruff==0.15.15",  # CPY001 needs preview mode, which can change other rules between versions.
+]
+
+[project.scripts]
+synclaw = "synclaw.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["synclaw*"]
+# Without this, a subpackage missing __init__.py is silently discovered as a
+# namespace package instead of failing the build.
+namespaces = false
+
+[tool.setuptools.dynamic]
+version = {attr = "synclaw.__version__"}
+
+[tool.setuptools.package-data]
+# Both are read at runtime, so they must ship in the wheel.
+synclaw = ["providers.json", "reaction_libraries.json"]
+
+[tool.uv]
+# Refresh editable metadata when the single version source changes.
+cache-keys = [{file = "pyproject.toml"}, {file = "src/synclaw/__init__.py"}]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+# Pin first-party detection so import ordering does not depend on the invocation directory.
+src = ["src", "."]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "CPY001"]
+ignore = ["E501"]
+# CPY001 is a preview rule; explicit-preview-rules keeps every other preview rule off.
+preview = true
+explicit-preview-rules = true
+
+[tool.ruff.lint.flake8-copyright]
+# Every Python file starts with the NVIDIA Apache-2.0 SPDX header.
+notice-rgx = '\A(#!.*\n)?# SPDX-FileCopyrightText: Copyright \(c\) \d{4} NVIDIA CORPORATION & AFFILIATES\. All rights reserved\.\n# SPDX-License-Identifier: Apache-2\.0\n'

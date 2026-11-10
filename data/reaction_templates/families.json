@@ -1,0 +1,1399 @@
+{
+  "C-N cross-coupling": {
+    "description": "Forms aryl C-N bonds from aryl halides or triflates and amines, or from arylboronic acids and anilines or NH five-membered heteroarenes.",
+    "search_terms": [
+      "C-N cross-coupling",
+      "C-N coupling",
+      "N arylation",
+      "Chan Lam coupling",
+      "arylboronic acid heteroarene",
+      "Buchwald Hartwig",
+      "Chan Lam",
+      "aryl amination"
+    ]
+  },
+  "N-oxide formation": {
+    "description": "Oxidizes azaarene nitrogen to an N-oxide in the encoded ring contexts.",
+    "search_terms": [
+      "N-oxide formation",
+      "azaaryl N oxidation",
+      "mCPBA",
+      "hydrogen peroxide"
+    ]
+  },
+  "N-protection": {
+    "description": "Installs Boc on aliphatic amines or an enol-ether-derived protecting group on an N-H azole.",
+    "search_terms": [
+      "amine protection",
+      "Boc protection",
+      "azole N protection",
+      "enol ether"
+    ]
+  },
+  "abstract carbonyl transformation": {
+    "description": "Adds an O, N, or nH nucleophile to a ketone and forms a heteroatom-substituted tertiary or quaternary carboxylic acid product.",
+    "search_terms": [
+      "abstract carbonyl transformation",
+      "ketone nucleophile addition",
+      "carboxylated tertiary alcohol",
+      "carboxylated amine",
+      "quaternary carboxylic acid"
+    ]
+  },
+  "acetal formation": {
+    "description": "Forms acetals or ketals by alcohol addition, carbonyl protection (including cyclic acetals of aromatic aldehydes with vicinal diols), or catechol methylenation.",
+    "search_terms": [
+      "acetal formation",
+      "ketal formation",
+      "carbonyl protection",
+      "catechol methylenation",
+      "cyclic acetal",
+      "aldehyde protection",
+      "dioxolane"
+    ]
+  },
+  "acid chloride formation": {
+    "description": "Converts a carboxylic acid to an acyl chloride.",
+    "search_terms": [
+      "acid chloride formation",
+      "carboxylic acid chlorination",
+      "acyl chloride",
+      "SOCl2-like"
+    ]
+  },
+  "acyl activation": {
+    "description": "Converts carboxylic acids, including aromatic acids, to acyl chlorides using an explicit chlorinating reactant such as thionyl chloride.",
+    "search_terms": [
+      "acyl chloride formation",
+      "acid chloride",
+      "thionyl chloride",
+      "oxalyl chloride",
+      "acyl chloride",
+      "acid activation"
+    ]
+  },
+  "alcohol halogenation": {
+    "description": "Converts an alcohol or phenol-like OH group to a bromide-bearing carbon product.",
+    "search_terms": [
+      "alcohol halogenation",
+      "alcohol bromination",
+      "hydroxyl to bromide",
+      "alkyl bromide formation",
+      "phenol bromide abstraction"
+    ]
+  },
+  "alkene C-C coupling": {
+    "description": "Builds substituted alkenes by Heck-type coupling of alkenes with alkyl or aryl bromides or iodides, vinyl-organometallic coupling, or cross metathesis.",
+    "search_terms": [
+      "alkene C-C coupling",
+      "Heck reaction",
+      "alkene coupling",
+      "vinyl substitution",
+      "C-C coupling",
+      "Heck coupling",
+      "Suzuki vinylation",
+      "Stille vinylation",
+      "cross metathesis"
+    ]
+  },
+  "alkene formation": {
+    "description": "Forms alkenes by alcohol elimination; use the encoded beta site and check unspecified E/Z geometry.",
+    "search_terms": [
+      "alcohol dehydration",
+      "elimination",
+      "alkene synthesis"
+    ]
+  },
+  "alkene-forming carbonyl condensation": {
+    "description": "Condenses aldehydes with enolizable carbonyl compounds or activated methyl or methylene partners to form substituted alkenes.",
+    "search_terms": [
+      "alkene-forming carbonyl condensation",
+      "Knoevenagel",
+      "aldehyde condensation",
+      "alkene formation",
+      "activated methyl",
+      "aldol condensation",
+      "Claisen Schmidt",
+      "enone synthesis"
+    ]
+  },
+  "alkene-forming carbonyl transformation": {
+    "description": "Converts an aldehyde or ketone and a haloalkyl partner into an alkene product at the former carbonyl carbon.",
+    "search_terms": [
+      "alkene-forming carbonyl transformation",
+      "olefination",
+      "alkene formation",
+      "carbonyl alkylidene formation",
+      "haloalkyl carbonyl coupling"
+    ]
+  },
+  "alkyne C-C coupling": {
+    "description": "Forms alkyl- or aryl-alkynyl bonds by Sonogashira-type coupling of terminal alkynes with alkyl or aryl halides (vinyl halides do not match), or by a specific net alkyne-exchange rule.",
+    "search_terms": [
+      "alkyne C-C coupling",
+      "Sonogashira coupling",
+      "alkynylation",
+      "terminal alkyne coupling",
+      "C-C alkyne formation",
+      "heteroaryl alkyne",
+      "alkyne exchange"
+    ]
+  },
+  "alkyne carbonyl formation": {
+    "description": "Couples a terminal alkyne with an acyl halide or aldehyde-like carbonyl halide partner to form an alkynyl ketone.",
+    "search_terms": [
+      "alkyne carbonyl formation",
+      "ynone formation",
+      "acyl Sonogashira",
+      "terminal alkyne acylation",
+      "alkynyl ketone"
+    ]
+  },
+  "alpha halogenation": {
+    "description": "Brominates the alpha position of carbonyl compounds, including carboxylic acids or carboxylates with an alpha C-H and alpha methyl groups with an implicit bromine source.",
+    "search_terms": [
+      "alpha halogenation",
+      "alpha halo acid",
+      "Hell Volhard Zelinsky",
+      "alpha bromination",
+      "bromo carbonyl",
+      "alpha bromoketone",
+      "carbonyl halogenation"
+    ]
+  },
+  "amide formation": {
+    "description": "Forms amides by acylating amines with acids or O, Cl, N, or S-linked donors; includes hydroxamates, nitrile hydration, ring openings, and selected net multistep rules.",
+    "search_terms": [
+      "amide coupling",
+      "carboxylic acid plus amine",
+      "acyl chloride amine",
+      "ester aminolysis",
+      "hydroxamate",
+      "acyl donor amination",
+      "beta ketoamide"
+    ]
+  },
+  "amidine formation": {
+    "description": "Forms amidines or guanidine-like products by substituting imidothioate-like precursors with primary amines, or N-aryl formamidines by condensing anilines with formamide dimethyl acetal.",
+    "search_terms": [
+      "amidine formation",
+      "guanidine formation",
+      "imidothioate amine",
+      "thioimidate substitution",
+      "thiourea amine",
+      "formamidine",
+      "DMF DMA",
+      "aniline condensation"
+    ]
+  },
+  "amidoxime formation": {
+    "description": "Adds hydroxylamine to an aromatic nitrile to form an amidoxime; separate rules encode different tautomers, including C(=NH)-NHOH.",
+    "search_terms": [
+      "amidoxime formation",
+      "nitrile hydroxylamine",
+      "amidoxime tautomer",
+      "N-hydroxyamidine"
+    ]
+  },
+  "amine alkylation": {
+    "description": "Forms N-C bonds by N-alkylation with halides or mesylates, activated-alcohol coupling, epoxide opening, reductive coupling, or specific net methyl-transfer rules.",
+    "search_terms": [
+      "amine alkylation",
+      "alkyl halide plus amine",
+      "mesylate displacement",
+      "epoxide opening",
+      "reductive amination",
+      "N-alkylation",
+      "aniline alkylation",
+      "phthalimide alkylation",
+      "N-methylation"
+    ]
+  },
+  "amine conjugate addition": {
+    "description": "Adds a primary or secondary amine or an N-H azole to an activated alkene, such as an acrylonitrile, to form a beta-amino electron-withdrawing product.",
+    "search_terms": [
+      "amine conjugate addition",
+      "aza Michael addition",
+      "activated alkene",
+      "beta amino carbonyl",
+      "beta amino nitrile",
+      "aza Michael",
+      "azole conjugate addition",
+      "cyanoethylation"
+    ]
+  },
+  "aromatic amination": {
+    "description": "Forms aryl C-N bonds by replacing aryl fluoride, heteroaryl chloride, or methylsulfinyl substituents with amine or ammonia nitrogen.",
+    "search_terms": [
+      "aromatic amination",
+      "SNAr amination",
+      "chloro azaarene",
+      "aryl amine",
+      "aryl fluoride amination",
+      "chloroazaarene",
+      "methylsulfinyl displacement"
+    ]
+  },
+  "aromatic deamination": {
+    "description": "Replaces an aromatic amino group by hydrogen through a net deamination step.",
+    "search_terms": [
+      "deamination",
+      "aniline to arene",
+      "diazotization reduction"
+    ]
+  },
+  "aromatic deoxygenation": {
+    "description": "Removes phenolic or aryl-triflate oxygen substitution to restore aromatic C-H.",
+    "search_terms": [
+      "aryl deoxygenation",
+      "phenol deoxygenation",
+      "triflate reduction"
+    ]
+  },
+  "aromatic halodeoxygenation": {
+    "description": "Replaces a hydroxyazaarene oxygen substituent with halogen from an explicit donor.",
+    "search_terms": [
+      "deoxybromination",
+      "hydroxypyridine substitution",
+      "heteroaryl halide"
+    ]
+  },
+  "aromatic hydroxylation": {
+    "description": "Converts an aromatic amine to phenol through a net nitrous-acid transformation.",
+    "search_terms": [
+      "aniline to phenol",
+      "diazotization hydrolysis",
+      "aromatic hydroxylation"
+    ]
+  },
+  "aromatic nitration": {
+    "description": "Replaces aromatic C-H with a nitro group on carbocyclic or azaarene rings, in some rules from explicit nitric acid.",
+    "search_terms": [
+      "aromatic nitration",
+      "nitroarene",
+      "azaaryl nitration",
+      "nitric acid"
+    ]
+  },
+  "aryl C-C coupling": {
+    "description": "Couples a carboxylated aryl partner with an aryl or heteroaryl halide to form a biaryl C-C bond, representing an abstract decarboxylative or directed cross-coupling.",
+    "search_terms": [
+      "aryl C-C coupling",
+      "biaryl coupling",
+      "decarboxylative coupling",
+      "aryl halide coupling",
+      "C-C cross coupling"
+    ]
+  },
+  "azo formation": {
+    "description": "Combines nitrous-acid diazotization and aromatic coupling to construct an azo linkage.",
+    "search_terms": [
+      "azo coupling",
+      "diazotization",
+      "diaryl azo"
+    ]
+  },
+  "benzazole formation": {
+    "description": "Condenses a carboxylic acid or ester-like partner with an ortho amino, hydroxy, thio, or amino arene to form a benzimidazole, benzoxazole, or benzothiazole-like ring.",
+    "search_terms": [
+      "benzazole formation",
+      "benzimidazole formation",
+      "benzoxazole formation",
+      "benzothiazole formation",
+      "ortho diamine condensation"
+    ]
+  },
+  "benzimidazole annulation": {
+    "description": "Closes a benzimidazole ring from an ortho-diamine and an acyl donor, aliphatic carboxylic acid, aldehyde, formic acid, or orthoester.",
+    "search_terms": [
+      "benzimidazole synthesis",
+      "ortho diamine",
+      "benzimidazole annulation",
+      "orthoester cyclization",
+      "benzimidazole",
+      "acid cyclodehydration"
+    ]
+  },
+  "benzisoxazole annulation": {
+    "description": "Forms fused benzisoxazoles from ortho-fluoro aromatic ketones and hydroxylamine.",
+    "search_terms": [
+      "benzisoxazole",
+      "oxime cyclization",
+      "intramolecular SNAr"
+    ]
+  },
+  "benzodiazepinone formation": {
+    "description": "Condenses a 2-aminoaryl ketone or aldehyde with an N-Boc amino acid to form a seven-membered 1,3-dihydro-2H-1,4-benzodiazepin-2-one.",
+    "search_terms": [
+      "benzodiazepinone formation",
+      "1,4-benzodiazepin-2-one",
+      "2-aminobenzophenone cyclization",
+      "Boc amino acid",
+      "seven-membered lactam"
+    ]
+  },
+  "benzofuran formation": {
+    "description": "Combines an alpha-halo electron-withdrawing partner with a salicylaldehyde-like phenol to form a benzofuran ring.",
+    "search_terms": [
+      "benzofuran formation",
+      "salicylaldehyde cyclization",
+      "alpha halo carbonyl",
+      "phenol cyclization"
+    ]
+  },
+  "benzothiazole annulation": {
+    "description": "Closes an N-arylthiourea into an aminobenzothiazole through net oxidative C-S bond formation.",
+    "search_terms": [
+      "Hugerschoff",
+      "aminobenzothiazole",
+      "thiourea cyclization"
+    ]
+  },
+  "borylation": {
+    "description": "Replaces an aryl halide with a boronate or boronic acid using a diboron or trialkyl borate partner, or protects a boronic acid as its pinacol ester.",
+    "search_terms": [
+      "aryl borylation",
+      "boronic acid formation",
+      "diboron",
+      "trialkyl borate",
+      "pinacol boronate",
+      "Bpin protection",
+      "boronic acid esterification"
+    ]
+  },
+  "carbamate annulation": {
+    "description": "Closes amino alcohols into cyclic carbamates with an explicit carbonylating reagent.",
+    "search_terms": [
+      "cyclic carbamate",
+      "oxazolidinone",
+      "amino alcohol cyclization"
+    ]
+  },
+  "carbamate formation": {
+    "description": "Constructs carbamates from amines and O-linked carbonyl donors; some rules encode additional net changes.",
+    "search_terms": [
+      "carbamate formation",
+      "chloroformate amination",
+      "CDI carbamate"
+    ]
+  },
+  "carbon-carbon acylation": {
+    "description": "Forms C-C bonds to an acyl carbon by ester enolate acylation, Claisen condensation, aromatic acylation or formylation, or Stetter-type conjugate acylation.",
+    "search_terms": [
+      "carbon carbon acylation",
+      "beta dicarbonyl formation",
+      "ester acylation",
+      "aromatic acetylation",
+      "Friedel Crafts acylation",
+      "Vilsmeier formylation",
+      "Claisen condensation",
+      "Stetter reaction"
+    ]
+  },
+  "carbon-carbon addition": {
+    "description": "Adds carbon donors to carbonyls, imines, or fulvenes, including net aryl-bromide metalation and ketone addition; organometallic preparation is implicit.",
+    "search_terms": [
+      "carbonyl arylation",
+      "aryl bromide ketone",
+      "tertiary alcohol",
+      "carbonyl addition",
+      "Grignard",
+      "imine allylation",
+      "trifluoromethylation"
+    ]
+  },
+  "carbon-carbon cleavage": {
+    "description": "Removes formyl, carboxyl-derived, or alkyl fragments; inspect mapping carefully for abstract chain-shortening rules.",
+    "search_terms": [
+      "decarbonylation",
+      "decarboxylation",
+      "alkyl chain shortening"
+    ]
+  },
+  "carbon-carbon coupling": {
+    "description": "Forms C-C bonds by Suzuki (boronic acid or boronate ester) or Sonogashira coupling, enolate alkylation, or other net carbon-transfer rules.",
+    "search_terms": [
+      "Suzuki coupling",
+      "Sonogashira coupling",
+      "biaryl",
+      "pinacol boronate",
+      "terminal alkyne",
+      "enolate alkylation",
+      "malonate alkylation",
+      "C-C coupling"
+    ]
+  },
+  "carbon-carbon cross-coupling": {
+    "description": "Couples alkyl, vinyl, alkynyl, or aryl bromides or iodides with each other, or aryl halides with alkylmagnesium, alkylzinc, or methylboroxine partners, to form a C-C bond.",
+    "search_terms": [
+      "carbon-carbon cross-coupling",
+      "C-C coupling",
+      "organohalide coupling",
+      "cross coupling",
+      "alkyl halide coupling",
+      "Kumada",
+      "Negishi",
+      "Suzuki methylation",
+      "alkyl aryl coupling"
+    ]
+  },
+  "carbon-carbon rearrangement": {
+    "description": "Rearranges allyl aryl ethers to ortho-allylated phenols, or performs a specific organopotassium/azaarene skeletal rearrangement with extensive ring-atom reorganization.",
+    "search_terms": [
+      "Claisen rearrangement",
+      "allyl aryl ether",
+      "ortho allylation",
+      "azaarene skeletal editing",
+      "ring rearrangement",
+      "organopotassium"
+    ]
+  },
+  "carbonyl addition": {
+    "description": "Adds an organohalide-derived carbon group to an aldehyde or ketone to form an alcohol product.",
+    "search_terms": [
+      "carbonyl addition",
+      "Grignard addition",
+      "carbonyl alkylation",
+      "alcohol formation",
+      "organohalide carbonyl addition"
+    ]
+  },
+  "carbonyl formation": {
+    "description": "Forms ketones from a nitrile and an organohalide-like partner (an abstract nitrile acylation), or unmasks a ketone by net cleavage of a methyl enol ether.",
+    "search_terms": [
+      "carbonyl formation",
+      "nitrile to ketone",
+      "organohalide coupling",
+      "acyl equivalent",
+      "enol ether hydrolysis",
+      "ketone regeneration",
+      "carbonyl unmasking"
+    ]
+  },
+  "carbonyl transformation": {
+    "description": "Adds or condenses an activated methylene compound with an activated carbamate-like electrophile to form a substituted carbonyl amide product.",
+    "search_terms": [
+      "carbonyl transformation",
+      "activated methylene addition",
+      "carbamate addition",
+      "amide substituted methine",
+      "beta dicarbonyl formation"
+    ]
+  },
+  "carboxylation": {
+    "description": "Installs an aromatic carboxylic acid using explicit carbon dioxide; activation and regioselectivity remain implicit.",
+    "search_terms": [
+      "CO2 carboxylation",
+      "aryl carboxylation",
+      "carboxylic acid synthesis"
+    ]
+  },
+  "cyclic anhydride formation": {
+    "description": "Cyclodehydrates adjacent aromatic carboxylic acids into a cyclic anhydride.",
+    "search_terms": [
+      "phthalic anhydride",
+      "diacid cyclization",
+      "anhydride formation"
+    ]
+  },
+  "cyclic peptide formation": {
+    "description": "Cyclizes an amino ester with a protected amino acid partner to form a diketopiperazine-like cyclic diamide.",
+    "search_terms": [
+      "cyclic peptide formation",
+      "diketopiperazine formation",
+      "cyclic dipeptide",
+      "amino ester cyclization",
+      "protected amino acid"
+    ]
+  },
+  "cyclic urea formation": {
+    "description": "Combines a primary amine and a beta-amino ester with an implicit carbonyl source to form a 3-substituted dihydrouracil (1,3-diazinane-2,4-dione).",
+    "search_terms": [
+      "cyclic urea formation",
+      "dihydrouracil formation",
+      "amine amino ester",
+      "heterocycle formation",
+      "diamine acrylate"
+    ]
+  },
+  "cyclic urea or imide formation": {
+    "description": "Cyclizes an amino ester-like reactant with an amine to form an imidazolidinedione or hydantoin-like cyclic urea product.",
+    "search_terms": [
+      "cyclic urea or imide formation",
+      "hydantoin formation",
+      "cyclic urea formation",
+      "amino ester amine",
+      "imidazolidinedione"
+    ]
+  },
+  "cycloaddition": {
+    "description": "Combines a diene and alkene dienophile to form a cyclohexene ring through a [4+2] cycloaddition.",
+    "search_terms": [
+      "cycloaddition",
+      "Diels Alder",
+      "diene alkene",
+      "cyclohexene formation",
+      "alkyne cycloaddition"
+    ]
+  },
+  "cyclopropane formation": {
+    "description": "Closes a cyclopropane by net dialkylation of an activated methylene with dibromoethane, or by a highly abstract closure between two methyl groups on the same carbon.",
+    "search_terms": [
+      "cyclopropane synthesis",
+      "active methylene",
+      "dibromoethane cyclization",
+      "cyclopropane closure",
+      "gem dimethyl cyclization",
+      "dehydrogenative cyclization"
+    ]
+  },
+  "dehydrogenation": {
+    "description": "Forms alkenes or aromatic heterocycles by net hydrogen removal from the specified saturated substrate.",
+    "search_terms": [
+      "dehydrogenation",
+      "indoline aromatization",
+      "alkene formation"
+    ]
+  },
+  "deprotection": {
+    "description": "Removes Boc, Cbz, benzyl, trityl, THP, silyl, alkyl ether, acetal, acetonide, acyl, or phthalimide protecting groups from N or O; each rule has a specific substrate scope.",
+    "search_terms": [
+      "Cbz deprotection",
+      "THP deprotection",
+      "silyl cleavage",
+      "benzyl deprotection",
+      "acetal cleavage",
+      "Boc deprotection",
+      "ether cleavage",
+      "silyl removal"
+    ]
+  },
+  "diazepine annulation": {
+    "description": "Encodes Boc removal followed by intramolecular condensation to a fused diazepine.",
+    "search_terms": [
+      "diazepine synthesis",
+      "Boc removal cyclization",
+      "fused diazepine"
+    ]
+  },
+  "diazine annulation": {
+    "description": "Condenses a substituted hydrazine with an extended dicarbonyl chain to form a six-membered diazine or dihydrodiazine ring, or glyoxal with an ortho aromatic diamine to form a quinoxaline.",
+    "search_terms": [
+      "diazine annulation",
+      "pyridazine formation",
+      "hydrazine dicarbonyl condensation",
+      "heterocycle formation",
+      "quinoxaline",
+      "glyoxal condensation",
+      "ortho diamine annulation"
+    ]
+  },
+  "enamine formation": {
+    "description": "Forms enamines by replacing the ethoxy group of an ethyl vinyl ether with a primary amine (alkyl, aryl, or acylhydrazide NH2; no activating group is required on the alkene), or by combining a beta-ketoester, propiolate, and primary amine into an unsaturated beta-enamino diester.",
+    "search_terms": [
+      "enamine formation",
+      "vinyl ether substitution",
+      "amine addition",
+      "ethoxy alkene",
+      "beta enamino ester",
+      "three component enamine",
+      "propiolate coupling"
+    ]
+  },
+  "enamine or alkene formation": {
+    "description": "Condenses a beta-dicarbonyl compound, a trimethyl or triethyl orthoester, and a primary amine to form a 2-(aminoalkylidene)-1,3-dicarbonyl enamine. The orthoester carbon must carry a carbon substituent, so orthoformates do not match.",
+    "search_terms": [
+      "enamine or alkene formation",
+      "enamine formation",
+      "beta dicarbonyl condensation",
+      "orthoester amine condensation",
+      "multicomponent condensation"
+    ]
+  },
+  "epoxidation": {
+    "description": "Transfers oxygen from an explicit peroxide or peracid to an alkene, forming an epoxide.",
+    "search_terms": [
+      "epoxidation",
+      "epoxide synthesis",
+      "mCPBA oxidation"
+    ]
+  },
+  "epoxide opening": {
+    "description": "Opens epoxides with primary alkylamines, ammonia, secondary amines, or N-H azoles to form beta-amino alcohols.",
+    "search_terms": [
+      "epoxide opening",
+      "amino alcohol",
+      "amine epoxide",
+      "epoxide aminolysis",
+      "azole epoxide opening"
+    ]
+  },
+  "ester formation": {
+    "description": "Forms esters by alcohol acylation, including acetylation with anhydrides and condensation with aliphatic acids, or by carboxylate alkylation.",
+    "search_terms": [
+      "esterification",
+      "alcohol acylation",
+      "carboxylate alkylation",
+      "acetate formation",
+      "alcohol acetylation",
+      "acid alcohol coupling"
+    ]
+  },
+  "ester hydrolysis": {
+    "description": "Converts methyl, ethyl, tert-butyl, and other encoded alkyl esters to carboxylic acids.",
+    "search_terms": [
+      "ester hydrolysis",
+      "carboxylic acid",
+      "methyl ester cleavage",
+      "ethyl ester cleavage",
+      "tert butyl ester cleavage"
+    ]
+  },
+  "ether formation": {
+    "description": "Forms ethers by O-alkylation, aromatic substitution, alcohol coupling, epoxide opening, oxa-Michael addition, isobutene addition, or diazocarbonyl O-H insertion.",
+    "search_terms": [
+      "ether formation",
+      "Williamson ether",
+      "SNAr etherification",
+      "phenol alkylation",
+      "oxa Michael",
+      "alcohol etherification",
+      "O-H insertion"
+    ]
+  },
+  "ether or thioether formation": {
+    "description": "Couples an alcohol, phenol, or thiol with an organic halide to form an ether or thioether C-O/C-S bond. The halide carbon may be alkyl, aryl, or vinyl, so aryl ether formation also matches; acyl halides are excluded.",
+    "search_terms": [
+      "ether or thioether formation",
+      "ether formation",
+      "thioether formation",
+      "alkyl halide substitution",
+      "Williamson ether synthesis"
+    ]
+  },
+  "fused heteroaromatic annulation": {
+    "description": "Forms fused heteroaromatic rings from ortho-functionalized aryl or heteroaryl halides and terminal alkynes, or fused pyrazolopyrimidines by condensing aminopyrazole-like partners with beta-diketones.",
+    "search_terms": [
+      "fused heteroaromatic annulation",
+      "annulation",
+      "fused heteroaromatic formation",
+      "indole-like formation",
+      "benzofuran-like formation",
+      "pyrazolopyrimidine",
+      "aminopyrazole annulation",
+      "beta diketone"
+    ]
+  },
+  "fused heterocycle annulation": {
+    "description": "Cyclizes a nitrile-containing carbon partner with an anthranilate-like amine ester to form a fused nitrogen heterocycle.",
+    "search_terms": [
+      "fused heterocycle annulation",
+      "fused heterocycle",
+      "quinazolinone formation",
+      "nitrile annulation",
+      "anthranilate condensation"
+    ]
+  },
+  "fused imidazole annulation": {
+    "description": "Forms a fused imidazole from an amino azaarene and an alpha-bromo aromatic ketone.",
+    "search_terms": [
+      "fused imidazole synthesis",
+      "amino azaarene",
+      "alpha bromo ketone"
+    ]
+  },
+  "fused triazine formation": {
+    "description": "Condenses an aminobenzonitrile-like arene with an aliphatic amine to form a fused nitrogen-rich heteroaromatic ring.",
+    "search_terms": [
+      "fused triazine formation",
+      "triazine formation",
+      "aminobenzonitrile annulation",
+      "amine condensation",
+      "fused heterocycle"
+    ]
+  },
+  "guanidine formation": {
+    "description": "Forms guanidines by aniline guanylation, by displacing methylthio from isothiourea-like donors with primary alkylamines, or by an abstract three-amine net transformation.",
+    "search_terms": [
+      "guanidine formation",
+      "aniline guanylation",
+      "chloroamidine",
+      "three amines",
+      "guanidinylation",
+      "isothiourea aminolysis",
+      "guanidine synthesis"
+    ]
+  },
+  "halogen exchange": {
+    "description": "Exchanges chloride for iodide on primary alkyl substrates, aryl chloride for fluoride, or alkyl mesylate for iodide, using an explicit hydrogen halide where encoded.",
+    "search_terms": [
+      "halogen exchange",
+      "alkyl chloride iodide",
+      "Finkelstein reaction",
+      "halex",
+      "aryl fluorination",
+      "mesylate to iodide"
+    ]
+  },
+  "halogenation": {
+    "description": "Introduces halogen at aromatic, heteroaromatic, benzylic, or aliphatic C-H sites, or by replacing alcohol, amino, or lactam groups; activation and selectivity are rule-specific.",
+    "search_terms": [
+      "aromatic bromination",
+      "benzylic bromination",
+      "aryl iodination",
+      "alcohol halogenation",
+      "chlorodehydration",
+      "aryl bromination",
+      "heteroaryl halogenation",
+      "NBS",
+      "C-H halogenation"
+    ]
+  },
+  "heteroaromatic annulation": {
+    "description": "Condenses an ortho-amino aryl carbonyl partner with an enolizable carbonyl compound to form a quinoline-like heteroaromatic ring.",
+    "search_terms": [
+      "heteroaromatic annulation",
+      "quinoline formation",
+      "aniline carbonyl condensation",
+      "Friedlander quinoline"
+    ]
+  },
+  "heteroatom substitution": {
+    "description": "Replaces carbon-bound leaving groups with heteroatom donors; broad queries need activation and valence checks.",
+    "search_terms": [
+      "heteroatom substitution",
+      "halide displacement",
+      "amination"
+    ]
+  },
+  "heterocycle annulation": {
+    "description": "Combines an isothiocyanate, an alpha-halo carbonyl compound, and a primary amine to form an imino-substituted thiazole ring.",
+    "search_terms": [
+      "heterocycle annulation",
+      "thiazole annulation",
+      "isothiocyanate",
+      "primary amine",
+      "heterocycle formation"
+    ]
+  },
+  "heterocycle condensation": {
+    "description": "Condenses an isothiocyanate-derived component with an aryl aldehyde to form a thiazolidinone or rhodanine-like alkene product.",
+    "search_terms": [
+      "heterocycle condensation",
+      "rhodanine formation",
+      "thiazolidinone condensation",
+      "isothiocyanate aldehyde",
+      "heterocycle alkene"
+    ]
+  },
+  "hydrazine formation": {
+    "description": "Encodes the net multistage conversion of an aniline to an arylhydrazine; diazotization and reduction conditions are implicit.",
+    "search_terms": [
+      "arylhydrazine formation",
+      "aniline hydrazine",
+      "diazotization reduction"
+    ]
+  },
+  "hydrostannylation": {
+    "description": "Adds a trialkyltin hydride across a terminal alkyne to give a vinylstannane.",
+    "search_terms": [
+      "hydrostannylation",
+      "vinylstannane",
+      "alkyne hydrometallation"
+    ]
+  },
+  "imidazole formation": {
+    "description": "Cyclizes an alpha-bromoketone with an amidine-like partner to form a substituted imidazole ring.",
+    "search_terms": [
+      "imidazole formation",
+      "alpha bromoketone amidine",
+      "heterocycle annulation",
+      "Debus imidazole"
+    ]
+  },
+  "imide or bis-amide formation": {
+    "description": "Acylates amines with bifunctional acyl donors, such as phthalic anhydride with primary alkylamines, to form imides or bis-amides.",
+    "search_terms": [
+      "imide or bis-amide formation",
+      "imide formation",
+      "bis amide formation",
+      "amine acylation",
+      "dicarbonyl acylation",
+      "phthalimide",
+      "anhydride imidation",
+      "amine protection"
+    ]
+  },
+  "imidoyl halide formation": {
+    "description": "Chlorinates an aldimine carbon using an explicit chlorine donor while retaining the C=N bond.",
+    "search_terms": [
+      "imidoyl chloride",
+      "imine chlorination",
+      "hydroximoyl chloride"
+    ]
+  },
+  "imine or hydrazone formation": {
+    "description": "Condenses an alkyl hydrazine with an aldehyde to form a hydrazone C=N bond.",
+    "search_terms": [
+      "imine or hydrazone formation",
+      "hydrazone formation",
+      "hydrazine aldehyde condensation",
+      "imine formation",
+      "aldehyde condensation"
+    ]
+  },
+  "indazole annulation": {
+    "description": "Forms indazoles from ortho-fluoro aromatic nitriles and a nitrogen partner (aminoindazoles), or from ortho-toluidine and nitrous acid.",
+    "search_terms": [
+      "aminoindazole synthesis",
+      "ortho fluoro nitrile",
+      "indazole annulation",
+      "indazole synthesis",
+      "nitrosative cyclization",
+      "o-toluidine"
+    ]
+  },
+  "indole annulation": {
+    "description": "Forms indoles through Fischer arylhydrazine-carbonyl annulation or ortho-haloaniline-alkyne coupling and cyclization.",
+    "search_terms": [
+      "indole synthesis",
+      "Fischer indole",
+      "arylhydrazine ketone",
+      "halo aniline alkyne"
+    ]
+  },
+  "isothiazole annulation": {
+    "description": "Builds a cyanoisothiazole through the specific dithiazole/enamine ring transformation encoded in the template.",
+    "search_terms": [
+      "isothiazole synthesis",
+      "dithiazole transformation",
+      "cyanoisothiazole"
+    ]
+  },
+  "lactam annulation": {
+    "description": "Forms isoindolinone, benzoxazinone, acridone-like, or piperidinone rings by intramolecular acylation or azadiene cycloaddition.",
+    "search_terms": [
+      "lactam annulation",
+      "isoindolinone synthesis",
+      "benzoxazinone synthesis",
+      "acridone",
+      "piperidinone",
+      "aza Diels Alder",
+      "lactam cyclization"
+    ]
+  },
+  "lactam chlorodehydration": {
+    "description": "Converts an aromatic lactam tautomer into a chloroazaarene using explicit phosphorus oxychloride.",
+    "search_terms": [
+      "lactam chlorodehydration",
+      "POCl3",
+      "pyridone chlorination"
+    ]
+  },
+  "lactam formation": {
+    "description": "Cyclizes a primary amine with an unsaturated dicarbonyl carboxylic acid to form a substituted lactam or pyrrolidinone-like ring.",
+    "search_terms": [
+      "lactam formation",
+      "pyrrolidinone formation",
+      "amine dicarbonyl cyclization",
+      "Michael addition cyclization"
+    ]
+  },
+  "multicomponent heterocycle annulation": {
+    "description": "Combines a urea-like or other nitrogen donor, an aryl aldehyde, and a beta-ketoester-like carbonyl component to form dihydropyrimidinone or aminodihydropyridine rings.",
+    "search_terms": [
+      "multicomponent heterocycle annulation",
+      "Biginelli reaction",
+      "pyrimidinone formation",
+      "multicomponent annulation",
+      "urea aldehyde beta ketoester",
+      "Biginelli-type",
+      "dihydropyrimidinone",
+      "dihydropyridine",
+      "three component annulation"
+    ]
+  },
+  "nitrile formation": {
+    "description": "Forms nitriles by halide substitution (including CuCN substitution of aryl bromides), primary amide dehydration, or net alcohol or amine conversions.",
+    "search_terms": [
+      "nitrile formation",
+      "cyanation",
+      "amide dehydration",
+      "halide to nitrile",
+      "aryl cyanation",
+      "benzonitrile"
+    ]
+  },
+  "nitrile hydrolysis": {
+    "description": "Converts nitriles to carboxylic acids in net graph rules requiring explicit alcohol and water reactants; inspect atom-source roles.",
+    "search_terms": [
+      "nitrile hydrolysis",
+      "nitrile to carboxylic acid",
+      "alcohol water reactants"
+    ]
+  },
+  "nitrogen heterocycle annulation": {
+    "description": "Forms purine- or triazine-like fused nitrogen heterocycles from two primary amines through implicit carbon and nitrogen atoms, or performs other specific nitrogen-ring closures and skeletal edits.",
+    "search_terms": [
+      "nitrogen heterocycle annulation",
+      "purine formation",
+      "triazine formation",
+      "diamine annulation",
+      "nitrogen heterocycle",
+      "azepine formation",
+      "nitrogen insertion",
+      "pyrrole skeletal editing"
+    ]
+  },
+  "olefination": {
+    "description": "Replaces carbonyl oxygen with a carbon fragment, including phosphonium olefination of aromatic aldehydes to terminal alkenes and unusual net methylenation rules.",
+    "search_terms": [
+      "Wittig methylenation",
+      "aldehyde olefination",
+      "terminal alkene",
+      "Wittig olefination",
+      "aldehyde methylenation",
+      "alkene synthesis"
+    ]
+  },
+  "oxadiazole annulation": {
+    "description": "Forms oxadiazole or oxadiazolone rings from amidoxime, acylhydrazine, nitrile, or cyanamide partners, including 1,2,4-oxadiazoles from aromatic acids and aromatic amidoximes.",
+    "search_terms": [
+      "oxadiazole synthesis",
+      "1,2,4 oxadiazole",
+      "1,3,4 oxadiazole",
+      "oxadiazolone",
+      "amidoxime annulation",
+      "1,2,4-oxadiazole",
+      "amidoxime cyclization",
+      "acid condensation"
+    ]
+  },
+  "oxadiazole formation": {
+    "description": "Combines a nitrile-containing partner with a carboxylic acid to form an oxadiazole-like five-membered heteroaromatic ring.",
+    "search_terms": [
+      "oxadiazole formation",
+      "heterocycle formation",
+      "nitrile plus carboxylic acid",
+      "1,2,4-oxadiazole",
+      "oxadiazolone formation"
+    ]
+  },
+  "oxadiazole or thiadiazole formation": {
+    "description": "Condenses a hydrazide-like precursor with an isothiocyanate to form an oxadiazole-like heteroaromatic product bearing an amino substituent.",
+    "search_terms": [
+      "oxadiazole or thiadiazole formation",
+      "oxadiazole formation",
+      "hydrazide isothiocyanate",
+      "thiadiazole formation",
+      "heterocycle annulation"
+    ]
+  },
+  "oxalamide formation": {
+    "description": "Couples two amines through an implicit oxalyl carbonyl linker to form an oxalamide N-C(=O)-C(=O)-N motif.",
+    "search_terms": [
+      "oxalamide formation",
+      "two amines oxalyl",
+      "bis amide formation",
+      "implicit oxalyl source"
+    ]
+  },
+  "oxazoline annulation": {
+    "description": "Constructs an oxazoline from an isocyanoacetamide and aldehyde; inspect template-imposed stereochemistry.",
+    "search_terms": [
+      "oxazoline synthesis",
+      "isocyanide cycloaddition",
+      "aldehyde annulation"
+    ]
+  },
+  "oxidation": {
+    "description": "Oxidizes primary alcohols to aldehydes and secondary alcohols to ketones, and covers benzylic oxidation, alpha hydroxylation, quinone formation, and Baeyer-Villiger oxygen insertion.",
+    "search_terms": [
+      "alcohol oxidation",
+      "primary alcohol aldehyde",
+      "secondary alcohol ketone",
+      "benzylic oxidation",
+      "alpha hydroxylation",
+      "Baeyer Villiger"
+    ]
+  },
+  "oxidative cleavage": {
+    "description": "Cleaves the encoded terminal alkenes to carbonyl products; check the exact product components.",
+    "search_terms": [
+      "alkene oxidative cleavage",
+      "terminal alkene",
+      "carbonyl formation"
+    ]
+  },
+  "oxime formation": {
+    "description": "Condenses hydroxylamine or O-substituted hydroxylamines with aromatic aldehydes or aryl alkyl ketones to form oximes or oxime ethers.",
+    "search_terms": [
+      "oxime formation",
+      "hydroxylamine",
+      "aldehyde oxime",
+      "ketone oxime",
+      "ketoxime",
+      "oxime ether",
+      "hydroxylamine condensation"
+    ]
+  },
+  "oxygen heterocycle annulation": {
+    "description": "Forms fused oxygen heterocycles, such as chromanones from ortho-hydroxy aryl ketones and cyclic ketones, or benzofuranones from mandelic-acid and phenol fragments.",
+    "search_terms": [
+      "oxygen heterocycle annulation",
+      "chromanone formation",
+      "phenol ketone annulation",
+      "oxygen heterocycle",
+      "cyclohexanone condensation",
+      "benzofuranone",
+      "mandelic acid cyclization",
+      "fused lactone"
+    ]
+  },
+  "phosphonate chemistry": {
+    "description": "Forms C-P phosphonates by Arbuzov transformations or removes phosphonate ester protection.",
+    "search_terms": [
+      "Michaelis Arbuzov",
+      "phosphonate synthesis",
+      "phosphonate deprotection"
+    ]
+  },
+  "phosphonium formation": {
+    "description": "Forms phosphonium salts or carbonyl-stabilized phosphoranes used as olefination precursors.",
+    "search_terms": [
+      "phosphonium salt",
+      "Wittig precursor",
+      "ylide generation"
+    ]
+  },
+  "phthalazinone formation": {
+    "description": "Condenses a monosubstituted hydrazine with a 2-formylaryl methyl ester to form a 2-substituted phthalazin-1(2H)-one.",
+    "search_terms": [
+      "phthalazinone formation",
+      "hydrazine aldehyde ester",
+      "2-formylbenzoate",
+      "heterocycle annulation"
+    ]
+  },
+  "protecting group removal": {
+    "description": "Removes a tert-butoxycarbonyl protecting group from an amine to reveal the free amine.",
+    "search_terms": [
+      "protecting group removal",
+      "Boc deprotection",
+      "amine deprotection",
+      "carbamate removal",
+      "protecting group"
+    ]
+  },
+  "pyrazole annulation": {
+    "description": "Forms pyrazole from a specific heteroaryl enaminone and arylhydrazine; the N-atom mapping is uncertain.",
+    "search_terms": [
+      "pyrazole synthesis",
+      "enaminone hydrazine",
+      "heteroaryl pyrazole"
+    ]
+  },
+  "pyrazole formation": {
+    "description": "Condenses a substituted hydrazine with a 1,3-dicarbonyl-like compound to form a pyrazole ring.",
+    "search_terms": [
+      "pyrazole formation",
+      "hydrazine dicarbonyl condensation",
+      "Knorr pyrazole",
+      "heterocycle formation"
+    ]
+  },
+  "pyrrole annulation": {
+    "description": "Forms N-arylpyrroles from anilines and either 1,4-diketone or masked 1,4-dicarbonyl partners.",
+    "search_terms": [
+      "Paal Knorr",
+      "Clauson Kaas",
+      "N-arylpyrrole"
+    ]
+  },
+  "pyrrole formation": {
+    "description": "Condenses a 1,4-dicarbonyl-like chain with a primary amine to form a pyrrole ring.",
+    "search_terms": [
+      "pyrrole formation",
+      "Paal Knorr pyrrole",
+      "dicarbonyl amine condensation",
+      "heterocycle formation"
+    ]
+  },
+  "quinazolinone formation": {
+    "description": "Cyclizes an ortho-amino benzamide-like reactant with a carbonyl compound to form a quinazolinone-like ring.",
+    "search_terms": [
+      "quinazolinone formation",
+      "benzodiazinone",
+      "ortho amino amide",
+      "carbonyl condensation",
+      "anthranilate cyclization"
+    ]
+  },
+  "quinolone annulation": {
+    "description": "Closes an ortho-fluoroaryl enaminone into a quinolone through intramolecular substitution.",
+    "search_terms": [
+      "quinolone synthesis",
+      "enaminone cyclization",
+      "intramolecular SNAr"
+    ]
+  },
+  "reduction": {
+    "description": "Reduces nitro, azide, nitrile, carbonyl, imine, acid, ester, amide, alkene, alkyne, aromatic, indole, or silicon-halide groups; each rule encodes a specific substrate pattern.",
+    "search_terms": [
+      "nitro reduction",
+      "carbonyl reduction",
+      "nitrile reduction",
+      "ester reduction",
+      "hydrogenation",
+      "imine reduction"
+    ]
+  },
+  "reductive amination": {
+    "description": "Couples aldehydes or ketones, including formaldehyde (methylation), azetidinone, and oxetanone, with amines by net reductive amination.",
+    "search_terms": [
+      "reductive amination",
+      "reductive methylation",
+      "aldehyde amine",
+      "ketone amination",
+      "amino oxetane",
+      "amino azetidine"
+    ]
+  },
+  "reductive dehalogenation": {
+    "description": "Replaces aromatic or heteroaromatic halogen substituents with hydrogen; reagent and site selectivity are implicit.",
+    "search_terms": [
+      "hydrodehalogenation",
+      "dechlorination",
+      "debromination",
+      "defluorination"
+    ]
+  },
+  "saturated heterocycle annulation": {
+    "description": "Forms saturated heterocycles, such as fused nitrogen rings from amino arylalkyl precursors and aldehydes, or six-membered N/P rings by primary-amine double addition to divinyl phosphorus.",
+    "search_terms": [
+      "saturated heterocycle annulation",
+      "Pictet Spengler",
+      "aldehyde amine cyclization",
+      "fused pyrrolidine",
+      "saturated heterocycle",
+      "N/P heterocycle",
+      "divinyl phosphorus",
+      "double aza Michael"
+    ]
+  },
+  "silyl protection": {
+    "description": "Converts alcohols to silyl ethers using alkyl- or aryl-substituted chlorosilanes.",
+    "search_terms": [
+      "silyl protection",
+      "silyl ether",
+      "alcohol protection",
+      "chlorosilane",
+      "trialkylsilyl chloride",
+      "TBS protection"
+    ]
+  },
+  "sulfonamide annulation": {
+    "description": "Cyclizes an amine with an aryl sulfonyl chloride bearing an ester-like group to form a cyclic sulfonamide or sultam-like product.",
+    "search_terms": [
+      "sulfonamide annulation",
+      "cyclic sulfonamide",
+      "sultam formation",
+      "sulfonyl chloride amine",
+      "annulation"
+    ]
+  },
+  "sulfonamide formation": {
+    "description": "Forms sulfonamides by N-sulfonylation of amines, anilines, or azoles with sulfonyl halides, including vinyl sulfonamides by sulfonylation with chloroethyl elimination.",
+    "search_terms": [
+      "sulfonamide formation",
+      "sulfonyl chloride amine",
+      "aniline sulfonylation",
+      "azole N sulfonylation",
+      "vinyl sulfonamide",
+      "sulfonylation elimination",
+      "ethenesulfonamide"
+    ]
+  },
+  "sulfonate formation": {
+    "description": "Converts alcohols or phenols to sulfonate esters, including mesylates, arylsulfonates, and triflates.",
+    "search_terms": [
+      "mesylate formation",
+      "triflate formation",
+      "sulfonate ester",
+      "alcohol activation",
+      "mesylation"
+    ]
+  },
+  "sulfone formation": {
+    "description": "Forms a sulfone C-S(=O)2-C linkage from two carbon leaving-group partners with an implicit sulfur dioxide equivalent.",
+    "search_terms": [
+      "sulfone formation",
+      "sulfonyl coupling",
+      "leaving group coupling",
+      "abstract sulfone",
+      "thiol coupling"
+    ]
+  },
+  "sulfonyl chloride formation": {
+    "description": "Forms sulfonyl chlorides by sulfonic-acid activation or aromatic chlorosulfonylation.",
+    "search_terms": [
+      "sulfonyl chloride formation",
+      "sulfonic acid activation",
+      "aromatic chlorosulfonylation"
+    ]
+  },
+  "sulfoxide formation": {
+    "description": "Forms sulfoxides by coupling a thiol-like sulfur nucleophile with a carbon leaving-group partner, or by oxidizing an aryl methyl sulfide with explicit hydrogen peroxide.",
+    "search_terms": [
+      "sulfoxide formation",
+      "thiol coupling",
+      "sulfur oxidation",
+      "leaving group substitution",
+      "sulfoxide synthesis",
+      "sulfide oxidation",
+      "hydrogen peroxide"
+    ]
+  },
+  "sulfur oxidation": {
+    "description": "Oxidizes the encoded thioethers to sulfoxides or sulfones; choose the rule for the intended oxidation state.",
+    "search_terms": [
+      "sulfoxide formation",
+      "sulfone formation",
+      "thioether oxidation"
+    ]
+  },
+  "suzuki cross-coupling": {
+    "description": "Couples aryl or heteroaryl boronic acids with aryl or heteroaryl halides or triflates to form biaryl C-C bonds.",
+    "search_terms": [
+      "suzuki cross-coupling",
+      "Suzuki",
+      "boronic acid",
+      "aryl halide",
+      "biaryl coupling",
+      "Suzuki coupling",
+      "biaryl",
+      "aryl iodide",
+      "aryl triflate"
+    ]
+  },
+  "tetrazole annulation": {
+    "description": "Forms tetrazoles by cycloaddition of an explicit azide to a nitrile, giving the encoded neutral tetrazole tautomer.",
+    "search_terms": [
+      "tetrazole synthesis",
+      "nitrile azide cycloaddition",
+      "azide nitrile cycloaddition",
+      "aryl tetrazole"
+    ]
+  },
+  "tetrazole formation": {
+    "description": "Converts a nitrile into a tetrazole ring using an implicit azide source.",
+    "search_terms": [
+      "tetrazole formation",
+      "nitrile to tetrazole",
+      "azide cycloaddition",
+      "bioisostere"
+    ]
+  },
+  "thiazole annulation": {
+    "description": "Condenses thiourea with an alpha-chloro aliphatic ketone to form an aminothiazole.",
+    "search_terms": [
+      "Hantzsch thiazole",
+      "aminothiazole",
+      "thiourea cyclization"
+    ]
+  },
+  "thiazole formation": {
+    "description": "Converts an alpha-halo carbonyl compound into a 2-aminothiazole (Hantzsch-type); the ring sulfur, ring nitrogen, C2, and amino nitrogen come from an implicit thiourea.",
+    "search_terms": [
+      "thiazole formation",
+      "aminothiazole formation",
+      "alpha halo carbonyl",
+      "thiazole annulation",
+      "Hantzsch thiazole"
+    ]
+  },
+  "thioether formation": {
+    "description": "Forms thioether C-S-C linkages from two organic halides with an implicit sulfur source, or aryl or heteroaryl sulfides from thiols or dimethyl disulfide and halide partners.",
+    "search_terms": [
+      "thioether formation",
+      "sulfide formation",
+      "alkyl halide coupling",
+      "aryl sulfide",
+      "SNAr thiolation",
+      "methylthiolation"
+    ]
+  },
+  "thionation": {
+    "description": "Replaces amide or aromatic lactam carbonyl oxygen with sulfur using explicit Lawesson's reagent or phosphorus pentasulfide.",
+    "search_terms": [
+      "amide thionation",
+      "thioamide formation",
+      "Lawesson reagent",
+      "lactam thionation",
+      "thiopyridone",
+      "P4S10"
+    ]
+  },
+  "thiourea formation": {
+    "description": "Couples an isothiocyanate with a primary or secondary amine to form a thiourea C(=S)-N product.",
+    "search_terms": [
+      "thiourea formation",
+      "isothiocyanate plus amine",
+      "amine coupling",
+      "thiocarbonyl",
+      "isothiocyanate amine"
+    ]
+  },
+  "triazole annulation": {
+    "description": "Forms triazole rings by alkyne-azide cycloaddition of alkyl azides with terminal alkynes, or by hydrazino-azaarene condensation with an orthoester.",
+    "search_terms": [
+      "triazole synthesis",
+      "azide alkyne cycloaddition",
+      "fused triazole",
+      "orthoester annulation",
+      "CuAAC",
+      "1,2,3-triazole"
+    ]
+  },
+  "triazole formation": {
+    "description": "Combines an isothiocyanate, amine, and hydrazide-like component to form an amino-substituted triazole-like heteroaromatic ring.",
+    "search_terms": [
+      "triazole formation",
+      "heterocycle annulation",
+      "aminotriazole",
+      "click reaction",
+      "isothiocyanate hydrazide"
+    ]
+  },
+  "triazole functionalization": {
+    "description": "Combines an organic azide and a primary amine with an implicit three-carbon propargyl unit (the CH2 linker and both triazole carbons) to form a 1-substituted 4-(aminomethyl)-1,2,3-triazole, as in N-propargylation followed by azide-alkyne cycloaddition.",
+    "search_terms": [
+      "triazole functionalization",
+      "triazolylmethyl amine",
+      "azide transformation",
+      "triazole formation",
+      "amine functionalization"
+    ]
+  },
+  "urea formation": {
+    "description": "Forms ureas from amines and isocyanates (including aryl isocyanates) or carbamates, plus an abstract two-amine net rule.",
+    "search_terms": [
+      "urea formation",
+      "isocyanate amine",
+      "carbamate aminolysis",
+      "diaryl urea",
+      "aryl isocyanate",
+      "trisubstituted urea"
+    ]
+  },
+  "urea or carbamate transformation": {
+    "description": "Couples an alpha-amino ester with an N-substituted 2,2,2-trifluoroethyl carbamate (an activated carbamate, not a protected amino acid) to form an N,N'-disubstituted urea, with the ester hydrolysed to the carboxylic acid.",
+    "search_terms": [
+      "urea or carbamate transformation",
+      "urea formation",
+      "carbamate transformation",
+      "amino ester",
+      "activated carbamate"
+    ]
+  }
+}

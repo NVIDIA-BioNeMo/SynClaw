@@ -1,0 +1,68 @@
+# Reaction source libraries
+
+Each executable SMARTS and its inline annotations is stored in one JSONL record;
+`metadata.provenance` records where it came from, and `metadata.smarts_revision` any
+local repair ([SMARTS_REPAIRS.md](SMARTS_REPAIRS.md)). Each reaction family's
+description and search terms are stored once in `families.json` and added to every
+template of that family on import.
+[`src/synclaw/reaction_libraries.json`](../../src/synclaw/reaction_libraries.json) lists the
+source files, their template counts, and checksums; it ships in the wheel.
+
+| Source | Templates |
+| --- | ---: |
+| SynFormer | 114 |
+| PaRoutes | 176 |
+| ORD | 203 |
+| NVIDIA-authored | 8 |
+
+No SMARTS appears in more than one source.
+
+Import from a source checkout into a new or existing stock database:
+
+```bash
+uv run synclaw ingest-reactions --db var/synclaw.sqlite
+```
+
+This installs all 501 templates and preserves
+building-block rows and prepared stock indexes. Reimporting replaces every row
+stored under `synformer`, `paroutes`, `ord`, or `nvidia`. Other libraries already in the
+database are retained; they are outside the default union. The import records each source
+file's hash from that manifest, and model runs reject a selected library whose
+source file, or `families.json`, has changed since, until you reimport.
+
+Select a source union with `--reaction-library synformer paroutes ord nvidia` in
+`run-model` or `mcp serve`; the default is all four. Template search and
+its family overview use the same union, counting each template once, and lookup,
+simulation, and pathway submission reject templates outside it.
+
+| Selection | Unique templates |
+| --- | ---: |
+| `synformer` | 114 |
+| `paroutes` | 176 |
+| `ord` | 203 |
+| `nvidia` | 8 |
+| `synformer paroutes` | 290 |
+| `synformer ord` | 317 |
+| `synformer paroutes ord` | 493 |
+| `synformer paroutes ord nvidia` | 501 |
+
+SMARTS are unchanged from their sources except 18 repaired rules, listed in
+[SMARTS_REPAIRS.md](SMARTS_REPAIRS.md) with their imported strings kept in
+`metadata.smarts_revision`. Prompt hints are generated from the selected records.
+
+Template IDs are `synformer:R...`, `paroutes:PR...`, `ord:R...`, and `nvidia:R...`; lookups match
+these IDs exactly. SynFormer IDs keep the original zero-based line numbers, so
+`synformer:R033` (a duplicate of R032) does not exist. Every ORD record's `metadata.provenance`
+names its source patent and line in Lowe's USPTO grants file.
+Records carry their provenance, role queries, and execution caveats.
+
+Attribution and licenses are in [synformer/NOTICE.md](synformer/NOTICE.md),
+[paroutes/NOTICE.md](paroutes/NOTICE.md), [ord/NOTICE.md](ord/NOTICE.md), and
+[nvidia/NOTICE.md](nvidia/NOTICE.md). SynFormer templates, NVIDIA-authored templates,
+and locally authored annotations outside `ord/` are covered by the Apache-2.0
+text in the project [LICENSE](../../LICENSE). The ORD templates, including their
+annotations, come from Lowe's USPTO grants data as distributed by the Open Reaction
+Database and are licensed under CC BY-SA 4.0; see [ord/LICENSE](ord/LICENSE) and
+[ord/NOTICE.md](ord/NOTICE.md). [THIRD_PARTY_NOTICES.md](../../THIRD_PARTY_NOTICES.md)
+summarizes every source. These are computational planning templates;
+RDKit execution and stock grounding do not establish experimental feasibility.

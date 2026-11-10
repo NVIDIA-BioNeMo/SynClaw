@@ -1,0 +1,617 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+"""Chemistry utilities backed by RDKit.
+
+RDKit is a required dependency for this package. We fail at import time when it
+is unavailable because fallback SMILES validation can make invalid synthesis
+plans look valid.
+"""
+
+from __future__ import annotations
+
+import re
+from collections import Counter
+from functools import lru_cache
+from typing import Any, Literal
+
+try:
+    from rdkit import Chem, DataStructs, RDLogger, rdBase
+    from rdkit.Chem import rdChemReactions, rdFingerprintGenerator, rdMolDescriptors, rdRascalMCES
+    from rdkit.Chem.MolStandardize import rdMolStandardize
+except ImportError as exc:  # pragma: no cover - exercised only in broken environments.
+    raise RuntimeError(
+        "RDKit is required for synclaw chemistry validation. "
+        "Install project dependencies, for example: uv sync or python -m pip install -e ."
+    ) from exc
+
+RDLogger.DisableLog("rdApp.*")
+
+MCES_METHOD = "rdkit_rascal_mces_bond_tanimoto"
+MCES_TIMEOUT_SECONDS = 20
+MCES_CACHE_SIZE = 2048
+MCES_MAX_BOND_MATCH_PAIRS = 10_000
+MORGAN_RADIUS = 2
+MORGAN_N_BITS = 2048
+_CONSTITUTIONAL_MORGAN_GENERATOR = rdFingerprintGenerator.GetMorganGenerator(
+    radius=MORGAN_RADIUS,
+    fpSize=MORGAN_N_BITS,
+)
+_STEREO_AWARE_MORGAN_GENERATOR = rdFingerprintGenerator.GetMorganGenerator(
+    radius=MORGAN_RADIUS,
+    fpSize=MORGAN_N_BITS,
+    includeChirality=True,
+)
+RDKIT_VERSION = str(rdBase.rdkitVersion)
+
+
+def backend_name() -> str:
+    """Return the active chemistry backend."""
+
+    return "rdkit"
+
+
+def validate_smiles(smiles: str | None) -> dict[str, Any]:
+    """Validate and canonicalize a SMILES string with RDKit."""
+
+    raw = "" if smiles is None else str(smiles)
+    text = raw.strip()
+    if not text:
+        return {
+            "input": raw,
+            "valid": False,
+            "canonical_smiles": None,
+            "error": "SMILES is empty",
+            "backend": "rdkit",
+            "properties": {},
+        }
+
+    mol = Chem.MolFromSmiles(text)
+    if mol is None:
+        return {
+            "input": raw,
+            "valid": False,
+            "canonical_smiles": None,
+            "error": "RDKit could not parse SMILES",
+            "backend": "rdkit",
+            "properties": {},
+        }
+
+    canonical = Chem.MolToSmiles(mol, canonical=True)
+    return {
+        "input": raw,
+        "valid": True,
+        "canonical_smiles": canonical,
+        "error": None,
+        "backend": "rdkit",
+        "properties": {
+            "heavy_atom_count": int(mol.GetNumHeavyAtoms()),
+            "formula": rdMolDescriptors.CalcMolFormula(mol),
+            "inchi_key": _inchi_key(mol),
+        },
+    }
+
+
+@lru_cache(maxsize=4096)
+def smarts_products_have_unmapped_atoms(products: str) -> bool | None:
+    """Whether any product-side SMARTS atom lacks an atom map; None if the SMARTS does not parse."""
+    try:
+        reaction = rdChemReactions.ReactionFromSmarts(f">>{products}")
+    except ValueError:
+        return None
+    return any(atom.GetAtomMapNum() == 0 for template in reaction.GetProducts() for atom in template.GetAtoms())
+
+
+def strip_isotopes(smiles: str) -> str:
+    """Remove isotope labels from a valid SMILES for opt-in target preprocessing.
+
+    Isotope-free inputs are returned unchanged. Modified inputs are serialized
+    as canonical isomeric SMILES, preserving remaining stereochemistry, charges
+    and disconnected components. Isotopic hydrogens become ordinary hydrogens;
+    stereochemistry that depended only on isotope distinctions is removed.
+    Empty or invalid SMILES raise ``ValueError``. This does not change the
+    isotope-sensitive behavior of :func:`compare_molecular_identity`.
+    """
+
+    mol = Chem.MolFromSmiles(smiles) if smiles.strip() else None
+    if mol is None or mol.GetNumAtoms() == 0:
+        raise ValueError("SMILES is empty or invalid")
+    if not any(atom.GetIsotope() for atom in mol.GetAtoms()):
+        return smiles
+    # Zero the isotope labels only; skipping standardization keeps charges and
+    # disconnected components as written.
+    rdMolStandardize.IsotopeParentInPlace(mol, skipStandardize=True)
+    # Isotopic hydrogens are now ordinary hydrogens, and a centre or double bond
+    # whose substituents differed only by isotope is no longer stereogenic.
+    hydrogen_removal = Chem.RemoveHsParameters()
+    hydrogen_removal.removeDefiningBondStereo = True
+    mol = Chem.RemoveHs(mol, hydrogen_removal)
+    Chem.AssignStereochemistry(mol, cleanIt=True, force=True)
+    return Chem.MolToSmiles(mol, canonical=True, isomericSmiles=True)
+
+
+def _inchi_key(mol: Any) -> str | None:
+    try:
+        return Chem.MolToInchiKey(mol)
+    except Exception:
+        return None
+
+
+MolecularIdentityMode = Literal[
+    "standard_inchi", "canonical_isomeric", "canonical_nonisomeric"
+]
+
+
+def compare_molecular_identity(
+    smiles_a: str | None,
+    smiles_b: str | None,
+    *,
+    mode: MolecularIdentityMode = "standard_inchi",
+) -> dict[str, Any]:
+    """Compare molecular identity under an explicit representation policy.
+
+    ``standard_inchi`` compares full Standard InChI strings, including their
+    isotope, stereo and net-protonation layers, with InChI's built-in normalization
+    of supported tautomers. Some charge representations, such as neutral glycine
+    and its zwitterion, normalize to the same identity; use ``canonical_isomeric``
+    when charge placement matters. It is not universal tautomer or graph equality.
+    ``canonical_isomeric`` compares RDKit canonical isomeric SMILES without
+    tautomer normalization. ``canonical_nonisomeric`` compares canonical
+    non-isomeric SMILES, ignoring both stereo and isotopes.
+
+    All modes ignore atom-map labels and input atom/component ordering. No
+    additional salt stripping, neutralization or tautomer enumeration is done.
+    Conversion failures return ``valid=False, identical=False`` with an error;
+    InChI warnings are returned for inspection. There is no fingerprint fallback.
+    A caller scoring routes must separately require an accepted submission.
+    """
+
+    if mode not in {"standard_inchi", "canonical_isomeric", "canonical_nonisomeric"}:
+        raise ValueError(f"Unknown molecular identity mode: {mode!r}")
+    result: dict[str, Any] = {
+        "mode": mode,
+        "valid": False,
+        "identical": False,
+        "left_identity": None,
+        "right_identity": None,
+        "warnings": [],
+        "error": None,
+    }
+    for side, smiles in (("left", smiles_a), ("right", smiles_b)):
+        text = "" if smiles is None else str(smiles).strip()
+        mol = Chem.MolFromSmiles(text) if text else None
+        if mol is None or mol.GetNumAtoms() == 0:
+            result["error"] = f"{side} SMILES is empty or invalid"
+            return result
+        if any(atom.GetAtomicNum() == 0 for atom in mol.GetAtoms()):
+            result["error"] = f"{side} SMILES contains a wildcard atom"
+            return result
+        for atom in mol.GetAtoms():
+            atom.SetAtomMapNum(0)
+        try:
+            if mode == "standard_inchi":
+                from rdkit.Chem import rdinchi
+
+                identity, status, message, _, _ = rdinchi.MolToInchi(mol)
+                if status not in (0, 1) or not identity.startswith("InChI=1S/"):
+                    raise ValueError(message or "Standard InChI conversion failed")
+                if status == 1:
+                    result["warnings"].append(f"{side}: {message or 'InChI conversion warning'}")
+            else:
+                identity = Chem.MolToSmiles(
+                    mol, canonical=True, isomericSmiles=mode == "canonical_isomeric"
+                )
+                if not identity:
+                    raise ValueError("Canonical SMILES conversion failed")
+        except Exception as exc:
+            result["error"] = f"{side} {mode} conversion failed: {exc}"
+            return result
+        result[f"{side}_identity"] = identity
+    result["valid"] = True
+    result["identical"] = result["left_identity"] == result["right_identity"]
+    return result
+
+
+def molecules_identical(smiles_a: str | None, smiles_b: str | None) -> bool | None:
+    """Standard InChI identity as a tri-state; ``None`` when the pair cannot be compared."""
+
+    result = compare_molecular_identity(smiles_a, smiles_b)
+    return bool(result["identical"]) if result["valid"] else None
+
+
+def similarity(
+    smiles_a: str,
+    smiles_b: str,
+    radius: int = 2,
+    n_bits: int = 2048,
+) -> dict[str, Any]:
+    """Compute calibrated Morgan/Tanimoto similarity between two SMILES strings.
+
+    The active ``similarity`` is the stereo-aware score; the constitutional score
+    is reported alongside it.
+    """
+
+    left = validate_smiles(smiles_a)
+    right = validate_smiles(smiles_b)
+    if not left["valid"] or not right["valid"]:
+        return {
+            "valid": False,
+            "similarity": None,
+            "constitutional_similarity": None,
+            "stereo_aware_similarity": None,
+            "method": "rdkit_morgan_tanimoto",
+            "left": left,
+            "right": right,
+            "error": "Both SMILES must be valid to compute similarity",
+        }
+
+    mol_a = Chem.MolFromSmiles(left["canonical_smiles"])
+    mol_b = Chem.MolFromSmiles(right["canonical_smiles"])
+    constitutional_score = _morgan_tanimoto(mol_a, mol_b, radius=radius, n_bits=n_bits)
+    stereo_score = _morgan_tanimoto(
+        mol_a,
+        mol_b,
+        radius=radius,
+        n_bits=n_bits,
+        include_chirality=True,
+    )
+    return {
+        "valid": True,
+        "similarity": stereo_score,
+        "constitutional_similarity": constitutional_score,
+        "stereo_aware_similarity": stereo_score,
+        "method": "rdkit_morgan_tanimoto",
+        "left": left,
+        "right": right,
+        "error": None,
+    }
+
+
+def constitutional_morgan_fingerprint(smiles: str) -> Any:
+    """Return the constitutional Morgan fingerprint used by BB near search."""
+
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        raise ValueError(f"Invalid SMILES for fingerprinting: {smiles!r}")
+    return constitutional_morgan_fingerprint_from_mol(mol)
+
+
+def constitutional_morgan_fingerprint_from_mol(mol: Any) -> Any:
+    """Return the constitutional Morgan fingerprint of an already-parsed molecule."""
+
+    return _CONSTITUTIONAL_MORGAN_GENERATOR.GetFingerprint(mol)
+
+
+def stereo_aware_morgan_fingerprint(smiles: str) -> Any:
+    """Return the chirality-aware Morgan fingerprint behind the stereo-aware similarity."""
+
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        raise ValueError(f"Invalid SMILES for fingerprinting: {smiles!r}")
+    return _STEREO_AWARE_MORGAN_GENERATOR.GetFingerprint(mol)
+
+
+def bulk_tanimoto(query_fingerprint: Any, candidate_fingerprints: list[Any]) -> list[float]:
+    """Tanimoto similarity of one fingerprint against many of the same kind."""
+
+    return [
+        float(score)
+        for score in DataStructs.BulkTanimotoSimilarity(
+            query_fingerprint,
+            candidate_fingerprints,
+        )
+    ]
+
+
+def mces(smiles_a: str, smiles_b: str) -> dict[str, Any]:
+    """Return the full RASCAL MCES and its bond-set Tanimoto overlap."""
+
+    left = validate_smiles(smiles_a)
+    right = validate_smiles(smiles_b)
+    if not left["valid"] or not right["valid"]:
+        return {
+            "valid": False,
+            "mces_smiles": None,
+            "similarity": None,
+            "matched_bonds": None,
+            "left_bonds": None,
+            "right_bonds": None,
+            "union_bonds": None,
+            "timed_out": False,
+            "timeout_seconds": MCES_TIMEOUT_SECONDS,
+            "method": MCES_METHOD,
+            "left": left,
+            "right": right,
+            "error": "Both SMILES must be valid to compute an MCES",
+            "chem_backend": backend_name(),
+        }
+
+    canonical_a = str(left["canonical_smiles"])
+    canonical_b = str(right["canonical_smiles"])
+    first, second = sorted((canonical_a, canonical_b))
+    result = dict(_cached_mces(first, second))
+    if canonical_a != first:
+        result["left_bonds"], result["right_bonds"] = (
+            result["right_bonds"],
+            result["left_bonds"],
+        )
+    result.update(
+        {
+            "left": left,
+            "right": right,
+            "chem_backend": backend_name(),
+        }
+    )
+    return result
+
+
+@lru_cache(maxsize=MCES_CACHE_SIZE)
+def _cached_mces(canonical_a: str, canonical_b: str) -> dict[str, Any]:
+    mol_a = Chem.MolFromSmiles(canonical_a)
+    mol_b = Chem.MolFromSmiles(canonical_b)
+    left_bonds = int(mol_a.GetNumBonds())
+    right_bonds = int(mol_b.GetNumBonds())
+
+    if canonical_a == canonical_b or _mces_graph_key(mol_a) == _mces_graph_key(mol_b):
+        return _mces_result(
+            mces_smiles=_mces_molecule_smiles(mol_a),
+            similarity=1.0,
+            matched_bonds=left_bonds,
+            left_bonds=left_bonds,
+            right_bonds=right_bonds,
+            union_bonds=left_bonds,
+        )
+
+    bond_match_pair_count = _bond_match_pair_count(mol_a, mol_b)
+    if bond_match_pair_count > MCES_MAX_BOND_MATCH_PAIRS:
+        return _mces_result(
+            mces_smiles=None,
+            similarity=None,
+            matched_bonds=None,
+            left_bonds=left_bonds,
+            right_bonds=right_bonds,
+            union_bonds=None,
+            error=(
+                f"RDKit RASCAL MCES requires {bond_match_pair_count} compatible bond pairs, "
+                f"exceeding the safe limit of {MCES_MAX_BOND_MATCH_PAIRS}"
+            ),
+        )
+
+    options = rdRascalMCES.RascalOptions()
+    options.similarityThreshold = 0.0
+    options.completeAromaticRings = False
+    options.maxBondMatchPairs = MCES_MAX_BOND_MATCH_PAIRS
+    options.timeout = MCES_TIMEOUT_SECONDS
+    options.allBestMCESs = False
+    options.singleLargestFrag = False
+    try:
+        results = rdRascalMCES.FindMCES(mol_a, mol_b, options)
+    except Exception as exc:
+        return _mces_result(
+            mces_smiles=None,
+            similarity=None,
+            matched_bonds=None,
+            left_bonds=left_bonds,
+            right_bonds=right_bonds,
+            union_bonds=None,
+            error=f"RDKit RASCAL MCES failed: {exc}",
+        )
+
+    if not results:
+        fallback_bond = _single_common_bond(mol_a, mol_b)
+        if fallback_bond is None:
+            return _mces_result(
+                mces_smiles=None,
+                similarity=0.0,
+                matched_bonds=0,
+                left_bonds=left_bonds,
+                right_bonds=right_bonds,
+                union_bonds=left_bonds + right_bonds,
+            )
+        bond = mol_a.GetBondWithIdx(fallback_bond)
+        atom_indices = sorted((bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()))
+        union_bonds = left_bonds + right_bonds - 1
+        try:
+            mces_smiles = _mces_fragment_smiles(
+                mol_a,
+                atom_indices=atom_indices,
+                bond_indices=[fallback_bond],
+            )
+        except Exception as exc:
+            return _mces_result(
+                mces_smiles=None,
+                similarity=None,
+                matched_bonds=1,
+                left_bonds=left_bonds,
+                right_bonds=right_bonds,
+                union_bonds=union_bonds,
+                error=f"Could not convert the one-bond MCES to SMILES: {exc}",
+            )
+        return _mces_result(
+            mces_smiles=mces_smiles,
+            similarity=float(1 / union_bonds),
+            matched_bonds=1,
+            left_bonds=left_bonds,
+            right_bonds=right_bonds,
+            union_bonds=union_bonds,
+        )
+
+    result = results[0]
+    if bool(result.timedOut):
+        return _mces_result(
+            mces_smiles=None,
+            similarity=None,
+            matched_bonds=None,
+            left_bonds=left_bonds,
+            right_bonds=right_bonds,
+            union_bonds=None,
+            timed_out=True,
+            error=f"RDKit RASCAL MCES exceeded the {MCES_TIMEOUT_SECONDS}-second timeout",
+        )
+
+    bond_indices = sorted({int(pair[0]) for pair in result.bondMatches()})
+    atom_indices = sorted({int(pair[0]) for pair in result.atomMatches()})
+    matched_bonds = len(bond_indices)
+    union_bonds = left_bonds + right_bonds - matched_bonds
+    if not matched_bonds:
+        return _mces_result(
+            mces_smiles=None,
+            similarity=0.0,
+            matched_bonds=0,
+            left_bonds=left_bonds,
+            right_bonds=right_bonds,
+            union_bonds=union_bonds,
+        )
+    try:
+        mces_smiles = _mces_fragment_smiles(
+            mol_a,
+            atom_indices=atom_indices,
+            bond_indices=bond_indices,
+        )
+    except Exception as exc:
+        return _mces_result(
+            mces_smiles=None,
+            similarity=None,
+            matched_bonds=matched_bonds,
+            left_bonds=left_bonds,
+            right_bonds=right_bonds,
+            union_bonds=union_bonds,
+            error=f"Could not convert the RASCAL MCES to SMILES: {exc}",
+        )
+    score = matched_bonds / union_bonds if union_bonds > 0 else 0.0
+    return _mces_result(
+        mces_smiles=mces_smiles,
+        similarity=float(score),
+        matched_bonds=matched_bonds,
+        left_bonds=left_bonds,
+        right_bonds=right_bonds,
+        union_bonds=union_bonds,
+    )
+
+
+def _mces_fragment_smiles(
+    mol: Any,
+    *,
+    atom_indices: list[int],
+    bond_indices: list[int],
+) -> str:
+    # Kekulizing the source first avoids invalid non-ring aromatic atoms at fragment boundaries.
+    source = _mces_output_mol(mol)
+    Chem.Kekulize(source, clearAromaticFlags=True)
+    smiles = Chem.MolFragmentToSmiles(
+        source,
+        atomsToUse=atom_indices,
+        bondsToUse=bond_indices,
+        canonical=True,
+        isomericSmiles=False,
+        kekuleSmiles=True,
+    )
+    if not smiles or Chem.MolFromSmiles(smiles) is None:
+        raise ValueError("generated fragment is not a valid SMILES string")
+    return smiles
+
+
+def _mces_molecule_smiles(mol: Any) -> str:
+    smiles = Chem.MolToSmiles(
+        _mces_output_mol(mol),
+        canonical=True,
+        isomericSmiles=False,
+    )
+    if not smiles or Chem.MolFromSmiles(smiles) is None:
+        raise ValueError("generated MCES is not a valid SMILES string")
+    return smiles
+
+
+def _mces_graph_key(mol: Any) -> str:
+    return Chem.MolToSmiles(
+        _mces_output_mol(mol),
+        canonical=True,
+        isomericSmiles=False,
+    )
+
+
+def _mces_output_mol(mol: Any) -> Any:
+    source = Chem.Mol(mol)
+    Chem.RemoveStereochemistry(source)
+    for atom in source.GetAtoms():
+        atom.SetAtomMapNum(0)
+    return source
+
+
+def _mces_result(
+    *,
+    mces_smiles: str | None,
+    similarity: float | None,
+    matched_bonds: int | None,
+    left_bonds: int,
+    right_bonds: int,
+    union_bonds: int | None,
+    timed_out: bool = False,
+    error: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "valid": error is None,
+        "mces_smiles": mces_smiles,
+        "similarity": similarity,
+        "matched_bonds": matched_bonds,
+        "left_bonds": left_bonds,
+        "right_bonds": right_bonds,
+        "union_bonds": union_bonds,
+        "timed_out": timed_out,
+        "timeout_seconds": MCES_TIMEOUT_SECONDS,
+        "method": MCES_METHOD,
+        "error": error,
+    }
+
+
+def _single_common_bond(mol_a: Any, mol_b: Any) -> int | None:
+    right_labels = {_bond_match_label(bond) for bond in mol_b.GetBonds()}
+    for bond_a in mol_a.GetBonds():
+        if _bond_match_label(bond_a) in right_labels:
+            return int(bond_a.GetIdx())
+    return None
+
+
+def _bond_match_pair_count(mol_a: Any, mol_b: Any) -> int:
+    left_labels = Counter(_bond_match_label(bond) for bond in mol_a.GetBonds())
+    right_labels = Counter(_bond_match_label(bond) for bond in mol_b.GetBonds())
+    return sum(count * right_labels[label] for label, count in left_labels.items())
+
+
+def _bond_match_label(bond: Any) -> tuple[Any, int, int]:
+    begin_atomic_number = int(bond.GetBeginAtom().GetAtomicNum())
+    end_atomic_number = int(bond.GetEndAtom().GetAtomicNum())
+    lower_atomic_number, upper_atomic_number = sorted(
+        (begin_atomic_number, end_atomic_number)
+    )
+    return bond.GetBondType(), lower_atomic_number, upper_atomic_number
+
+
+def _morgan_tanimoto(
+    mol_a: Any,
+    mol_b: Any,
+    *,
+    radius: int,
+    n_bits: int,
+    include_chirality: bool = False,
+) -> float:
+    generator = rdFingerprintGenerator.GetMorganGenerator(
+        radius=radius,
+        fpSize=n_bits,
+        includeChirality=include_chirality,
+    )
+    fp_a = generator.GetFingerprint(mol_a)
+    fp_b = generator.GetFingerprint(mol_b)
+    return float(DataStructs.TanimotoSimilarity(fp_a, fp_b))
+
+
+def extract_smiles_candidates(text: str) -> list[str]:
+    """Extract RDKit-parseable molecule-like tokens from free text."""
+
+    candidates: list[str] = []
+    for raw in re.findall(r"[A-Za-z0-9@+\-\[\]\(\)=#$\\/%.:~*]{2,}", text):
+        token = raw.strip(".,;:")
+        result = validate_smiles(token)
+        if result["valid"]:
+            candidates.append(result["canonical_smiles"])
+    return candidates
