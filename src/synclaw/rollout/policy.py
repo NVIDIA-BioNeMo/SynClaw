@@ -43,6 +43,9 @@ DEFAULT_MAX_LOW_SIMILARITY_SUBMISSIONS: int | None = None
 DEFAULT_REACTION_LIBRARY = DEFAULT_REACTION_LIBRARIES
 DEFAULT_CONTEXT_WARNING_REMAINING_FRACTION = 0.5
 DEFAULT_CONTEXT_CRITICAL_REMAINING_FRACTION = 0.25
+# The context length a deployment serves and enforces when it names none of its own.
+# RolloutPolicyConfig itself still defaults to no context limit.
+DEFAULT_MAX_MODEL_LEN = 262_144
 # What an "inf" task budget becomes; an unlimited max_model_len is handled separately.
 _UNLIMITED_BUDGET_VALUES: dict[str, int | None] = {"max_turns": None, "max_tool_calls": 0, "max_tokens": None}
 
