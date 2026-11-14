@@ -192,7 +192,7 @@ def task_budget_config(task: dict[str, Any], config: RolloutPolicyConfig) -> Rol
 
 @dataclass(slots=True)
 class RolloutPolicyState:
-    """Mutable policy state with a stable version-one checkpoint representation."""
+    """Mutable policy state with a stable checkpoint representation."""
 
     total_tool_calls: int = 0
     consecutive_non_tool_turns_after_tools: int = 0
@@ -219,9 +219,7 @@ class RolloutPolicyState:
         return cls(
             total_tool_calls=int(checkpoint.get("total_tool_calls") or 0),
             consecutive_non_tool_turns_after_tools=int(
-                checkpoint.get("consecutive_non_tool_turns_after_tools")
-                or checkpoint.get("non_tool_turns_after_search")
-                or 0
+                checkpoint.get("consecutive_non_tool_turns_after_tools") or 0
             ),
             forced_submit_requested=bool(checkpoint.get("forced_submit_requested")),
             model_stop_submit_requested=bool(checkpoint.get("model_stop_submit_requested")),

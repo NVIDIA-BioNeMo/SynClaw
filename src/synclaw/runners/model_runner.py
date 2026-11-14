@@ -1348,28 +1348,8 @@ def checkpoint_matches_run(
     task: dict[str, Any],
     config: policy.RolloutPolicyConfig,
 ) -> bool:
-    checkpoint_responses_state_mode = checkpoint.get("responses_state_mode")
-    if checkpoint_responses_state_mode is not None and checkpoint_responses_state_mode != getattr(
-        args, "responses_state_mode", None
-    ):
+    if checkpoint.get("responses_state_mode") != getattr(args, "responses_state_mode", None):
         return False
-    if (
-        getattr(args, "api_mode", None) == "responses"
-        and getattr(args, "responses_state_mode", None) == "previous_id"
-        and checkpoint_responses_state_mode is None
-        and not checkpoint.get("responses_previous_id")
-    ):
-        pending_input = checkpoint.get("responses_pending_input")
-        input_history = checkpoint.get("responses_input_history")
-        pristine_initial_state = (
-            int(checkpoint.get("next_turn_index") or 0) == 0
-            and isinstance(pending_input, list)
-            and isinstance(input_history, list)
-            and bool(pending_input)
-            and pending_input == input_history
-        )
-        if not pristine_initial_state:
-            return False
     # A different endpoint cannot continue the server-side state (``responses_previous_id``)
     # or the conversation the checkpoint recorded.
     for field, default in (

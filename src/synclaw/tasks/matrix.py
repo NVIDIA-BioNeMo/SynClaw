@@ -17,8 +17,8 @@ The build has two phases, both of which `build_matrix_directory` runs:
 1. *Catalog*: read the selected template libraries and the building-block catalog, canonicalize and
    deduplicate the blocks, and write everything except `matrix.npy`.
 2. *Fill*: compile each template's reactant queries once per worker, then test every block
-   against every query. This is the expensive phase -- 5.15M blocks x 502 templates takes about
-   four minutes on 128 cores and writes 2.6 GB.
+   against every query. This is the expensive phase: the matrix has one byte per block per template,
+   and the work is spread across worker processes.
 
 Workers write disjoint row ranges of one memory-mapped `matrix.npy`, so the matrix itself is never
 collected in the parent. The parent does hold every block's SMILES, through both phases -- about

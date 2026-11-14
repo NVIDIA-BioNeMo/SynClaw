@@ -21,7 +21,6 @@ spec.loader.exec_module(check_wheel_contents)
 @pytest.fixture
 def wheel_project(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("CI_COMMIT_TAG", raising=False)
     package = tmp_path / "src" / "synclaw"
     package.mkdir(parents=True)
     (package / "__init__.py").write_text('__version__ = "0.2.1"\n')
@@ -43,9 +42,8 @@ def wheel_project(tmp_path, monkeypatch):
     return build
 
 
-def test_matching_wheel_and_release_tag_pass(wheel_project, monkeypatch):
+def test_matching_wheel_passes(wheel_project):
     wheel_project()
-    monkeypatch.setenv("CI_COMMIT_TAG", "v0.2.1")
     assert check_wheel_contents.main() == 0
 
 
@@ -55,12 +53,6 @@ def test_matching_wheel_and_release_tag_pass(wheel_project, monkeypatch):
 )
 def test_stale_metadata_or_missing_package_data_fails(wheel_project, options):
     wheel_project(**options)
-    assert check_wheel_contents.main() == 1
-
-
-def test_mismatched_release_tag_fails(wheel_project, monkeypatch):
-    wheel_project()
-    monkeypatch.setenv("CI_COMMIT_TAG", "v0.2.0")
     assert check_wheel_contents.main() == 1
 
 

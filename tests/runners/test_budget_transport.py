@@ -471,6 +471,7 @@ def test_budget_cli_and_checkpoint_settings():
         "model": args.model,
         "provider": args.provider,
         "api_mode": args.api_mode,
+        "responses_state_mode": args.responses_state_mode,
         **task,
         **config.budget_fields,
         "stop_condition": args.stop_condition,

@@ -42,11 +42,11 @@ def _accepted_submission(similarity: float) -> dict[str, object]:
     }
 
 
-def test_policy_checkpoint_fields_preserve_version_one_names_and_legacy_counter() -> None:
+def test_policy_checkpoint_fields_round_trip() -> None:
     state = RolloutPolicyState.from_checkpoint(
         {
             "total_tool_calls": 7,
-            "non_tool_turns_after_search": 2,
+            "consecutive_non_tool_turns_after_tools": 2,
             "forced_submit_requested": True,
             "last_submission": {"accepted": False},
             "best_accepted_similarity": 0.75,
@@ -57,7 +57,6 @@ def test_policy_checkpoint_fields_preserve_version_one_names_and_legacy_counter(
 
     assert fields["total_tool_calls"] == 7
     assert fields["consecutive_non_tool_turns_after_tools"] == 2
-    assert "non_tool_turns_after_search" not in fields
     assert fields["forced_submit_requested"] is True
     assert fields["last_submission"] == {"accepted": False}
     assert state.has_submission is True

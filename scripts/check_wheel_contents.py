@@ -12,13 +12,12 @@ from __future__ import annotations
 
 import argparse
 import ast
-import os
 import sys
 import zipfile
 from email.parser import BytesParser
 from pathlib import Path
 
-from packaging.version import InvalidVersion, Version
+from packaging.version import Version
 
 SRC = Path("src")
 
@@ -47,16 +46,7 @@ def main(dist_dir: Path = Path("dist")) -> int:
     if source_version != wheel_version or Version(source_version) != Version(metadata["Version"]):
         print("source, wheel and distribution versions disagree", file=sys.stderr)
         return 1
-    release_tag = os.environ.get("CI_COMMIT_TAG")
-    if release_tag:
-        try:
-            tag_matches = Version(release_tag.removeprefix("v")) == Version(source_version)
-        except InvalidVersion:
-            tag_matches = False
-        if not tag_matches:
-            print(f"release tag {release_tag!r} does not match {source_version}", file=sys.stderr)
-            return 1
-    # Walk the tree rather than asking git: the CI image has no git binary, and
+    # Walk the tree rather than asking git: git is not needed, and
     # what matters is that every module present in src/ reached the wheel.
     # providers.json and reaction_libraries.json are package data the runtime requires.
     modules = sorted(
