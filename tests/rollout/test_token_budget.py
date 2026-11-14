@@ -388,7 +388,7 @@ def test_replay_usage_anchor_rejects_uncovered_or_changed_input(change):
     assert snapshot.source == "unavailable"
 
 
-def test_replay_anchor_survives_sorted_json_checkpoint_and_accepts_legacy_state():
+def test_replay_anchor_survives_sorted_json_checkpoint():
     estimator = ContextTokenEstimator()
     request = {"input": [{"role": "user", "content": "plan"}], "tools": []}
     output = [{"type": "reasoning", "id": "rs_1", "encrypted_content": "opaque"}]
@@ -401,10 +401,6 @@ def test_replay_anchor_survives_sorted_json_checkpoint_and_accepts_legacy_state(
     assert restored.snapshot(
         checkpoint["payload"], context_window_tokens=10000, max_output_tokens=1000,
     ).input_tokens == 1100
-    legacy = {key: value for key, value in checkpoint["estimator"].items() if not key.startswith("replay_")}
-    assert ContextTokenEstimator.from_checkpoint(legacy).snapshot(
-        checkpoint["payload"], context_window_tokens=10000, max_output_tokens=1000,
-    ).input_tokens is None
 
 
 class _Transport:
@@ -501,9 +497,6 @@ def test_context_warnings_repeat_only_below_quarter_and_preserve_reasoning(remai
         result.state.budget_feedback.checkpoint_fields()
     )))
     assert restored.context_warning_sent
-    legacy = restored.checkpoint_fields()
-    legacy.pop("context_warning_sent")
-    assert not BudgetFeedbackState.from_checkpoint(legacy).context_warning_sent
 
 
 def test_context_warning_survives_failed_request_resume_without_repetition():

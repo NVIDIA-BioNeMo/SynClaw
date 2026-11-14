@@ -701,7 +701,7 @@ class ImportAndEvalTests(unittest.TestCase):
         self.assertEqual(args.api_mode, "messages")
         self.assertEqual(args.messages_url, "https://api.anthropic.com/v1/messages")
 
-    def test_previous_id_rejects_legacy_first_turn_checkpoint_with_response_progress(self):
+    def test_checkpoint_must_record_the_same_responses_state_mode(self):
         import argparse
 
         args = argparse.Namespace(
@@ -711,8 +711,7 @@ class ImportAndEvalTests(unittest.TestCase):
             responses_state_mode="previous_id",
         )
         task = {"task_id": "fixture-0001", "target_smiles": "CCO"}
-        initial_message = {"role": "user", "content": "Plan CCO."}
-        tool_output = {"type": "function_call_output", "call_id": "call-1", "output": "{}"}
+        messages = [{"role": "user", "content": "Plan CCO."}]
         checkpoint = {
             "model": args.model,
             "provider": args.provider,
@@ -720,35 +719,15 @@ class ImportAndEvalTests(unittest.TestCase):
             "task_id": task["task_id"],
             "target_smiles": task["target_smiles"],
             "next_turn_index": 0,
-            "responses_pending_input": [tool_output],
-            "responses_input_history": [initial_message, tool_output],
+            "responses_pending_input": messages,
+            "responses_input_history": messages,
         }
+        config = policy.RolloutPolicyConfig()
 
-        self.assertFalse(checkpoint_matches_run(checkpoint, args, task, policy.RolloutPolicyConfig()))
-
-    def test_previous_id_accepts_pristine_legacy_first_turn_checkpoint(self):
-        import argparse
-
-        args = argparse.Namespace(
-            model="example-model",
-            provider="openai",
-            api_mode="responses",
-            responses_state_mode="previous_id",
+        self.assertFalse(checkpoint_matches_run(checkpoint, args, task, config))
+        self.assertTrue(
+            checkpoint_matches_run({**checkpoint, "responses_state_mode": "previous_id"}, args, task, config)
         )
-        task = {"task_id": "fixture-0001", "target_smiles": "CCO"}
-        initial_messages = [{"role": "user", "content": "Plan CCO."}]
-        checkpoint = {
-            "model": args.model,
-            "provider": args.provider,
-            "api_mode": args.api_mode,
-            "task_id": task["task_id"],
-            "target_smiles": task["target_smiles"],
-            "next_turn_index": 0,
-            "responses_pending_input": initial_messages,
-            "responses_input_history": initial_messages,
-        }
-
-        self.assertTrue(checkpoint_matches_run(checkpoint, args, task, policy.RolloutPolicyConfig()))
 
     def test_model_runner_keeps_max_effort_for_messages_api(self):
         args = _provider_args(provider="anthropic", reasoning_effort="max")
