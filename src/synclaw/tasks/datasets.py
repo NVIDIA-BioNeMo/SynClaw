@@ -102,6 +102,19 @@ def build_llm_task(
     }
 
 
+def build_adhoc_task(smiles: str) -> dict[str, Any]:
+    """Build the task for one target given directly, instead of read from a task set.
+
+    The task id comes from the SMILES, so a checkpoint resumes only the same target.
+    """
+
+    smiles = smiles.strip()
+    digest = hashlib.sha256(smiles.encode("utf-8")).hexdigest()[:8]
+    return build_llm_task(
+        smiles, task_id=f"smiles-{digest}", dataset="smiles", source_file="--smiles"
+    )
+
+
 def parse_budget_set(text: str) -> dict[str, int | bool | str]:
     """Parse ``max_turns=40,token_budget_feedback=false`` into task budget overrides; 'none' is empty."""
 
