@@ -25,7 +25,9 @@ def test_adhoc_task_is_valid_and_keyed_by_its_smiles() -> None:
     assert task["target_smiles"] == "OCC"
     assert task["canonical_target_smiles"] == "CCO"
     assert task["question"] == "Target molecule: OCC"
-    assert task["task_id"] == build_adhoc_task("OCC")["task_id"] != build_adhoc_task("CCN")["task_id"]
+    assert task["task_id"].startswith("smiles-") and len(task["task_id"]) == len("smiles-") + 12
+    assert task["task_id"] == build_adhoc_task("CCO")["task_id"]  # same molecule, other spelling
+    assert task["task_id"] != build_adhoc_task("CCN")["task_id"]
     assert task["available_tools"] and task["excluded_tools"] == []
 
 
@@ -57,6 +59,24 @@ def test_task_set_selection_is_unchanged(tmp_path) -> None:
 
     assert model_runner.resolve_run_task(_args("--taskset", str(taskset)))["task_id"] == "t0"
     assert model_runner.resolve_run_task(_args("--taskset", str(taskset), "--task-index", "1"))["task_id"] == "t1"
+
+
+def test_empty_taskset_is_an_error_not_the_default(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.raises(OSError):
+        model_runner.resolve_run_task(_args("--taskset", ""))
+
+
+@pytest.mark.parametrize("flags", [["--smiles", "not a molecule"], ["--smiles", "CCO", "--taskset", "t.jsonl"]])
+def test_bad_target_is_reported_before_the_missing_api_key(monkeypatch, flags) -> None:
+    for name in ("NVIDIA_API_KEY", "NVBUILD_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
+
+    with pytest.raises(RuntimeError) as error:
+        model_runner.run_model_from_args(_args(*flags))
+
+    assert "API key" not in str(error.value)
 
 
 def test_run_sends_the_smiles_target_to_the_model(tmp_path, monkeypatch) -> None:

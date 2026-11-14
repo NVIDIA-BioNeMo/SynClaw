@@ -337,6 +337,8 @@ def run_model_from_args(args: argparse.Namespace) -> dict[str, Any]:
     session_started_monotonic = time.monotonic()
     apply_provider_defaults(args)
     require_endpoint(args)
+    # Resolved before the key check so a bad target or task set is reported on the first try.
+    task = resolve_run_task(args)
     use_preset_keys = uses_preset_endpoint(args)
     api_key = resolve_api_key(args.provider, args.api_key_env, use_preset_keys=use_preset_keys)
     if not api_key and providers.api_key_required(
@@ -344,7 +346,6 @@ def run_model_from_args(args: argparse.Namespace) -> dict[str, Any]:
     ):
         raise RuntimeError(providers.missing_api_key_message(args.provider, args.api_key_env))
 
-    task = resolve_run_task(args)
     args.db = str(resolve_task_db_path(getattr(args, "db", None)))
     prompts.validate_model_run_database(args.db, library=args.reaction_library or None)
     excluded_tools = run_excluded_tools(args, task)
@@ -946,7 +947,9 @@ def resolve_run_task(args: argparse.Namespace) -> dict[str, Any]:
     task_index = getattr(args, "task_index", None)
     smiles = getattr(args, "smiles", None)
     if smiles is None:
-        return load_task(taskset or DEFAULT_TASKSET, 0 if task_index is None else task_index)
+        return load_task(
+            DEFAULT_TASKSET if taskset is None else taskset, 0 if task_index is None else task_index
+        )
     if taskset is not None or task_index is not None:
         raise RuntimeError("--smiles cannot be combined with --taskset or --task-index")
     try:

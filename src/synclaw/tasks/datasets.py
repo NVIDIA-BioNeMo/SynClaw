@@ -105,14 +105,13 @@ def build_llm_task(
 def build_adhoc_task(smiles: str) -> dict[str, Any]:
     """Build the task for one target given directly, instead of read from a task set.
 
-    The task id comes from the SMILES, so a checkpoint resumes only the same target.
+    The task id comes from the canonical SMILES, so a checkpoint resumes only the same molecule,
+    however its SMILES is written.
     """
 
-    smiles = smiles.strip()
-    digest = hashlib.sha256(smiles.encode("utf-8")).hexdigest()[:8]
-    return build_llm_task(
-        smiles, task_id=f"smiles-{digest}", dataset="smiles", source_file="--smiles"
-    )
+    task = build_llm_task(smiles.strip(), task_id="smiles", dataset="smiles", source_file="--smiles")
+    digest = hashlib.sha256(task["canonical_target_smiles"].encode("utf-8")).hexdigest()[:12]
+    return {**task, "task_id": f"smiles-{digest}"}
 
 
 def parse_budget_set(text: str) -> dict[str, int | bool | str]:
