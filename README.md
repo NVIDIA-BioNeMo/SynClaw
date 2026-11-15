@@ -130,6 +130,14 @@ uv run synclaw run-model --model <model-id> \
   --summary-output artifacts/results/chembl_task0_summary.csv
 ```
 
+To plan a single molecule without building a task set, pass `--smiles` instead of `--taskset` and
+`--task-index`:
+
+```bash
+uv run synclaw run-model --model <model-id> --smiles 'CC(=O)Nc1ccc(O)cc1' \
+  --trace artifacts/traces/one_molecule.jsonl
+```
+
 This writes a JSONL trace of every tool call and a one-row summary CSV. See
 [Hosted Model Runs](#hosted-model-runs) for providers and run controls and
 [Results And Reports](#results-and-reports) for scoring. To drive the tools from your own agent

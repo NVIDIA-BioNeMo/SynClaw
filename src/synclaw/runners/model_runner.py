@@ -32,6 +32,7 @@ from synclaw.rollout.loop import (
     RolloutTask,
     run_rollout,
 )
+from synclaw.tasks.datasets import build_adhoc_task
 from synclaw.tools import contracts
 from synclaw.tools.synthesis import (
     SynthesisTools,
@@ -40,6 +41,7 @@ from synclaw.tools.synthesis import (
 )
 
 DEFAULT_MODEL_RUN_DB = Path("var/synclaw.sqlite")
+DEFAULT_TASKSET = "artifacts/tasksets/chembl_llm_tasks.jsonl"
 RETRYABLE_HTTP_CODES = {429, 500, 502, 503, 504}
 ANTHROPIC_VERSION = "2023-06-01"
 
@@ -124,8 +126,17 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         default=providers.default_provider(),
         help="Provider preset for API transport and endpoint defaults",
     )
-    parser.add_argument("--taskset", default="artifacts/tasksets/chembl_llm_tasks.jsonl")
-    parser.add_argument("--task-index", type=int, default=0)
+    parser.add_argument(
+        "--taskset", help=f"Task set JSONL. Defaults to {DEFAULT_TASKSET}."
+    )
+    parser.add_argument(
+        "--task-index", type=int, help="Zero-based task to run from the task set. Defaults to 0."
+    )
+    parser.add_argument(
+        "--smiles",
+        help="Plan this one target SMILES instead of reading a task set "
+        "(cannot be combined with --taskset or --task-index)",
+    )
     parser.add_argument("--db", help="SQLite database. Defaults to var/synclaw.sqlite.")
     parser.add_argument("--model", required=True, help="Model ID as the provider names it")
     parser.add_argument(
@@ -326,6 +337,8 @@ def run_model_from_args(args: argparse.Namespace) -> dict[str, Any]:
     session_started_monotonic = time.monotonic()
     apply_provider_defaults(args)
     require_endpoint(args)
+    # Resolved before the key check so a bad target or task set is reported on the first try.
+    task = resolve_run_task(args)
     use_preset_keys = uses_preset_endpoint(args)
     api_key = resolve_api_key(args.provider, args.api_key_env, use_preset_keys=use_preset_keys)
     if not api_key and providers.api_key_required(
@@ -333,7 +346,6 @@ def run_model_from_args(args: argparse.Namespace) -> dict[str, Any]:
     ):
         raise RuntimeError(providers.missing_api_key_message(args.provider, args.api_key_env))
 
-    task = load_task(args.taskset, args.task_index)
     args.db = str(resolve_task_db_path(getattr(args, "db", None)))
     prompts.validate_model_run_database(args.db, library=args.reaction_library or None)
     excluded_tools = run_excluded_tools(args, task)
@@ -926,6 +938,24 @@ def normalize_reasoning_effort(args: argparse.Namespace) -> None:
 
     if getattr(args, "reasoning_effort", None) == "max" and getattr(args, "api_mode", None) != "messages":
         args.reasoning_effort = "xhigh"
+
+
+def resolve_run_task(args: argparse.Namespace) -> dict[str, Any]:
+    """The task a run plans: the --smiles target, else the selected task-set row."""
+
+    taskset = getattr(args, "taskset", None)
+    task_index = getattr(args, "task_index", None)
+    smiles = getattr(args, "smiles", None)
+    if smiles is None:
+        return load_task(
+            DEFAULT_TASKSET if taskset is None else taskset, 0 if task_index is None else task_index
+        )
+    if taskset is not None or task_index is not None:
+        raise RuntimeError("--smiles cannot be combined with --taskset or --task-index")
+    try:
+        return build_adhoc_task(smiles)
+    except ValueError as exc:
+        raise RuntimeError(str(exc)) from exc
 
 
 def load_task(path: str, index: int) -> dict[str, Any]:
