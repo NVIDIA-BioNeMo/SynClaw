@@ -204,6 +204,14 @@ def test_local_tool_dispatcher_does_not_hide_harness_errors() -> None:
         call_local_tool(BrokenTools(), "mces", {"smiles_a": "C", "smiles_b": "CC"})
 
 
+@pytest.mark.parametrize("step", ["BB:1", 1, None])
+def test_local_tool_dispatcher_rejects_non_object_steps(step: Any) -> None:
+    result = call_local_tool(object(), "submit_pathway", {"steps": [step], "pathway_text": "x"})
+
+    assert result["error"] == "invalid_tool_call"
+    assert "array of objects" in result["issues"][0]
+
+
 @pytest.mark.parametrize("max_tool_calls", [2, 10])
 @pytest.mark.parametrize("floor", ["exact", 1.0])
 @pytest.mark.parametrize(

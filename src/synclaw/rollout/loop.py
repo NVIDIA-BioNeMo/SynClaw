@@ -222,8 +222,11 @@ def call_local_tool(
                 top_near_matches=arguments["top_near_matches"],
             )
         if name == "submit_pathway":
+            steps = _optional_array(arguments, "steps", name) or []
+            if not all(isinstance(step, dict) for step in steps):
+                raise ValueError(f"{name} argument 'steps' must be an array of objects")
             return tools.submit_pathway(
-                steps=_optional_array(arguments, "steps", name) or [],
+                steps=steps,
                 building_block=_optional_str(arguments, "building_block"),
                 pathway_text=arguments.get("pathway_text"),
                 target_smiles=target_smiles,
