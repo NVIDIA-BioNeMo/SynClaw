@@ -89,7 +89,8 @@ def test_turn_reminders_are_emitted_once_and_force_the_final_turn() -> None:
     assert state.forced_submit_requested is True
 
 
-def test_no_tool_response_uses_shared_persistence_and_force_submit_policy() -> None:
+@pytest.mark.parametrize("tool_calls", [0, 1])
+def test_no_tool_response_uses_shared_persistence_and_force_submit_policy(tool_calls: int) -> None:
     state = RolloutPolicyState(
         total_tool_calls=1,
         best_accepted_similarity=0.5,
@@ -105,7 +106,7 @@ def test_no_tool_response_uses_shared_persistence_and_force_submit_policy() -> N
     assert second.reminder.startswith("Call submit_pathway now")
     assert state.forced_submit_requested is True
 
-    search_only_state = RolloutPolicyState(total_tool_calls=1)
+    search_only_state = RolloutPolicyState(total_tool_calls=tool_calls)
     search_only_first = handle_no_tool_response(
         config, search_only_state, content="still thinking"
     )

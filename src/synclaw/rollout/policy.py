@@ -418,10 +418,6 @@ def handle_no_tool_response(
                 "Call submit_pathway now with your best route."
             )
         )
-    if state.total_tool_calls <= 0:
-        # Stopping is shared policy; adapters retain their historical reason labels.
-        return NoToolDecision()
-
     state.consecutive_non_tool_turns_after_tools += 1
     persistence_suffix = ""
     if is_below_persistence_floor(

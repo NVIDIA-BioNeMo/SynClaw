@@ -635,3 +635,14 @@ def test_shared_rollout_requests_and_accepts_a_tool_limit_final_submission() -> 
         "type": "function",
         "function": {"name": "submit_pathway"},
     }
+
+
+def test_benchmark_empty_replies_still_obey_turn_budget() -> None:
+    transport = FakeTransport([AssistantTurn({"content": ""}, "stop") for _ in range(3)])
+
+    result = _run_shared_rollout(transport, rollout_config=config(stop_condition="exact", max_turns=3))
+
+    assert len(transport.requests) == result.state.assistant_turns == 3
+    assert result.state.policy.total_tool_calls == 0
+    assert result.submission is None
+    assert result.reason == "no_accepted_submission"
