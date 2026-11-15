@@ -635,3 +635,33 @@ def test_shared_rollout_requests_and_accepts_a_tool_limit_final_submission() -> 
         "type": "function",
         "function": {"name": "submit_pathway"},
     }
+
+
+@pytest.mark.parametrize("stop_condition", ["exact", 1.0])
+@pytest.mark.parametrize("content", ["", "Still planning."])
+def test_benchmark_nudges_first_no_tool_reply_before_exact_submission(stop_condition, content) -> None:
+    first = AssistantTurn({"content": content, "reasoning_text": "Plan the route."}, "stop")
+    transport = FakeTransport([first, tool_turn("submit_pathway", {"steps": []})])
+    tools = FakeTools([{"accepted": True, "actual_final_smiles": "CCO", "stereo_aware_similarity_to_target": 1.0}])
+
+    result = _run_shared_rollout(transport, tools, rollout_config=config(stop_condition=stop_condition))
+
+    assert len(transport.requests) == 2
+    assert any(
+        m.get("role") == "user" and "Continue. Use additional tools" in m.get("content", "")
+        for m in transport.requests[1]
+    )
+    assert tools.calls == ["submit_pathway"]
+    assert result.reason == "terminal_submission"
+    assert result.submission is not None and result.submission["accepted"]
+
+
+def test_benchmark_empty_replies_still_obey_turn_budget() -> None:
+    transport = FakeTransport([AssistantTurn({"content": ""}, "stop") for _ in range(3)])
+
+    result = _run_shared_rollout(transport, rollout_config=config(stop_condition="exact", max_turns=3))
+
+    assert len(transport.requests) == result.state.assistant_turns == 3
+    assert result.state.policy.total_tool_calls == 0
+    assert result.submission is None
+    assert result.reason == "no_accepted_submission"
