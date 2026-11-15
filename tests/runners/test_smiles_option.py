@@ -68,15 +68,33 @@ def test_empty_taskset_is_an_error_not_the_default(tmp_path, monkeypatch) -> Non
         model_runner.resolve_run_task(_args("--taskset", ""))
 
 
-@pytest.mark.parametrize("flags", [["--smiles", "not a molecule"], ["--smiles", "CCO", "--taskset", "t.jsonl"]])
-def test_bad_target_is_reported_before_the_missing_api_key(monkeypatch, flags) -> None:
-    for name in ("NVIDIA_API_KEY", "NVBUILD_API_KEY"):
-        monkeypatch.delenv(name, raising=False)
+@pytest.mark.parametrize(
+    ("flags", "message"),
+    [
+        (["--smiles", "not a molecule"], "Invalid target SMILES"),
+        (["--smiles", "CCO", "--taskset", "t.jsonl"], "cannot be combined"),
+    ],
+)
+def test_bad_target_is_reported_before_the_missing_api_key(monkeypatch, flags, message) -> None:
+    monkeypatch.delenv("TEST_SYNCLAW_API_KEY", raising=False)
+    args = _args(
+        "--provider", "custom", "--api-mode", "chat", "--base-url", "https://example.test/v1",
+        "--api-key-env", "TEST_SYNCLAW_API_KEY", *flags,
+    )
 
-    with pytest.raises(RuntimeError) as error:
-        model_runner.run_model_from_args(_args(*flags))
+    with pytest.raises(RuntimeError, match=message):
+        model_runner.run_model_from_args(args)
 
-    assert "API key" not in str(error.value)
+
+def test_missing_api_key_is_reported_for_a_valid_target(monkeypatch) -> None:
+    monkeypatch.delenv("TEST_SYNCLAW_API_KEY", raising=False)
+    args = _args(
+        "--provider", "custom", "--api-mode", "chat", "--base-url", "https://example.test/v1",
+        "--api-key-env", "TEST_SYNCLAW_API_KEY", "--smiles", "CCO",
+    )
+
+    with pytest.raises(RuntimeError, match="TEST_SYNCLAW_API_KEY is not set"):
+        model_runner.run_model_from_args(args)
 
 
 def test_run_sends_the_smiles_target_to_the_model(tmp_path, monkeypatch) -> None:
