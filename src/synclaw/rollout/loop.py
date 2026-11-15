@@ -36,7 +36,7 @@ from synclaw.rollout.policy import (
     turn_reminders,
 )
 from synclaw.tools.compaction import compact_json_size, compact_tool_result
-from synclaw.tools.contracts import TOOL_NAMES
+from synclaw.tools.contracts import TOOL_ARGUMENT_DEFAULTS, TOOL_NAMES
 
 EventCallback = Callable[[dict[str, Any], int | None], Awaitable[None] | None]
 SubmissionScorer = Callable[[dict[str, Any]], dict[str, Any]]
@@ -171,15 +171,16 @@ def call_local_tool(
     target_smiles: str | None = None,
 ) -> dict[str, Any]:
     """Validate and dispatch one call to an allowlisted in-process tool."""
+    arguments = {**TOOL_ARGUMENT_DEFAULTS.get(name, {}), **arguments}
     try:
         if name not in TOOL_NAMES:
             return tool_argument_error(name, f"Unknown tool name: {name}", arguments)
         if name == "search_building_blocks":
             return tools.search_building_blocks(
                 _required_str(arguments, "query", name),
-                arguments.get("limit", 10),
-                include_near=arguments.get("include_near", True),
-                min_similarity=arguments.get("min_similarity", 0.15),
+                arguments["limit"],
+                include_near=arguments["include_near"],
+                min_similarity=arguments["min_similarity"],
             )
         if name == "similarity":
             return tools.similarity(
@@ -198,27 +199,27 @@ def call_local_tool(
                 product_smiles=_optional_str_or_str_list(
                     arguments, "product_smiles", name
                 ),
-                limit=arguments.get("limit", 10),
+                limit=arguments["limit"],
                 library=reaction_library or None,
-                run_forward=arguments.get("run_forward", False),
-                try_permutations=arguments.get("try_permutations", True),
+                run_forward=arguments["run_forward"],
+                try_permutations=arguments["try_permutations"],
             )
         if name == "simulate_reaction":
             return tools.simulate_reaction(
                 _required_str(arguments, "reaction_id", name),
                 _required_str_list(arguments, "reactants", name),
                 product_smiles=_optional_str(arguments, "product_smiles"),
-                max_products=arguments.get("max_products", 100),
-                try_permutations=arguments.get("try_permutations", True),
+                max_products=arguments["max_products"],
+                try_permutations=arguments["try_permutations"],
             )
         if name == "simulate_reverse_reaction":
             return tools.simulate_reverse_reaction(
                 _required_str(arguments, "reaction_id", name),
                 _required_str_or_str_list(arguments, "product_smiles", name),
-                max_outcomes=arguments.get("max_outcomes", 50),
-                include_near=arguments.get("include_near", True),
-                min_similarity=arguments.get("min_similarity", 0.15),
-                top_near_matches=arguments.get("top_near_matches", 3),
+                max_outcomes=arguments["max_outcomes"],
+                include_near=arguments["include_near"],
+                min_similarity=arguments["min_similarity"],
+                top_near_matches=arguments["top_near_matches"],
             )
         if name == "submit_pathway":
             return tools.submit_pathway(
@@ -228,7 +229,8 @@ def call_local_tool(
                 target_smiles=target_smiles,
             )
         raise AssertionError(f"Missing local dispatcher for allowlisted tool: {name}")
-    except Exception as exc:
+    # Malformed model arguments surface as these; anything else is a harness bug and must propagate.
+    except (TypeError, ValueError) as exc:
         return tool_argument_error(name, str(exc), arguments)
 
 

@@ -3,13 +3,17 @@
 
 from __future__ import annotations
 
+import inspect
+
 from synclaw.rollout.policy import prepare_tool_call
 from synclaw.tools.contracts import (
     MESSAGES_TOOL_SCHEMAS,
     RESPONSES_TOOL_SCHEMAS,
+    TOOL_ARGUMENT_DEFAULTS,
     TOOL_SCHEMAS,
     filter_chat_tool_schemas,
 )
+from synclaw.tools.synthesis import SynthesisTools
 
 
 def test_transport_schemas_preserve_one_canonical_contract() -> None:
@@ -36,6 +40,14 @@ def test_tool_descriptions_carry_the_rules_prompts_leave_out() -> None:
     assert "not guaranteed to work forward" in descriptions["simulate_reverse_reaction"]
     for rule in ("BB:<id>", "INT:<step_number>", "steps: []", "best accepted route is kept"):
         assert rule in descriptions["submit_pathway"]
+
+
+def test_tool_method_defaults_match_the_contract() -> None:
+    for name, defaults in TOOL_ARGUMENT_DEFAULTS.items():
+        parameters = inspect.signature(getattr(SynthesisTools, name)).parameters
+        for key, value in defaults.items():
+            if key != "steps":
+                assert parameters[key].default == value, (name, key)
 
 
 def test_filtered_schemas_are_independent_copies() -> None:

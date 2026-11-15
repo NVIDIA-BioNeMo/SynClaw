@@ -90,7 +90,7 @@ class SynthesisTools:
     def search_building_blocks(
         self,
         query: str,
-        limit: int = 20,
+        limit: int = 10,
         include_near: bool = True,
         min_similarity: float = 0.15,
     ) -> dict[str, Any]:
@@ -142,7 +142,7 @@ class SynthesisTools:
     def search_reaction_templates(
         self,
         query: str | None = None,
-        limit: int = 20,
+        limit: int = 10,
         library: LibrarySelection = None,
         reactant_smiles: list[str] | None = None,
         product_smiles: str | list[str] | None = None,
@@ -573,6 +573,18 @@ class SynthesisTools:
                 if actual_step_product:
                     result["actual_product_smiles"] = actual_step_product
                     intermediates[f"INT:{index}"] = actual_step_product
+
+        used_refs = {
+            str(ref)
+            for step in steps
+            if isinstance(refs := step.get("reactants") or step.get("reactant_refs"), list)
+            for ref in refs
+        }
+        issues.extend(
+            f"step {index}: INT:{index} is not used by a later step; every step must feed the final product"
+            for index in range(1, len(steps))
+            if f"INT:{index}" not in used_refs
+        )
 
         submitted_final = steps[-1].get("product_smiles") if steps else None
         submitted_final_validation = chem.validate_smiles(submitted_final) if submitted_final else None

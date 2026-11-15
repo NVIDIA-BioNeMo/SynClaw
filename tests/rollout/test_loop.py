@@ -192,6 +192,16 @@ def test_local_tool_dispatcher_defaults_to_canonical_reaction_library() -> None:
     result = call_local_tool(LibraryTools(), "search_reaction_templates", {})
 
     assert result["library"] == ("synformer", "paroutes", "ord", "nvidia")
+    assert result["limit"] == 10
+
+
+def test_local_tool_dispatcher_does_not_hide_harness_errors() -> None:
+    class BrokenTools:
+        def mces(self, smiles_a: str, smiles_b: str) -> dict[str, Any]:
+            raise RuntimeError("index missing")
+
+    with pytest.raises(RuntimeError, match="index missing"):
+        call_local_tool(BrokenTools(), "mces", {"smiles_a": "C", "smiles_b": "CC"})
 
 
 @pytest.mark.parametrize("max_tool_calls", [2, 10])

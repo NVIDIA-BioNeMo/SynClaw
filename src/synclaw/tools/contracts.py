@@ -283,7 +283,8 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                 "library: it is accepted only if a library template generates the same product "
                 "from the same reactants. "
                 "Starting reactants must be purchasable building blocks, given as BB:<id> or exact "
-                "building-block SMILES; use INT:<step_number> for an earlier step's product. For "
+                "building-block SMILES; use INT:<step_number> for an earlier step's product, and every "
+                "step but the last must feed a later one. For "
                 "direct purchase, pass steps: [] and one exact building_block. The route is scored "
                 "on the RDKit-generated product of its final step. If you submit more than once, "
                 "the best accepted route is kept, so a later submission cannot replace a better "
@@ -357,25 +358,14 @@ TOOL_NAMES = tuple(tool["function"]["name"] for tool in TOOL_SCHEMAS)
 REQUIRED_TOOL_NAMES = frozenset({"submit_pathway"})
 
 TOOL_ARGUMENT_DEFAULTS: dict[str, dict[str, Any]] = {
-    "search_building_blocks": {
-        "limit": 10,
-        "include_near": True,
-        "min_similarity": 0.15,
-    },
-    "search_reaction_templates": {
-        "limit": 10,
-        "run_forward": False,
-        "try_permutations": True,
-    },
-    "simulate_reaction": {"max_products": 100, "try_permutations": True},
-    "simulate_reverse_reaction": {
-        "max_outcomes": 50,
-        "include_near": True,
-        "min_similarity": 0.15,
-        "top_near_matches": 3,
-    },
-    "submit_pathway": {"steps": []},
+    tool["function"]["name"]: {
+        key: spec["default"]
+        for key, spec in tool["function"]["parameters"].get("properties", {}).items()
+        if "default" in spec
+    }
+    for tool in TOOL_SCHEMAS
 }
+TOOL_ARGUMENT_DEFAULTS["submit_pathway"]["steps"] = []
 
 TOOL_ALLOWED_ARGUMENTS: dict[str, frozenset[str]] = {
     tool["function"]["name"]: frozenset(
