@@ -898,13 +898,11 @@ def _building_block_grounding(step_results: list[dict[str, Any]]) -> dict[str, A
     ungrounded: list[dict[str, Any]] = []
     for step in step_results:
         for reactant in step.get("resolved_reactants") or []:
-            if not isinstance(reactant, dict):
-                continue
             source = reactant.get("source")
             if source == "intermediate":
                 continue
             block = reactant.get("building_block")
-            if isinstance(block, dict) and block.get("id") is not None:
+            if block is not None:
                 building_block_ids.add(int(block["id"]))
                 continue
             ungrounded.append(
