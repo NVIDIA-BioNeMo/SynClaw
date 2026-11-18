@@ -13,6 +13,7 @@ from typing import Any
 from synclaw.core import chem, db, fingerprint_index, reactions
 from synclaw.core.libraries import LibrarySelection, normalize_libraries
 from synclaw.core.toxicity import BLOCK_KEY, ToxicityConfig, ToxicityScreen, refusal_message
+from synclaw.tools.contracts import clamp_to_contract
 
 REVERSE_RANK_LIMIT = 25
 REVERSE_RANK_MAX_OUTCOMES = 10
@@ -98,6 +99,7 @@ class SynthesisTools:
 
         ``*`` browses the catalog. Hidden building blocks never appear.
         """
+        limit = clamp_to_contract("search_building_blocks", "limit", limit)
         validation = chem.validate_smiles(query)
         with db.session(self.db_path) as conn:
             results = db.search_building_blocks(
@@ -113,7 +115,7 @@ class SynthesisTools:
         return {
             "query": query,
             "query_canonical_smiles": validation.get("canonical_smiles") if validation["valid"] else None,
-            "limit": max(1, min(int(limit), 100)),
+            "limit": limit,
             "include_near": include_near,
             "min_similarity": min_similarity,
             "count": len(results),
@@ -164,7 +166,7 @@ class SynthesisTools:
         text_query = (query or "").strip()
         has_text_query = bool(text_query and text_query != "*")
         has_molecule_query = bool(reactant_smiles or product_smiles)
-        result_limit = max(1, min(int(limit), 100))
+        result_limit = clamp_to_contract("search_reaction_templates", "limit", limit)
         if not has_text_query and not has_molecule_query:
             # With nothing to search for, list the reaction families to search by.
             with db.session(self.db_path) as conn:
@@ -297,7 +299,7 @@ class SynthesisTools:
                 reaction_id=reaction_id,
                 reactant_smiles=[item["smiles"] for item in resolved],
                 product_smiles=product_smiles,
-                max_products=max_products,
+                max_products=clamp_to_contract("simulate_reaction", "max_products", max_products),
                 try_permutations=try_permutations,
                 library=self.reaction_libraries,
             )
@@ -323,7 +325,7 @@ class SynthesisTools:
                 conn,
                 reaction_id=reaction_id,
                 product_smiles=product_smiles,
-                max_outcomes=max_outcomes,
+                max_outcomes=clamp_to_contract("simulate_reverse_reaction", "max_outcomes", max_outcomes),
                 library=self.reaction_libraries,
             )
             if result.get("reaction_executed"):

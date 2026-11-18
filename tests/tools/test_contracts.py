@@ -4,12 +4,15 @@
 from __future__ import annotations
 
 import inspect
+from pathlib import Path
 
+from synclaw.core import db
 from synclaw.rollout.policy import prepare_tool_call
 from synclaw.tools.contracts import (
     MESSAGES_TOOL_SCHEMAS,
     RESPONSES_TOOL_SCHEMAS,
     TOOL_ARGUMENT_DEFAULTS,
+    TOOL_ARGUMENT_SPECS,
     TOOL_SCHEMAS,
     filter_chat_tool_schemas,
 )
@@ -48,6 +51,20 @@ def test_tool_method_defaults_match_the_contract() -> None:
         for key, value in defaults.items():
             if key != "steps":
                 assert parameters[key].default == value, (name, key)
+
+
+def test_tool_methods_honor_the_advertised_maximum(tmp_path: Path) -> None:
+    maximum = TOOL_ARGUMENT_SPECS["search_building_blocks"]["limit"]["maximum"]
+    (tmp_path / "bbs.txt").write_text(
+        "SMILES\n" + "\n".join("C" * n for n in range(1, maximum + 5)), encoding="utf-8"
+    )
+    database = tmp_path / "test.sqlite"
+    db.ingest_building_blocks(tmp_path / "bbs.txt", database)
+    db.prepare_building_block_search(database)
+
+    result = SynthesisTools(database).search_building_blocks("*", limit=maximum * 5)
+
+    assert result["limit"] == result["count"] == maximum
 
 
 def test_filtered_schemas_are_independent_copies() -> None:
