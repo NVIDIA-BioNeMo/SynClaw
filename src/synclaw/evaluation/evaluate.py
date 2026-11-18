@@ -403,8 +403,6 @@ def extract_final_submission(
                     final_smiles = _final_smiles_from_structured_steps(
                         candidate, target_smiles=target_smiles
                     )
-                elif submit_call_arguments:
-                    final_smiles = None
                 else:
                     final_smiles = _first_present(candidate, ("final_smiles", "product_smiles", "product"))
                 submitted_final_smiles = _first_present(candidate, ("submitted_final_smiles",))
