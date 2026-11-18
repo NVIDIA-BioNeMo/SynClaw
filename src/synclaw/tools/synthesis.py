@@ -224,7 +224,7 @@ class SynthesisTools:
                     "results": text_results,
                 }
             # Rank the whole structural match pool before truncating to the requested limit.
-            result = reactions.search_reaction_templates_structural_matches(
+            molecule_results = reactions.search_reaction_templates_structural_matches(
                 conn,
                 reactant_smiles=reactant_smiles,
                 product_smiles=product_smiles,
@@ -234,23 +234,24 @@ class SynthesisTools:
                 try_permutations=try_permutations,
                 template_scan_limit=template_scan_limit,
             )
-            if product_smiles and result.get("valid"):
-                self._rank_template_search_by_reverse_usefulness(conn, result, product_smiles)
+            if product_smiles and molecule_results.get("valid"):
+                self._rank_template_search_by_reverse_usefulness(conn, molecule_results, product_smiles)
             else:
-                result["reverse_ranking"] = {"applied": False, "reason": "product_smiles was not supplied"}
-        result["query"] = query
-        result["search_mode"] = "molecule"
-        result["results"] = list(result.get("results") or [])[:result_limit]
-        result["count"] = len(result["results"])
-        result["limit"] = result_limit
+                molecule_results["reverse_ranking"] = {"applied": False, "reason": "product_smiles was not supplied"}
+        matches = list(molecule_results.pop("results", None) or [])[:result_limit]
+        molecule_results.pop("count", None)
+        result = {**molecule_results, "query": query, "limit": result_limit}
         if has_text_query:
             # Text and molecule constraints are searched independently and returned side by side.
-            result["search_mode"] = "text_and_molecule"
-            result["structural_results"] = result.pop("results")
-            result["structural_count"] = result.pop("count")
-            result["text_results"] = text_results
-            result["text_count"] = len(text_results)
-        return result
+            return {
+                **result,
+                "search_mode": "text_and_molecule",
+                "structural_results": matches,
+                "structural_count": len(matches),
+                "text_results": text_results,
+                "text_count": len(text_results),
+            }
+        return {**result, "search_mode": "molecule", "results": matches, "count": len(matches)}
 
     def get_reaction_template(self, reaction_id: str) -> dict[str, Any]:
         with db.session(self.db_path) as conn:
