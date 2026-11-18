@@ -370,9 +370,19 @@ TOOL_ALLOWED_ARGUMENTS: dict[str, frozenset[str]] = {
 
 
 def clamp_to_contract(tool_name: str, argument: str, value: Any) -> int:
-    """Clamp an integer argument to the bounds its tool schema advertises."""
+    """Clamp a whole-number argument to the bounds its tool schema advertises.
+
+    Anything else (a boolean, string, fraction, NaN or infinity) raises ``ValueError``
+    instead of being coerced, so the caller sees the contract rather than a substituted value.
+    """
 
     spec = TOOL_ARGUMENT_SPECS[tool_name][argument]
+    whole = isinstance(value, int) or (isinstance(value, float) and value.is_integer())
+    if isinstance(value, bool) or not whole:
+        raise ValueError(
+            f"{tool_name} argument '{argument}' must be a whole number from "
+            f"{spec['minimum']} to {spec['maximum']}, got {value!r}"
+        )
     return max(spec["minimum"], min(int(value), spec["maximum"]))
 
 

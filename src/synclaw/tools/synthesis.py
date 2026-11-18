@@ -599,16 +599,18 @@ class SynthesisTools:
                     result["actual_product_smiles"] = actual_step_product
                     intermediates[f"INT:{index}"] = actual_step_product
 
-        used_refs = {
-            str(ref)
-            for step in steps
-            if isinstance(refs := step.get("reactants") or step.get("reactant_refs"), list)
-            for ref in refs
+        # Count only references that resolved: an INT:k exists only after step k, so this
+        # excludes forward and self references that the resolver already rejected.
+        used_intermediates = {
+            str(reactant["ref"])
+            for result in step_results
+            for reactant in result.get("resolved_reactants") or []
+            if reactant.get("source") == "intermediate"
         }
         issues.extend(
             f"step {index}: INT:{index} is not used by a later step; every step must feed the final product"
             for index in range(1, len(steps))
-            if f"INT:{index}" not in used_refs
+            if f"INT:{index}" not in used_intermediates
         )
 
         submitted_final = steps[-1].get("product_smiles") if steps else None

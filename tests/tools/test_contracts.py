@@ -4,7 +4,11 @@
 from __future__ import annotations
 
 import inspect
+import math
 from pathlib import Path
+from typing import Any
+
+import pytest
 
 from synclaw.core import db
 from synclaw.rollout.policy import prepare_tool_call
@@ -14,6 +18,7 @@ from synclaw.tools.contracts import (
     TOOL_ARGUMENT_DEFAULTS,
     TOOL_ARGUMENT_SPECS,
     TOOL_SCHEMAS,
+    clamp_to_contract,
     filter_chat_tool_schemas,
 )
 from synclaw.tools.synthesis import SynthesisTools
@@ -65,6 +70,17 @@ def test_tool_methods_honor_the_advertised_maximum(tmp_path: Path) -> None:
     result = SynthesisTools(database).search_building_blocks("*", limit=maximum * 5)
 
     assert result["limit"] == result["count"] == maximum
+
+
+@pytest.mark.parametrize("value", [math.inf, -math.inf, math.nan, 2.5, True, "10", None])
+def test_clamp_to_contract_rejects_values_that_are_not_whole_numbers(value: Any) -> None:
+    with pytest.raises(ValueError, match="must be a whole number from 1 to 20"):
+        clamp_to_contract("search_building_blocks", "limit", value)
+
+
+@pytest.mark.parametrize(("value", "expected"), [(5, 5), (5.0, 5), (0, 1), (1e6, 20)])
+def test_clamp_to_contract_clamps_whole_numbers_to_the_schema_bounds(value: Any, expected: int) -> None:
+    assert clamp_to_contract("search_building_blocks", "limit", value) == expected
 
 
 def test_filtered_schemas_are_independent_copies() -> None:
