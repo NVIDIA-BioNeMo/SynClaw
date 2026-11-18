@@ -1,4 +1,4 @@
-# Contributing to SynClaw
+# Contributing to BioNeMo-SynClaw
 
 We welcome contributions. By submitting a contribution, you agree that it is
 licensed under the [Apache License 2.0](LICENSE) that covers this project.

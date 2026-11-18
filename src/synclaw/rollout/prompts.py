@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Canonical prompts and task preparation for every SynClaw rollout transport."""
+"""Canonical prompts and task preparation for every BioNeMo-SynClaw rollout transport."""
 
 from __future__ import annotations
 

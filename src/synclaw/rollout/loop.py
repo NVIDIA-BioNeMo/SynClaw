@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Transport-neutral execution of one SynClaw tool-use rollout."""
+"""Transport-neutral execution of one BioNeMo-SynClaw tool-use rollout."""
 
 from __future__ import annotations
 
@@ -118,7 +118,7 @@ class ToolExecutor(Protocol):
 
 
 class LocalToolExecutor:
-    """Execute normalized calls through SynClaw's in-process synthesis tools."""
+    """Execute normalized calls through BioNeMo-SynClaw's in-process synthesis tools."""
 
     def __init__(
         self,
@@ -386,7 +386,7 @@ async def run_rollout(
     score_submission: SubmissionScorer | None = None,
     budget_provider: BudgetProvider | None = None,
 ) -> RolloutResult:
-    """Run the canonical SynClaw loop independently of model and tool transports."""
+    """Run the canonical BioNeMo-SynClaw loop independently of model and tool transports."""
     state = state or RolloutState(
         messages=[dict(row) for row in task.initial_messages], events=[]
     )

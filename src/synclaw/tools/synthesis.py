@@ -623,7 +623,7 @@ class SynthesisTools:
             )
 
         # ReaSyn checks the whole generated product state, not just the chosen
-        # outcome. SynClaw exposes all components as route candidates, so check the
+        # outcome. BioNeMo-SynClaw exposes all components as route candidates, so check the
         # existing generated products plus the selected product if output was capped.
         products = [
             ("product" if index == len(step_results) else "intermediate", smiles)

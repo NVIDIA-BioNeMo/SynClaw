@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Canonical model-visible contracts and dispatch defaults for SynClaw tools."""
+"""Canonical model-visible contracts and dispatch defaults for BioNeMo-SynClaw tools."""
 
 from __future__ import annotations
 

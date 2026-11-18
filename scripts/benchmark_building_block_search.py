@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Benchmark exact and near building-block searches against prepared SynClaw DBs."""
+"""Benchmark exact and near building-block searches against prepared BioNeMo-SynClaw DBs."""
 
 from __future__ import annotations
 

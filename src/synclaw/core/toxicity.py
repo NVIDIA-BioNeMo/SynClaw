@@ -7,7 +7,7 @@ This reimplements ReaSyn's optional filter: a molecule is flagged when its
 Morgan/Tanimoto similarity to any watchlist entry exceeds a threshold. The
 watchlist is ReaSyn's public ``data/mols_to_filter.txt``, fetched into ``var/`` by
 ``synclaw download-public-data`` and never committed. The screen is off by default;
-enabling it requires a valid watchlist. SynClaw retains its existing 2,048-bit
+enabling it requires a valid watchlist. BioNeMo-SynClaw retains its existing 2,048-bit
 constitutional Morgan fingerprints rather than ReaSyn's 4,096-bit fingerprints.
 
 A watchlist is a denylist of known agents and their close analogues. It is not a
@@ -207,7 +207,7 @@ def refusal_message(block: dict[str, Any]) -> str:
     items = "; ".join(f"{item['role']} {item['smiles']}" for item in block["refused"])
     return (
         f"Refused by the dangerous-molecule screen ({items}; Tanimoto similarity to the watchlist exceeds "
-        f"{block['threshold']}). SynClaw does not plan routes to or through such molecules."
+        f"{block['threshold']}). This system does not plan routes to or through such molecules."
     )
 
 

@@ -59,7 +59,7 @@ def ingest_reaction_libraries(
     catalog = bundled_reaction_catalog()
     template_dir = bundled_reaction_template_dir()
     if not template_dir.is_dir():
-        raise RuntimeError("Importing the bundled reaction sources requires a source checkout of synclaw")
+        raise RuntimeError("Importing the bundled reaction sources requires a source checkout of BioNeMo-SynClaw")
     libraries = list(catalog["sources"])
     families = json.loads(_verified_bundled_file(template_dir, catalog["families"]).read_text())
     records = []

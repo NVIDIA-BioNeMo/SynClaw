@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Provider-neutral state and decisions for SynClaw tool-use rollouts."""
+"""Provider-neutral state and decisions for BioNeMo-SynClaw tool-use rollouts."""
 
 from __future__ import annotations
 

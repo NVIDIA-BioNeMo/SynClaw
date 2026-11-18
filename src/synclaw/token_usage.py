@@ -3,7 +3,7 @@
 
 """Token-usage accounting for hosted-model responses.
 
-SynClaw counts tokens; it never estimates prices. A provider that reports its own
+BioNeMo-SynClaw counts tokens; it never estimates prices. A provider that reports its own
 ``cost`` inside a response's usage (OpenRouter does) has that value carried
 through and summed, but nothing here computes one.
 """

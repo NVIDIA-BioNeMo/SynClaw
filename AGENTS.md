@@ -2,7 +2,7 @@
 
 ## Project Structure
 
-SynClaw (Agentic Retrosynthesis Planning) is a Python package under `src/synclaw`. The CLI
+BioNeMo-SynClaw (Agentic Retrosynthesis Planning) is a Python package under `src/synclaw`. The CLI
 entry point is `src/synclaw/cli.py`, which stays at the package root alongside
 `__main__.py`. Everything else is grouped by layer:
 
@@ -20,7 +20,7 @@ Provider presets (API style, endpoints, credential variables) live in
 `src/synclaw/providers.json`, not in Python. Add or repoint a backend by editing that
 table. The API style comes from the preset or `--api-mode`, never from the model
 name, so do not add model-name special cases. `token_usage.py` counts tokens and
-passes through a provider-reported `cost`; SynClaw never estimates prices.
+passes through a provider-reported `cost`; BioNeMo-SynClaw never estimates prices.
 
 **Adding a model-facing tool** touches three files in order: declare the schema in
 `synclaw/tools/contracts.py`, implement it on `SynthesisTools` in `synclaw/tools/synthesis.py`,
