@@ -610,7 +610,7 @@ class SynthesisTools:
 
         actual_final_candidates = _actual_final_candidates(step_results)
         all_steps_valid = bool(step_results) and all(result.get("valid") is True for result in step_results)
-        grounding = _building_block_grounding(step_results)
+        grounding = _summarize_reactant_grounding(step_results)
         accepted = not issues and all_steps_valid
         scoring = score_pathway_against_target(
             actual_final_candidates,
@@ -893,7 +893,7 @@ def _final_product_rank(product_smiles: str, target_smiles: str) -> tuple[float,
     )
 
 
-def _building_block_grounding(step_results: list[dict[str, Any]]) -> dict[str, Any]:
+def _summarize_reactant_grounding(step_results: list[dict[str, Any]]) -> dict[str, Any]:
     building_block_ids: set[int] = set()
     ungrounded: list[dict[str, Any]] = []
     for step in step_results:
