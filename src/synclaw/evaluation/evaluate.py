@@ -184,7 +184,7 @@ def replay_selected_submission(
             library=library,
             hide_target=hide_target,
         )
-        if last is not None and _recorded_refused(events, ordinal):
+        if last is not None and _recorded_submit_result(events, ordinal).get("refused") is True:
             # Replay runs without the screen, so keep the refusal the run itself recorded.
             last = {**last, "accepted": False, "refused": True}
         if last is None or not last.get("accepted"):
@@ -286,35 +286,21 @@ def extract_selected_submission(
     return extract_final_submission(selected_events, target_smiles=target_smiles)
 
 
-def _recorded_refused(events: list[dict[str, Any]], ordinal: int) -> bool:
-    """Whether the run's own screen refused the n-th submit_pathway call."""
+def _recorded_submit_result(events: list[dict[str, Any]], ordinal: int) -> dict[str, Any]:
+    """The recorded result of the n-th submit_pathway call; results are appended in call order."""
 
     results = [
-        event for event in events
+        _payload(event).get("result") for event in events
         if _event_type(event) in TOOL_RESULT_TYPES and _tool_name(event) == "submit_pathway"
     ]
-    if ordinal >= len(results):
-        return False
-    payload = _payload(results[ordinal])
-    result = payload.get("result") if isinstance(payload, dict) else None
-    return isinstance(result, dict) and result.get("refused") is True
+    result = results[ordinal] if ordinal < len(results) else None
+    return result if isinstance(result, dict) else {}
 
 
 def _recorded_step_smarts(events: list[dict[str, Any]], *, call_ordinal: int) -> dict[int, str]:
-    """Map step positions to template SMARTS from the result of the given submit_pathway call.
+    """Map step positions to template SMARTS from the result of the given submit_pathway call."""
 
-    Results are appended in call order, so the n-th submit_pathway result belongs to the n-th call.
-    """
-
-    results = [
-        event for event in events
-        if _event_type(event) in TOOL_RESULT_TYPES and _tool_name(event) == "submit_pathway"
-    ]
-    if call_ordinal >= len(results):
-        return {}
-    payload = _payload(results[call_ordinal])
-    result = payload.get("result") if isinstance(payload, dict) else None
-    steps = result.get("steps") if isinstance(result, dict) else None
+    steps = _recorded_submit_result(events, call_ordinal).get("steps")
     recorded: dict[int, str] = {}
     for position, step in enumerate(steps if isinstance(steps, list) else []):
         template = step.get("template") if isinstance(step, dict) else None
@@ -400,16 +386,12 @@ def extract_final_submission(
 
     for event in reversed(events):
         event_type = _event_type(event)
-        payload = _payload(event)
         tool_name = _tool_name(event)
-        candidates = []
-        if isinstance(payload, dict):
-            candidates.append(payload)
-            if isinstance(payload.get("result"), dict):
-                candidates.append(payload["result"])
-            if isinstance(payload.get("arguments"), dict):
-                candidates.append(payload["arguments"])
         if event_type in FINAL_EVENT_TYPES or tool_name == "submit_pathway":
+            payload = _payload(event)
+            candidates = [payload] + [
+                payload[key] for key in ("result", "arguments") if isinstance(payload.get(key), dict)
+            ]
             for candidate in candidates:
                 pathway_text = _first_present(candidate, ("pathway_text", "pathway", "route", "content", "text"))
                 structured_submission = tool_name == "submit_pathway" or "accepted" in candidate or "reaction_validation" in candidate
