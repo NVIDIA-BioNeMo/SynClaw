@@ -34,6 +34,7 @@ from synclaw.tasks.public_data import (
     list_public_data_files,
 )
 from synclaw.tasks.targets import DEFAULT_POOL_CACHE_MAX, GenerationOptions, generate_targets
+from synclaw.tools.contracts import TOOL_ARGUMENT_DEFAULTS
 from synclaw.tools.synthesis import SynthesisTools
 
 
@@ -257,7 +258,9 @@ def build_parser() -> argparse.ArgumentParser:
     tools_sub = tools.add_subparsers(dest="tool_command")
     search = tools_sub.add_parser("search-building-blocks", help="Search building blocks")
     search.add_argument("query")
-    search.add_argument("--limit", type=int, default=20)
+    search.add_argument(
+        "--limit", type=int, default=TOOL_ARGUMENT_DEFAULTS["search_building_blocks"]["limit"]
+    )
     search.add_argument("--no-near", action="store_true", help="Disable similarity-ranked near matches")
     search.add_argument("--min-similarity", type=float, default=0.15, help="Minimum near-match similarity to return")
     search.add_argument("--db", default=str(db.DEFAULT_DB_PATH))
@@ -279,7 +282,9 @@ def build_parser() -> argparse.ArgumentParser:
     mces.set_defaults(func=_cmd_tool_mces)
     rxn_search = tools_sub.add_parser("search-reaction-templates", help="Search reaction templates")
     rxn_search.add_argument("query", nargs="?")
-    rxn_search.add_argument("--limit", type=int, default=20)
+    rxn_search.add_argument(
+        "--limit", type=int, default=TOOL_ARGUMENT_DEFAULTS["search_reaction_templates"]["limit"]
+    )
     rxn_search.add_argument(
         "--library",
         action="append",
