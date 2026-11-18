@@ -1,6 +1,6 @@
 # BioNeMo-SynClaw
 
-![BioNeMo-SynClaw architecture: an LLM agent uses search tools (building blocks, reaction templates) and simulate-and-score tools (similarity, MCES, forward and reverse reaction simulation), then submits a pathway that is validated with RDKit](assets/synclaw.png)
+![BioNeMo-SynClaw architecture: an LLM agent uses search tools (building blocks, reaction templates) and simulate-and-score tools (similarity, MCES, forward and reverse reaction simulation), then submits a pathway that is validated with RDKit](assets/BioNeMo-SynClaw-README.png)
 
 BioNeMo-SynClaw is a harness that lets LLMs plan chemical synthesis routes with tool use. Given a target
 molecule (a SMILES string), a model searches purchasable building blocks and reaction templates,
