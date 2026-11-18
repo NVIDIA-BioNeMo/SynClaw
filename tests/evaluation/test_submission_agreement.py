@@ -216,3 +216,23 @@ def test_product_fields_in_call_arguments_are_never_scored(db_path, tmp_path, fi
 
     assert summary["final_smiles"] is None
     assert summary["meets_similarity_floor"] is False
+
+
+@pytest.mark.parametrize("name", SUBMISSIONS)
+def test_a_submission_without_a_verdict_is_not_ranked_against_the_target(
+    tools, db_path, tmp_path, name,
+):
+    """Without a verdict, the target must not pick a product the run may not have made."""
+
+    steps, target = SUBMISSIONS[name]
+    result = tools.submit_pathway(steps=steps, pathway_text=name, target_smiles=target)
+    recorded = {
+        key: value for key, value in result.items()
+        if key not in FINAL_PRODUCT_FIELDS and key != "accepted"
+    }
+    targetless = tools.submit_pathway(steps=steps, pathway_text=name, target_smiles=None)
+
+    summary = _evaluate(tmp_path / "trace.jsonl", [_result_event(recorded)], db_path, target)
+
+    assert summary["accepted"] is None
+    assert summary["final_smiles"] == targetless["actual_final_smiles"]

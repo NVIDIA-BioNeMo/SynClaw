@@ -495,8 +495,9 @@ def _final_smiles_from_structured_steps(
     submitted_validation = chem.validate_smiles(str(submitted)) if submitted else None
     return select_final_product(
         final_product_candidates(steps),
-        # submit_pathway ranks against the target only for an accepted route.
-        target_smiles=target_smiles if candidate.get("accepted") is not False else None,
+        # submit_pathway ranks against the target only for an accepted route. Without a
+        # verdict, ranking would pick the closest product whether or not the run made it.
+        target_smiles=target_smiles if candidate.get("accepted") is True else None,
         preferred_smiles=(
             submitted_validation["canonical_smiles"]
             if submitted_validation and submitted_validation["valid"]
