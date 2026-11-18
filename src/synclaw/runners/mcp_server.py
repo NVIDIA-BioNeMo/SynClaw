@@ -80,9 +80,9 @@ def _invoke_tool_process(
     """Execute one allowlisted tool against worker-local state."""
 
     if tool_name not in _TOOL_METHOD_NAMES:
-        raise ValueError(f"Unknown SynClaw tool {tool_name!r}")
+        raise ValueError(f"Unknown BioNeMo-SynClaw tool {tool_name!r}")
     if _WORKER_TOOLS is None:
-        raise RuntimeError("SynClaw tool worker was not initialized")
+        raise RuntimeError("BioNeMo-SynClaw tool worker was not initialized")
 
     return call_local_tool(
         _WORKER_TOOLS,
@@ -97,7 +97,7 @@ def _tool_worker_pid() -> int:
     """Return a worker identity after its initializer has completed."""
 
     if _WORKER_TOOLS is None:
-        raise RuntimeError("SynClaw tool worker was not initialized")
+        raise RuntimeError("BioNeMo-SynClaw tool worker was not initialized")
     return os.getpid()
 
 
@@ -172,19 +172,19 @@ class AsyncToolExecutor:
                 remaining = deadline - time.monotonic()
                 if remaining <= 0.0:
                     raise TimeoutError(
-                        "Timed out while prestarting SynClaw chemistry workers "
+                        "Timed out while prestarting BioNeMo-SynClaw chemistry workers "
                         f"({len(worker_pids)}/{expected_workers} ready)"
                     )
                 try:
                     pid, error_type, error_message = ready_queue.get(timeout=remaining)
                 except queue.Empty as exc:
                     raise TimeoutError(
-                        "Timed out while prestarting SynClaw chemistry workers "
+                        "Timed out while prestarting BioNeMo-SynClaw chemistry workers "
                         f"({len(worker_pids)}/{expected_workers} ready)"
                     ) from exc
                 if error_type:
                     raise RuntimeError(
-                        f"SynClaw chemistry worker {pid} failed startup: "
+                        f"BioNeMo-SynClaw chemistry worker {pid} failed startup: "
                         f"{error_type}: {error_message}"
                     )
                 worker_pids.add(int(pid))

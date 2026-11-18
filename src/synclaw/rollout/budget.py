@@ -338,12 +338,12 @@ def with_harness_feedback(
     last = messages[-1]
     original = str(last.get("content") or "")
     if last["role"] == "tool":
-        # SynClaw tool results are JSON objects. Keep them parseable and distinguish
+        # BioNeMo-SynClaw tool results are JSON objects. Keep them parseable and distinguish
         # harness guidance from the actual chemistry result, under field names
         # that do not mention the harness, since the model reads them.
         result = json.loads(original)
         if not isinstance(result, dict):
-            raise ValueError("Expected a JSON object for a SynClaw tool result")
+            raise ValueError("Expected a JSON object for a BioNeMo-SynClaw tool result")
         previous = result.get(field) if field != "budget" else None
         result[field] = f"{previous}\n\n{content}" if previous else content
         updated = json.dumps(result, sort_keys=True, separators=(",", ":"))

@@ -21,7 +21,7 @@ try:
     from rdkit.Chem.MolStandardize import rdMolStandardize
 except ImportError as exc:  # pragma: no cover - exercised only in broken environments.
     raise RuntimeError(
-        "RDKit is required for synclaw chemistry validation. "
+        "RDKit is required for BioNeMo-SynClaw chemistry validation. "
         "Install project dependencies, for example: uv sync or python -m pip install -e ."
     ) from exc
 

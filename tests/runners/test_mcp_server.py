@@ -262,7 +262,7 @@ def test_process_worker_tool_exception_does_not_break_pool(tmp_path: Path) -> No
     )
 
     async def run() -> None:
-        with pytest.raises(ValueError, match="Unknown SynClaw tool"):
+        with pytest.raises(ValueError, match="Unknown BioNeMo-SynClaw tool"):
             await executor.execute("not-a-public-tool", lambda **_: {})
         result = await executor.execute(
             "similarity",
