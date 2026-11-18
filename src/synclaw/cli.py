@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Command line interface for SynClaw workflows."""
+"""Command line interface for BioNeMo-SynClaw workflows."""
 
 from __future__ import annotations
 

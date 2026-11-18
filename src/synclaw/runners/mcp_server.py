@@ -227,7 +227,7 @@ class AsyncToolExecutor:
             broken.shutdown(wait=False, cancel_futures=True)
             print(f"synclaw_mcp_worker_pool_restarted ({exc})", file=sys.stderr, flush=True)
         return ToolWorkerPoolBroken(
-            "A SynClaw chemistry worker terminated unexpectedly during this call; "
+            "A chemistry worker terminated unexpectedly during this call; "
             f"the worker pool was restarted, so retry the call. ({exc})"
         )
 
@@ -354,7 +354,7 @@ def create_server(
                 for tool in await super().list_tools()
             ]
 
-    server = SynClawMCP("synclaw-server")
+    server = SynClawMCP("bionemo-synclaw-server")
     descriptions = {tool["function"]["name"]: tool["function"]["description"] for tool in TOOL_SCHEMAS}
     parameters = {tool["function"]["name"]: tool["function"]["parameters"] for tool in TOOL_SCHEMAS}
 

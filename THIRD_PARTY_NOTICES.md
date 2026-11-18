@@ -1,9 +1,9 @@
 # Third-Party Notices
 
-SynClaw is licensed under the [Apache License 2.0](LICENSE), except the reaction
+BioNeMo-SynClaw is licensed under the [Apache License 2.0](LICENSE), except the reaction
 templates in `data/reaction_templates/ord/`, which are licensed under CC BY-SA 4.0.
 This file lists the third-party material distributed in this repository and the
-third-party packages SynClaw depends on. No third-party source code is vendored.
+third-party packages BioNeMo-SynClaw depends on. No third-party source code is vendored.
 
 ## Data distributed in this repository
 
@@ -51,7 +51,7 @@ third-party packages SynClaw depends on. No third-party source code is vendored.
   (CC BY-SA 4.0), <https://creativecommons.org/licenses/by-sa/4.0/legalcode>.
   It covers the templates and the annotations stored with them in that
   directory (see its [LICENSE](data/reaction_templates/ord/LICENSE)), and does not
-  extend to the rest of SynClaw.
+  extend to the rest of BioNeMo-SynClaw.
 - Changes: radius-1 templates were extracted and deduplicated, seven SMARTS were
   repaired (listed in
   [`SMARTS_REPAIRS.md`](data/reaction_templates/SMARTS_REPAIRS.md)), and names,
@@ -62,7 +62,7 @@ third-party packages SynClaw depends on. No third-party source code is vendored.
 ## Runtime dependencies
 
 These packages are installed separately by the package manager under their own
-licenses. They are not distributed with SynClaw.
+licenses. They are not distributed with BioNeMo-SynClaw.
 
 | Package | Used by | License |
 | --- | --- | --- |
@@ -78,5 +78,5 @@ licenses. They are not distributed with SynClaw.
 `synclaw download-public-data` fetches SynFormer files and the ReaSyn watchlist
 (`data/mols_to_filter.txt`) from their respective public repositories, and
 `synclaw prepare-emolecules-bbs` downloads the eMolecules catalog from
-downloads.emolecules.com. These files are not distributed with SynClaw and remain under their
+downloads.emolecules.com. These files are not distributed with BioNeMo-SynClaw and remain under their
 providers' terms.

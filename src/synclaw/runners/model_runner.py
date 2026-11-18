@@ -614,7 +614,7 @@ def run_model_from_args(args: argparse.Namespace) -> dict[str, Any]:
 
 
 class _HostedTransport:
-    """Adapt SynClaw's hosted transports to the shared rollout engine."""
+    """Adapt BioNeMo-SynClaw's hosted transports to the shared rollout engine."""
 
     def __init__(
         self,

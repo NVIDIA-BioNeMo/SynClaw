@@ -1,10 +1,10 @@
-# SynClaw
+# BioNeMo-SynClaw
 
-![SynClaw architecture: an LLM agent uses search tools (building blocks, reaction templates) and simulate-and-score tools (similarity, MCES, forward and reverse reaction simulation), then submits a pathway that is validated with RDKit](assets/synclaw.png)
+![BioNeMo-SynClaw architecture: an LLM agent uses search tools (building blocks, reaction templates) and simulate-and-score tools (similarity, MCES, forward and reverse reaction simulation), then submits a pathway that is validated with RDKit](assets/synclaw.png)
 
-SynClaw is a harness that lets LLMs plan chemical synthesis routes with tool use. Given a target
+BioNeMo-SynClaw is a harness that lets LLMs plan chemical synthesis routes with tool use. Given a target
 molecule (a SMILES string), a model searches purchasable building blocks and reaction templates,
-tests reaction steps with RDKit, and submits a route. SynClaw validates the route, records the full
+tests reaction steps with RDKit, and submits a route. BioNeMo-SynClaw validates the route, records the full
 trace, and scores the result against the target.
 
 It is useful for benchmarking models on retrosynthesis-style planning, for producing verified
@@ -24,13 +24,13 @@ same chemistry tools.
 ## Requirements
 
 - Python 3.11–3.14 and [uv](https://docs.astral.sh/uv/). RDKit is installed as a dependency.
-- A building-block catalog. SynClaw does not ship one: [Quick Start](#quick-start) shows how to
+- A building-block catalog. BioNeMo-SynClaw does not ship one: [Quick Start](#quick-start) shows how to
   try the tools with the bundled 37 common reagents, and how to prepare the eMolecules catalog
   for real runs.
 - For hosted-model runs, an API key for your provider (see [Hosted endpoints](#hosted-endpoints)).
   The local tools and the MCP server need no key.
 
-`synclaw download-public-data` and `synclaw prepare-emolecules-bbs` download third-party datasets that are not distributed with SynClaw; running them is optional. For each dataset you choose to use, you are responsible for checking that its license fits your intended purpose.
+`synclaw download-public-data` and `synclaw prepare-emolecules-bbs` download third-party datasets that are not distributed with BioNeMo-SynClaw; running them is optional. For each dataset you choose to use, you are responsible for checking that its license fits your intended purpose.
 
 ## How it works
 
@@ -50,7 +50,7 @@ The harness is intentionally strict about final answers:
 
 ## Quick Start
 
-SynClaw is run from a checkout of this repository. Install the dependencies:
+BioNeMo-SynClaw is run from a checkout of this repository. Install the dependencies:
 
 ```bash
 uv sync
@@ -61,7 +61,7 @@ and linting.
 
 ### 1. Create a database
 
-SynClaw keeps building blocks and reaction templates in one SQLite file, `var/synclaw.sqlite` by
+BioNeMo-SynClaw keeps building blocks and reaction templates in one SQLite file, `var/synclaw.sqlite` by
 default. The bundled templates (501 reactions, see [Reaction Templates](#reaction-templates))
 need no download:
 
@@ -70,7 +70,7 @@ uv run synclaw db init --db var/synclaw.sqlite
 uv run synclaw ingest-reactions --db var/synclaw.sqlite
 ```
 
-The database is disposable. After upgrading SynClaw, rebuild it with these commands rather than
+The database is disposable. After upgrading BioNeMo-SynClaw, rebuild it with these commands rather than
 reusing it.
 
 ### 2. Add building blocks
@@ -462,7 +462,7 @@ Flags override every preset field: `--api-mode`, `--base-url`, `--responses-url`
 key variables are not read, so pass this if the new endpoint needs a key), `--auth-header`
 (`bearer` or `x-api-key`) and `--responses-state-mode` (`full` resends the whole history each
 turn, for endpoints that do not store responses). A run fails before any request if the selected
-API has no endpoint or a named key variable is unset. SynClaw records token usage reported by the
+API has no endpoint or a named key variable is unset. BioNeMo-SynClaw records token usage reported by the
 endpoint; it does not estimate prices.
 
 ```bash
@@ -482,7 +482,7 @@ uv sync --extra mcp
 uv run synclaw mcp serve --db var/synclaw.sqlite
 ```
 
-The server is named `synclaw-server` and exposes `search_building_blocks`,
+The server is named `bionemo-synclaw-server` and exposes `search_building_blocks`,
 `search_reaction_templates`, `similarity`, `mces`, `simulate_reaction`, `simulate_reverse_reaction`
 and `submit_pathway`. Use MCP when another agent or client owns the model loop. Use `run-model` when this
 package should own the hosted-model loop and write traces and results directly.
@@ -522,9 +522,9 @@ targets through `synclaw.core.chem.strip_isotopes` before making tasks.
 
 ## Dangerous-Molecule Screen
 
-SynClaw offers an **opt-in** watchlist screen based on [ReaSyn](https://github.com/NVIDIA-BioNeMo/ReaSyn).
+BioNeMo-SynClaw offers an **opt-in** watchlist screen based on [ReaSyn](https://github.com/NVIDIA-BioNeMo/ReaSyn).
 A molecule is flagged when its Morgan/Tanimoto similarity to an entry in `mols_to_filter.txt`
-exceeds 0.8, comparing each SMILES as a whole. SynClaw uses 2,048-bit fingerprints where ReaSyn
+exceeds 0.8, comparing each SMILES as a whole. BioNeMo-SynClaw uses 2,048-bit fingerprints where ReaSyn
 uses 4,096, so results near the cutoff can differ. This is a watchlist filter, not a general
 toxicity predictor or a claim of regulatory compliance.
 
@@ -562,7 +562,7 @@ Contributions require a DCO sign-off (`git commit -s`); see [CONTRIBUTING.md](CO
 
 ## License
 
-SynClaw is licensed under the [Apache License 2.0](LICENSE), except the reaction
+BioNeMo-SynClaw is licensed under the [Apache License 2.0](LICENSE), except the reaction
 templates in `data/reaction_templates/ord/`, which are licensed under
 [CC BY-SA 4.0](data/reaction_templates/ord/LICENSE). Third-party data in this
 repository, including the reaction-template sources under `data/reaction_templates/`,

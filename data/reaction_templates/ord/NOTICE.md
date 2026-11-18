@@ -5,7 +5,7 @@ descriptions, planning notes and provenance records stored with them in
 `templates.jsonl`, are licensed under the Creative Commons
 Attribution-ShareAlike 4.0 International License (CC BY-SA 4.0):
 https://creativecommons.org/licenses/by-sa/4.0/legalcode. See [LICENSE](LICENSE).
-This license covers only this directory. The rest of SynClaw is under the project
+This license covers only this directory. The rest of BioNeMo-SynClaw is under the project
 [LICENSE](../../../LICENSE) (Apache-2.0) or the terms in the other NOTICE files.
 
 ## Source

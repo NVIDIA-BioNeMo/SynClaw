@@ -3,7 +3,7 @@
 
 """Context accounting and rollout feedback, independent of model transports.
 
-``_feedback_text`` below emits SynClaw-chemistry-specific guidance (``submit_pathway``,
+``_feedback_text`` below emits BioNeMo-SynClaw-chemistry-specific guidance (``submit_pathway``,
 ``building_block``) once context runs low; it is not domain-independent.
 """
 

@@ -46,7 +46,7 @@ def prepare_emolecules_building_blocks(
 
     The derived file contains a ``SMILES`` header followed by one canonical
     isomeric SMILES per line. Parent IDs are intentionally omitted because the
-    SynClaw importer expects the complete line to be a SMILES value.
+    BioNeMo-SynClaw importer expects the complete line to be a SMILES value.
     ``multicomponent`` sets how salts and mixtures are handled: ``keep`` them as
     shipped, reduce each to its ``major`` (largest by heavy atoms) component, or
     ``drop`` them.
