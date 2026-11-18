@@ -65,18 +65,6 @@ def attach_response_usage(message: dict[str, Any], response: dict[str, Any]) -> 
             )
 
 
-def _sum_ints(*values: Any) -> int | None:
-    total = 0
-    saw_value = False
-    for value in values:
-        integer = token_usage.int_or_none(value)
-        if integer is None:
-            continue
-        total += integer
-        saw_value = True
-    return total if saw_value else None
-
-
 def retry_delay_seconds(attempt: int, body: str = "", headers: Any = None) -> float:
     retry_after = None
     if headers is not None:
@@ -98,10 +86,6 @@ def _float_or_none(value: Any) -> float | None:
         return None
     try:
         return float(value)
-    except (TypeError, ValueError):
-        return None
-    try:
-        return int(value)
     except (TypeError, ValueError):
         return None
 

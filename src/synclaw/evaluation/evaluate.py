@@ -22,7 +22,7 @@ from synclaw.rollout.policy import (
     submission_identical_to_target,
     submission_similarity_to_target,
 )
-from synclaw.token_usage import int_or_none, trace_token_usage
+from synclaw.token_usage import trace_token_usage
 from synclaw.tools.synthesis import (
     hidden_target_summary_fields,
     score_pathway_against_target,
@@ -556,18 +556,6 @@ def _float_or_none(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
-
-
-def _sum_ints(*values: Any) -> int | None:
-    total = 0
-    saw_value = False
-    for value in values:
-        integer = int_or_none(value)
-        if integer is None:
-            continue
-        total += integer
-        saw_value = True
-    return total if saw_value else None
 
 
 def _similarity_floor(tool_config: dict[str, Any] | None) -> StopCondition:
