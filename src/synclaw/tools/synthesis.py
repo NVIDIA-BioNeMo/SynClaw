@@ -350,6 +350,7 @@ class SynthesisTools:
         result: dict[str, Any],
         product_smiles: str | list[str],
     ) -> None:
+        """Re-rank ``result["results"]`` in place by how well each template's reverse precursors are in stock."""
         matches = list(result.get("results") or [])
         enriched_count = min(len(matches), REVERSE_RANK_LIMIT)
         enriched = matches[:enriched_count]
@@ -394,6 +395,7 @@ class SynthesisTools:
         min_similarity: float = 0.0,
         top_near_matches: int = 0,
     ) -> None:
+        """Annotate a reverse-simulation ``result`` in place with building-block grounding for each candidate set."""
         exact_match_sets = 0
         exact_match_count = 0
         near_match_count = 0
