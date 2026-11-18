@@ -87,15 +87,6 @@ def test_an_analogue_can_still_be_bought(db_path: Path) -> None:
     assert result["similarity_to_target"] < 1.0
 
 
-def test_every_step_must_feed_the_final_product(db_path: Path) -> None:
-    orphaned = [ROUND_TRIP[0], {**ROUND_TRIP[1], "reactants": ["C=O"]}]
-
-    result = _tools(db_path, None).submit_pathway(steps=orphaned, target_smiles=TARGET)
-
-    assert result["accepted"] is False
-    assert any("INT:1 is not used by a later step" in issue for issue in result["issues"])
-
-
 def test_the_target_cannot_be_a_starting_reactant(db_path: Path) -> None:
     unhidden = _tools(db_path, None).submit_pathway(steps=ROUND_TRIP, target_smiles=TARGET)
     hidden = _tools(db_path).submit_pathway(steps=ROUND_TRIP, target_smiles=TARGET)

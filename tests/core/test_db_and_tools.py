@@ -275,6 +275,24 @@ class DbAndToolsTests(unittest.TestCase):
             self.assertFalse(submission["accepted"])
             self.assertIn("unknown building block reference: BB:999", submission["issues"][0])
 
+    def test_every_step_must_feed_the_final_product(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            source = tmp_path / "bbs.txt"
+            templates = tmp_path / "templates.txt"
+            source.write_text("SMILES\nCCO\n", encoding="utf-8")
+            templates.write_text("[C:1][O:2]>>[C:1]=[O:2]\n", encoding="utf-8")
+            db_path = tmp_path / "test.sqlite"
+            db.ingest_building_blocks(source, db_path)
+            ingest_reaction_templates(templates, db_path=db_path, library="demo")
+            step = {"reaction_id": "demo:R000", "reactants": ["BB:1"], "product_smiles": "CC=O"}
+
+            submission = SynthesisTools(db_path).submit_pathway(target_smiles="CC=O", steps=[step, step])
+
+            self.assertFalse(submission["accepted"])
+            self.assertEqual(submission["reaction_validation"], "valid")
+            self.assertIn("INT:1 is not used by a later step", submission["issues"][0])
+
     def test_search_returns_near_matches_after_the_exact_hit(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
