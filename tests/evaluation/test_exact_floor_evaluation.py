@@ -7,7 +7,6 @@ import json
 
 import pytest
 
-from synclaw.core import chem
 from synclaw.evaluation.evaluate import _similarity_floor, evaluate_trace_file
 
 
@@ -63,17 +62,12 @@ def test_generated_product_fallback_shares_identity_selection(tmp_path, explicit
         tool_config={"stop_condition": "exact"},
     )
 
+    # As in submit_pathway, every generated product is a candidate, so the identical tautomer
+    # outranks the analogue even when the step recorded the analogue as its actual product.
     assert evaluation["accepted"] is True
-    if explicit_product is None:
-        # The identical tautomer outranks the analogue, as in tests/tools/test_identity_product_selection.py.
-        assert evaluation["final_smiles"] == "Oc1ccccn1"
-        assert evaluation["identical_to_target"] is True
-        assert evaluation["meets_similarity_floor"] is True
-    else:
-        # A recorded actual product takes precedence over fallback candidates.
-        assert evaluation["final_smiles"] == chem.validate_smiles(explicit_product)["canonical_smiles"]
-        assert evaluation["identical_to_target"] is False
-        assert evaluation["meets_similarity_floor"] is False
+    assert evaluation["final_smiles"] == "Oc1ccccn1"
+    assert evaluation["identical_to_target"] is True
+    assert evaluation["meets_similarity_floor"] is True
 
 
 @pytest.mark.parametrize("recorded", ["none", None])

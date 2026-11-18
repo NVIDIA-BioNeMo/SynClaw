@@ -24,6 +24,7 @@ from synclaw.rollout.policy import (
 )
 from synclaw.token_usage import trace_token_usage
 from synclaw.tools.synthesis import (
+    final_product_candidates,
     hidden_target_summary_fields,
     score_pathway_against_target,
     select_final_product,
@@ -475,22 +476,11 @@ def _final_smiles_from_structured_steps(
     target_smiles: str | None,
 ) -> str | None:
     steps = candidate.get("steps")
-    if not isinstance(steps, list) or not steps:
+    if not isinstance(steps, list) or not steps or not isinstance(steps[-1], dict):
         return None
-    final_step = steps[-1]
-    if not isinstance(final_step, dict):
-        return None
-    if final_step.get("valid") is True:
-        actual_product = final_step.get("actual_product_smiles")
-        if actual_product:
-            validation = chem.validate_smiles(str(actual_product))
-            if validation["valid"]:
-                return str(validation["canonical_smiles"])
-        product = final_step.get("product")
-        if isinstance(product, dict) and product.get("valid") and product.get("canonical_smiles"):
-            return str(product["canonical_smiles"])
-    generated = _valid_smiles_list(final_step.get("generated_products"))
-    return select_final_product(generated, target_smiles=target_smiles, preferred_smiles=None)
+    return select_final_product(
+        final_product_candidates(steps), target_smiles=target_smiles, preferred_smiles=None
+    )
 
 
 def write_summary_csv(summaries: list[dict[str, Any]], output_path: str | Path) -> None:
@@ -567,17 +557,6 @@ def _similarity_floor(tool_config: dict[str, Any] | None) -> StopCondition:
     except ValueError:
         # A malformed recorded condition must not abort the rest of the evaluation batch.
         return DEFAULT_STOP_CONDITION
-
-
-def _valid_smiles_list(values: Any) -> list[str]:
-    if not isinstance(values, list):
-        return []
-    valid: list[str] = []
-    for value in values:
-        validation = chem.validate_smiles(str(value))
-        if validation["valid"]:
-            valid.append(str(validation["canonical_smiles"]))
-    return sorted(set(valid))
 
 
 def _infer_target(events: list[dict[str, Any]]) -> str | None:

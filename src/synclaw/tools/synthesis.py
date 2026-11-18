@@ -636,7 +636,7 @@ class SynthesisTools:
         if block and block["refused"]:
             issues.append(refusal_message(block))
 
-        actual_final_candidates = _actual_final_candidates(step_results)
+        actual_final_candidates = final_product_candidates(step_results)
         all_steps_valid = bool(step_results) and all(result.get("valid") is True for result in step_results)
         grounding = _summarize_reactant_grounding(step_results)
         accepted = not issues and all_steps_valid
@@ -811,7 +811,9 @@ def _actual_step_product(step_result: dict[str, Any]) -> str | None:
     return generated[0] if generated else None
 
 
-def _actual_final_candidates(step_results: list[dict[str, Any]]) -> list[str]:
+def final_product_candidates(step_results: list[dict[str, Any]]) -> list[str]:
+    """The validated products of a pathway's final step, from which its final product is chosen."""
+
     if not step_results:
         return []
     final_step = step_results[-1]
