@@ -62,9 +62,11 @@ def evaluate_trace_file(
     run_summary = extract_run_summary(events)
     hidden_target = hidden_target_summary_fields(events)
     final = extract_selected_submission(events, target_smiles=inferred_target)
+    # The run's selection never saw a call it did not execute, so neither path below may.
+    executed_events = _without_unexecuted_calls(events)
     if final is None:
         final = replay_selected_submission(
-            events,
+            executed_events,
             db_path=db_path,
             target_smiles=inferred_target,
             # Partial traces have no run_summary, so re-scoring them needs the selection passed in.
@@ -73,7 +75,7 @@ def evaluate_trace_file(
             hide_target=hidden_target["target_hidden_from_stock"],
         )
     if final is None:
-        final = extract_final_submission(events, target_smiles=inferred_target)
+        final = extract_final_submission(executed_events, target_smiles=inferred_target)
     pathway_text = final.get("pathway_text") if final else None
     final_smiles = final.get("final_smiles") if final else None
     submitted_final_smiles = final.get("submitted_final_smiles") if final else None
@@ -190,9 +192,7 @@ def replay_selected_submission(
     last: dict[str, Any] | None = None
     for ordinal, event in enumerate(submit_calls):
         recorded = recorded_results[ordinal] if ordinal < len(recorded_results) else {}
-        last = _replay_submission(
-            tools, _payload(event), recorded, db_path, target_smiles, library=library
-        )
+        last = _replay_submission(tools, _payload(event), recorded, target_smiles)
         if last is not None and recorded.get("refused") is True:
             # Replay runs without the screen, so keep the refusal the run itself recorded.
             last = {**last, "accepted": False, "refused": True}
@@ -227,10 +227,7 @@ def _replay_submission(
     tools: SynthesisTools,
     payload: dict[str, Any],
     recorded: dict[str, Any],
-    db_path: str | Path,
     target_smiles: str | None,
-    *,
-    library: LibrarySelection,
 ) -> dict[str, Any] | None:
     arguments = payload.get("dispatch_arguments") if isinstance(payload.get("dispatch_arguments"), dict) else None
     if arguments is None and isinstance(payload.get("arguments"), dict):
@@ -248,7 +245,8 @@ def _replay_submission(
     # SMARTS it ran, so an unknown ID is resolved to the current template with that SMARTS.
     recorded_smarts = _recorded_step_smarts(recorded)
     resolved_steps = []
-    with db.session(db_path) as conn:
+    library = tools.reaction_libraries
+    with db.session(tools.db_path) as conn:
         for index, step in enumerate(steps):
             if not isinstance(step, dict):
                 return None
@@ -291,6 +289,40 @@ def _recorded_submit_results(events: list[dict[str, Any]]) -> list[dict[str, Any
         if _event_type(event) in TOOL_RESULT_TYPES and _tool_name(event) == "submit_pathway"
     )
     return [result if isinstance(result, dict) else {} for result in results]
+
+
+def _without_unexecuted_calls(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drop the call and result events of tool calls the run recorded but never executed.
+
+    Past the tool-call budget the loop records each call and a stub result without running
+    it. A tool's results are recorded in call order, so the n-th result of a tool pairs with
+    its n-th call.
+    """
+
+    def tool_ordinals(event_types: set[str]) -> dict[int, tuple[str | None, int]]:
+        """Key each event of these types by its index to its tool name and per-tool ordinal."""
+
+        counts: dict[str | None, int] = {}
+        keys = {}
+        for index, event in enumerate(events):
+            if _event_type(event) in event_types:
+                name = _tool_name(event)
+                counts[name] = counts.get(name, -1) + 1
+                keys[index] = (name, counts[name])
+        return keys
+
+    results = tool_ordinals(TOOL_RESULT_TYPES)
+    unexecuted = {
+        key for index, key in results.items()
+        if _payload(events[index]).get("outcome") == "over_budget"
+    }
+    if not unexecuted:
+        return events
+    dropped = {
+        index for keys in (results, tool_ordinals(TOOL_CALL_TYPES))
+        for index, key in keys.items() if key in unexecuted
+    }
+    return [event for index, event in enumerate(events) if index not in dropped]
 
 
 def _recorded_step_smarts(result: dict[str, Any]) -> dict[int, str]:
@@ -393,7 +425,10 @@ def extract_final_submission(
                 structured_submission = tool_name == "submit_pathway" or "accepted" in candidate or "reaction_validation" in candidate
                 submit_call_arguments = tool_name == "submit_pathway" and event_type in TOOL_CALL_TYPES
                 has_actual_final_field = "actual_final_smiles" in candidate
-                if has_actual_final_field:
+                if submit_call_arguments:
+                    # The model wrote these arguments; only a result carries a validated product.
+                    final_smiles = None
+                elif has_actual_final_field:
                     final_smiles = candidate.get("actual_final_smiles")
                 elif structured_submission:
                     final_smiles = _final_smiles_from_structured_steps(

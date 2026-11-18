@@ -21,6 +21,7 @@ from synclaw.rollout.policy import (
     RolloutPolicyState,
     append_selected_submission_event,
     handle_tool_result,
+    tool_argument_error,
 )
 from synclaw.tools.synthesis import SynthesisTools
 
@@ -77,6 +78,9 @@ CALLS = {
     "rejected": {"steps": [_step(OXIDIZE, "BB:1", "CCC")]},
     # The run rejects an unknown template, and replay cannot resolve it either.
     "unreplayable": {"steps": [_step("retired:R999", "BB:1", "CCCC")]},
+    # Past the tool-call budget the run records the call but never executes it. Replayed,
+    # it would be the best submission, so scoring it would differ from the run.
+    "over_budget": {"steps": [_step(OXIDIZE, "BB:1", KETONE)]},
 }
 
 
@@ -159,25 +163,56 @@ def test_replayed_trace_scores_the_submission_the_run_selected(
     ]
     for index, kind in enumerate(kinds):
         arguments = {**CALLS[kind], "pathway_text": f"call {index}: {kind}"}
-        result = tools.submit_pathway(**arguments, target_smiles=target)
-        handle_tool_result(
-            config, state, name="submit_pathway", arguments=arguments, result=result,
-            target_smiles=target,
-        )
+        if kind == "over_budget":
+            # As rollout.loop does: the result is recorded, but the policy never sees it.
+            result = tool_argument_error("submit_pathway", "budget reached", arguments)
+            recorded = {"result": result, "outcome": "over_budget"}
+        else:
+            result = tools.submit_pathway(**arguments, target_smiles=target)
+            handle_tool_result(
+                config, state, name="submit_pathway", arguments=arguments, result=result,
+                target_smiles=target,
+            )
+            recorded = {"result": result}
         events += [
             {"event_type": "tool_call", "tool_name": "submit_pathway", "payload": {"arguments": arguments}},
-            _result_event(result),
+            {"event_type": "tool_result", "tool_name": "submit_pathway", "payload": recorded},
         ]
-    with_selection = list(events)
+    replayed = _evaluate(tmp_path / "replayed.jsonl", events, db_path, target)
     submission, arguments = state.selected_submission()
+    if submission is None:
+        # The run executed no submission, so there is nothing to score.
+        assert replayed["has_final_submission"] is False
+        return
+    with_selection = list(events)
     append_selected_submission_event(
         with_selection, task={"target_smiles": target}, submission=submission,
         submission_arguments=arguments, reason="test",
     )
 
-    replayed = _evaluate(tmp_path / "replayed.jsonl", events, db_path, target)
     selected = _evaluate(tmp_path / "selected.jsonl", with_selection, db_path, target)
 
     assert {key: replayed[key] for key in SCORED_FIELDS} == {
         key: selected[key] for key in SCORED_FIELDS
     }
+
+
+@pytest.mark.parametrize("field", [*STEP_PRODUCT_FIELDS, "actual_final_smiles"])
+def test_product_fields_in_call_arguments_are_never_scored(db_path, tmp_path, field):
+    """Only a submit_pathway result carries a validated product; the model writes the arguments."""
+
+    step = {**_step("retired:R999", "BB:1", KETONE), "valid": True}
+    arguments = {"steps": [step], "pathway_text": "claimed", "accepted": True}
+    if field == "actual_final_smiles":
+        arguments[field] = KETONE
+    else:
+        step[field] = {"valid": True, "canonical_smiles": KETONE} if field == "product" else (
+            KETONE if field == "actual_product_smiles"
+            else [[KETONE]] if field == "generated_product_sets" else [KETONE]
+        )
+    call = {"event_type": "tool_call", "tool_name": "submit_pathway", "payload": {"arguments": arguments}}
+
+    summary = _evaluate(tmp_path / "trace.jsonl", [call], db_path, KETONE)
+
+    assert summary["final_smiles"] is None
+    assert summary["meets_similarity_floor"] is False

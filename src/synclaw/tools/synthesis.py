@@ -830,8 +830,11 @@ def final_product_candidates(step_results: list[dict[str, Any]]) -> list[str]:
             for component in _as_list(product_set)
         ),
     ]
+    product = final_step.get("product")
     if final_step.get("valid") is True:
-        products += [final_step.get("actual_product_smiles"), _actual_step_product(final_step)]
+        products.append(final_step.get("actual_product_smiles"))
+        if isinstance(product, dict) and product.get("valid"):
+            products.append(product.get("canonical_smiles"))
     return _valid_generated_products([product for product in products if product])
 
 
