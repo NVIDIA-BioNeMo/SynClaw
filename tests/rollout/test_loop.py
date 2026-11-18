@@ -218,6 +218,36 @@ def test_local_tool_dispatcher_returns_an_error_for_a_non_finite_limit(tmp_path:
     assert "must be a whole number" in result["issues"][0]
 
 
+@pytest.mark.parametrize(
+    ("name", "arguments"),
+    [
+        ("simulate_reaction", {"reaction_id": "demo:R000", "reactants": ["BB:99999999999999999999"]}),
+        (
+            "submit_pathway",
+            {
+                "steps": [
+                    {
+                        "reaction_id": "demo:R000",
+                        "reactants": ["BB:99999999999999999999"],
+                        "product_smiles": "CC=O",
+                    }
+                ]
+            },
+        ),
+    ],
+)
+def test_local_tool_dispatcher_reports_an_out_of_range_building_block_id(
+    tmp_path: Path, name: str, arguments: dict[str, Any]
+) -> None:
+    (tmp_path / "bbs.txt").write_text("SMILES\nCCO\n", encoding="utf-8")
+    database = tmp_path / "test.sqlite"
+    db.ingest_building_blocks(tmp_path / "bbs.txt", database)
+
+    result = call_local_tool(SynthesisTools(database), name, arguments, target_smiles="CC=O")
+
+    assert "unknown building block reference: BB:99999999999999999999" in " ".join(result["issues"])
+
+
 @pytest.mark.parametrize("step", ["BB:1", 1, None])
 def test_local_tool_dispatcher_rejects_non_object_steps(step: Any) -> None:
     result = call_local_tool(object(), "submit_pathway", {"steps": [step], "pathway_text": "x"})
