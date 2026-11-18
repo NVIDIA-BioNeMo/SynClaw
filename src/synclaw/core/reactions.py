@@ -706,7 +706,7 @@ def _simulate_reaction_smarts(
             smarts,
             reactant_smiles,
             product_smiles,
-            max_products=500,
+            max_products=None,
             try_permutations=try_permutations,
         )
         if len(reactant_smiles) <= MAX_SMARTS_REACTANTS
@@ -736,13 +736,12 @@ def _simulate_reaction_smarts(
                 str(template["template_id"]),
                 reactant_smiles,
                 product_smiles,
-                max_products=500,
+                max_products=None,
                 try_permutations=try_permutations,
             )
             if wanted <= set(result["generated_products"]):
-                limit = max(1, min(int(max_products), 500))
-                result["generated_products"] = result["generated_products"][:limit]
-                result["generated_product_sets"] = result["generated_product_sets"][:limit]
+                result["generated_products"] = result["generated_products"][:max_products]
+                result["generated_product_sets"] = result["generated_product_sets"][:max_products]
                 result["reaction_smarts"] = smarts
                 return result
         issues = [
@@ -799,7 +798,7 @@ def _simulate_template(
     reactant_smiles: list[str],
     product_smiles: str | None,
     *,
-    max_products: int,
+    max_products: int | None,
     try_permutations: bool,
 ) -> dict[str, Any]:
     product_issues = []
@@ -923,8 +922,8 @@ def _simulate_template(
         "product": product_validation,
         "product_smiles": product_smiles,
         "product_matched": product_matched,
-        "generated_products": generated[: max(1, min(int(max_products), 500))],
-        "generated_product_sets": generated_product_sets[: max(1, min(int(max_products), 500))],
+        "generated_products": generated[:max_products],
+        "generated_product_sets": generated_product_sets[:max_products],
         "generated_product_count": len(generated),
         "generated_product_set_count": len(generated_product_sets),
         "skipped_invalid_product_set_count": skipped_invalid_product_sets,
@@ -1119,7 +1118,7 @@ def _run_reverse_reaction(
     *,
     max_outcomes: int,
 ) -> tuple[list[dict[str, Any]], list[list[int]], int, int]:
-    limit = max(1, min(int(max_outcomes), 500))
+    limit = max_outcomes
     generated: list[dict[str, Any]] = []
     seen: set[tuple[str, ...]] = set()
     identity = tuple(range(len(product_mols)))

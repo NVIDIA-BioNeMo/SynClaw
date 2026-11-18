@@ -320,6 +320,7 @@ class SynthesisTools:
         Stock matches for the precursors are planning evidence only; an unmatched
         precursor may still be made as an intermediate.
         """
+        top_near_matches = clamp_to_contract("simulate_reverse_reaction", "top_near_matches", top_near_matches)
         with db.session(self.db_path) as conn:
             result = reactions.simulate_reverse_reaction(
                 conn,
@@ -338,7 +339,7 @@ class SynthesisTools:
                 )
         result["include_near"] = include_near
         result["min_similarity"] = min_similarity
-        result["top_near_matches"] = max(0, min(int(top_near_matches), 10))
+        result["top_near_matches"] = top_near_matches
         _compact_reverse_reaction_result(result)
         return result
 
@@ -392,7 +393,6 @@ class SynthesisTools:
         min_similarity: float = 0.0,
         top_near_matches: int = 0,
     ) -> None:
-        top_near_matches = max(0, min(int(top_near_matches), 10))
         exact_match_sets = 0
         exact_match_count = 0
         near_match_count = 0

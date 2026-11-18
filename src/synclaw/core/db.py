@@ -656,7 +656,6 @@ def search_building_blocks(
         ValueError: The query is not a valid SMILES.
     """
 
-    limit = max(1, min(int(limit), 100))
     text = (query or "").strip()
     if not text or text == "*":
         cursor = conn.execute(
@@ -910,7 +909,6 @@ def search_reaction_templates(
 ) -> list[dict[str, Any]]:
     """Rank templates by TF-IDF similarity to a text query; an empty query or ``*`` lists them."""
 
-    limit = max(1, min(int(limit), 100))
     text = (query or "").strip()
     if not text or text == "*":
         return list_reaction_templates(conn, limit=limit, library=library)
