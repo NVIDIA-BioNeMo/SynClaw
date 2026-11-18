@@ -42,6 +42,15 @@ def evaluate_trace_file(
     target_smiles: str | None = None,
     tool_config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """Score one trace file as a row for the results CSV.
+
+    The submission comes from the first of these that the trace yields: its
+    ``selected_submission`` event, a replay of its ``submit_pathway`` calls against
+    ``db_path``, or its last submission-like event. ``target_smiles`` overrides the target
+    recorded in the trace. ``tool_config`` supplies the run's reaction library, stop
+    condition and toxicity screen.
+    """
+
     path = Path(trace_path)
     events = list(db.iter_jsonl(path))
     if not events:
@@ -149,7 +158,8 @@ def replay_selected_submission(
 
     The best accepted submission is kept, so a later, worse one cannot replace it. With none
     accepted, the last submission stands. ``hide_target`` replays with the target out of
-    stock, as a run that hid it validated its submissions.
+    stock, as a run that hid it validated its submissions. Returns the selection in the
+    shape of ``extract_final_submission``, or None if no call could be replayed.
     """
 
     submit_calls = [
@@ -378,6 +388,15 @@ def extract_final_submission(
     events: list[dict[str, Any]],
     target_smiles: str | None = None,
 ) -> dict[str, Any] | None:
+    """Read the pathway, product and verdict from the last submission-like event.
+
+    Scans backwards for a ``submit_pathway`` call or result, or a ``FINAL_EVENT_TYPES``
+    event, that carries pathway text or steps. The product is read from
+    ``actual_final_smiles``, else the final step of a structured submission, else a
+    ``final_smiles``-style field. ``target_smiles`` only chooses among a final step's
+    generated products. Returns None if no event qualifies.
+    """
+
     for event in reversed(events):
         event_type = _event_type(event)
         payload = _payload(event)
