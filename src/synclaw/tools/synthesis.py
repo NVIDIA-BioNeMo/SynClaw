@@ -812,18 +812,31 @@ def _actual_step_product(step_result: dict[str, Any]) -> str | None:
 
 
 def final_product_candidates(step_results: list[dict[str, Any]]) -> list[str]:
-    """The validated products of a pathway's final step, from which its final product is chosen."""
+    """The validated products of a pathway's final step, from which its final product is chosen.
 
-    if not step_results:
+    Every field a step result records a product in contributes, so a step recorded with
+    only some of them still yields its products: the generated products, flat or as
+    product sets, and, for a valid step, its own product, which a capped list can miss.
+    """
+
+    if not step_results or not isinstance(step_results[-1], dict):
         return []
     final_step = step_results[-1]
-    generated = _valid_generated_products(final_step.get("generated_products"))
-    if generated:
-        return generated
-    actual_step_product = _actual_step_product(final_step)
-    if actual_step_product:
-        return [actual_step_product]
-    return []
+    products = [
+        *_as_list(final_step.get("generated_products")),
+        *(
+            component
+            for product_set in _as_list(final_step.get("generated_product_sets"))
+            for component in _as_list(product_set)
+        ),
+    ]
+    if final_step.get("valid") is True:
+        products += [final_step.get("actual_product_smiles"), _actual_step_product(final_step)]
+    return _valid_generated_products([product for product in products if product])
+
+
+def _as_list(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
 
 
 def _valid_generated_products(products: Any) -> list[str]:

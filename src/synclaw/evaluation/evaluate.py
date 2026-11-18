@@ -24,6 +24,7 @@ from synclaw.rollout.policy import (
 )
 from synclaw.token_usage import trace_token_usage
 from synclaw.tools.synthesis import (
+    SynthesisTools,
     final_product_candidates,
     hidden_target_summary_fields,
     score_pathway_against_target,
@@ -160,31 +161,39 @@ def replay_selected_submission(
     The best accepted submission is kept, so a later, worse one cannot replace it. With none
     accepted, the last submission stands. ``hide_target`` replays with the target out of
     stock, as a run that hid it validated its submissions. Returns the selection in the
-    shape of ``extract_final_submission``, or None if no call could be replayed.
+    shape of ``extract_final_submission``, or None when the submission the run would select
+    cannot be replayed: none was accepted and the last call cannot be. An earlier replayed
+    call is not substituted, since the run did not select it; the caller reads the last
+    call's recorded result instead.
     """
 
     submit_calls = [
         event for event in events
         if _event_type(event) in TOOL_CALL_TYPES and _tool_name(event) == "submit_pathway"
     ]
+    if not submit_calls:
+        return None
+    recorded_results = _recorded_submit_results(events)
+    tools = SynthesisTools(
+        db_path,
+        reaction_libraries=library,
+        # Replay re-scores a recorded trace without the screen; recorded refusals are kept below.
+        toxicity=ToxicityConfig(mode=MODE_OFF),
+        hidden_target_smiles=target_smiles if hide_target else None,
+        hidden_building_block_ids=frozenset(
+            json.loads(hidden_target_summary_fields(events)["hidden_building_block_ids"] or "[]")
+        ),
+    )
     best: dict[str, Any] | None = None
     best_identical: bool | None = None
     best_similarity: float | None = None
     last: dict[str, Any] | None = None
     for ordinal, event in enumerate(submit_calls):
-        payload = _payload(event)
-        if not isinstance(payload, dict):
-            continue
+        recorded = recorded_results[ordinal] if ordinal < len(recorded_results) else {}
         last = _replay_submission(
-            events,
-            payload,
-            ordinal,
-            db_path,
-            target_smiles,
-            library=library,
-            hide_target=hide_target,
+            tools, _payload(event), recorded, db_path, target_smiles, library=library
         )
-        if last is not None and _recorded_submit_result(events, ordinal).get("refused") is True:
+        if last is not None and recorded.get("refused") is True:
             # Replay runs without the screen, so keep the refusal the run itself recorded.
             last = {**last, "accepted": False, "refused": True}
         if last is None or not last.get("accepted"):
@@ -215,14 +224,13 @@ def replay_selected_submission(
 
 
 def _replay_submission(
-    events: list[dict[str, Any]],
+    tools: SynthesisTools,
     payload: dict[str, Any],
-    ordinal: int,
+    recorded: dict[str, Any],
     db_path: str | Path,
     target_smiles: str | None,
     *,
     library: LibrarySelection,
-    hide_target: bool,
 ) -> dict[str, Any] | None:
     arguments = payload.get("dispatch_arguments") if isinstance(payload.get("dispatch_arguments"), dict) else None
     if arguments is None and isinstance(payload.get("arguments"), dict):
@@ -238,7 +246,7 @@ def _replay_submission(
         return None
     # Template IDs change between catalog versions, but each step's result records the
     # SMARTS it ran, so an unknown ID is resolved to the current template with that SMARTS.
-    recorded_smarts = _recorded_step_smarts(events, call_ordinal=ordinal)
+    recorded_smarts = _recorded_step_smarts(recorded)
     resolved_steps = []
     with db.session(db_path) as conn:
         for index, step in enumerate(steps):
@@ -257,18 +265,7 @@ def _replay_submission(
             if template is None:
                 return None
             resolved_steps.append(step)
-    from synclaw.tools.synthesis import SynthesisTools
-
-    # Replay re-scores a recorded trace without the screen; recorded refusals are kept by the caller.
-    return SynthesisTools(
-        db_path,
-        reaction_libraries=library,
-        toxicity=ToxicityConfig(mode=MODE_OFF),
-        hidden_target_smiles=target_smiles if hide_target else None,
-        hidden_building_block_ids=frozenset(
-            json.loads(hidden_target_summary_fields(events)["hidden_building_block_ids"] or "[]")
-        ),
-    ).submit_pathway(
+    return tools.submit_pathway(
         steps=resolved_steps,
         building_block=arguments.get("building_block"),
         pathway_text=arguments.get("pathway_text"),
@@ -286,21 +283,20 @@ def extract_selected_submission(
     return extract_final_submission(selected_events, target_smiles=target_smiles)
 
 
-def _recorded_submit_result(events: list[dict[str, Any]], ordinal: int) -> dict[str, Any]:
-    """The recorded result of the n-th submit_pathway call; results are appended in call order."""
+def _recorded_submit_results(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The recorded result of each submit_pathway call, in call order, as results are appended."""
 
-    results = [
+    results = (
         _payload(event).get("result") for event in events
         if _event_type(event) in TOOL_RESULT_TYPES and _tool_name(event) == "submit_pathway"
-    ]
-    result = results[ordinal] if ordinal < len(results) else None
-    return result if isinstance(result, dict) else {}
+    )
+    return [result if isinstance(result, dict) else {} for result in results]
 
 
-def _recorded_step_smarts(events: list[dict[str, Any]], *, call_ordinal: int) -> dict[int, str]:
-    """Map step positions to template SMARTS from the result of the given submit_pathway call."""
+def _recorded_step_smarts(result: dict[str, Any]) -> dict[int, str]:
+    """Map step positions to the template SMARTS a recorded submit_pathway result ran."""
 
-    steps = _recorded_submit_result(events, call_ordinal).get("steps")
+    steps = result.get("steps")
     recorded: dict[int, str] = {}
     for position, step in enumerate(steps if isinstance(steps, list) else []):
         template = step.get("template") if isinstance(step, dict) else None
@@ -455,11 +451,22 @@ def _final_smiles_from_structured_steps(
     candidate: dict[str, Any],
     target_smiles: str | None,
 ) -> str | None:
+    """Choose a recorded submission's final product from its steps as submit_pathway does."""
+
     steps = candidate.get("steps")
     if not isinstance(steps, list) or not steps or not isinstance(steps[-1], dict):
         return None
+    submitted = candidate.get("submitted_final_smiles") or steps[-1].get("product_smiles")
+    submitted_validation = chem.validate_smiles(str(submitted)) if submitted else None
     return select_final_product(
-        final_product_candidates(steps), target_smiles=target_smiles, preferred_smiles=None
+        final_product_candidates(steps),
+        # submit_pathway ranks against the target only for an accepted route.
+        target_smiles=target_smiles if candidate.get("accepted") is not False else None,
+        preferred_smiles=(
+            submitted_validation["canonical_smiles"]
+            if submitted_validation and submitted_validation["valid"]
+            else None
+        ),
     )
 
 
