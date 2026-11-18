@@ -94,6 +94,10 @@ class SynthesisTools:
         include_near: bool = True,
         min_similarity: float = 0.15,
     ) -> dict[str, Any]:
+        """Look up a SMILES in stock: the exact match first, then near matches.
+
+        ``*`` browses the catalog. Hidden building blocks never appear.
+        """
         validation = chem.validate_smiles(query)
         with db.session(self.db_path) as conn:
             results = db.search_building_blocks(
@@ -150,6 +154,12 @@ class SynthesisTools:
         try_permutations: bool = True,
         template_scan_limit: int = 5000,
     ) -> dict[str, Any]:
+        """Search templates by text, by reactant/product structure, or both.
+
+        With neither, return an overview of the reaction families. Given both, the two
+        searches run independently and return side by side. A configured library
+        selection overrides ``library``, so a caller cannot widen it.
+        """
         library = self.reaction_libraries or library
         text_query = (query or "").strip()
         has_text_query = bool(text_query and text_query != "*")
@@ -257,6 +267,11 @@ class SynthesisTools:
         max_products: int = 100,
         try_permutations: bool = True,
     ) -> dict[str, Any]:
+        """Run a template forward and check an optional claimed product.
+
+        Reactants may be ``BB:<id>`` or any SMILES; unlike in submit_pathway, they need
+        not be in stock. A reaction SMARTS counts only if a library template reproduces it.
+        """
         with db.session(self.db_path) as conn:
             hidden_ids = self.hidden_building_block_ids
             resolved = [
@@ -298,6 +313,11 @@ class SynthesisTools:
         min_similarity: float = 0.15,
         top_near_matches: int = 3,
     ) -> dict[str, Any]:
+        """Run a template backwards from product(s) to candidate reactant sets.
+
+        Stock matches for the precursors are planning evidence only; an unmatched
+        precursor may still be made as an intermediate.
+        """
         with db.session(self.db_path) as conn:
             result = reactions.simulate_reverse_reaction(
                 conn,
