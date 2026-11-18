@@ -34,6 +34,15 @@ def int_or_none(value: Any) -> int | None:
         return None
 
 
+def float_or_none(value: Any) -> float | None:
+    if value in (None, ""):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def normalize_token_usage(usage: Any) -> dict[str, Any]:
     """Map Chat, Responses and Messages usage objects onto one field set."""
 

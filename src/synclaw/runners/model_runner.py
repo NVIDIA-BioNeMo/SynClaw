@@ -72,24 +72,13 @@ def retry_delay_seconds(attempt: int, body: str = "", headers: Any = None) -> fl
             retry_after = headers.get("Retry-After")
         except AttributeError:
             retry_after = None
-    parsed_retry_after = _float_or_none(retry_after)
+    parsed_retry_after = token_usage.float_or_none(retry_after)
     if parsed_retry_after is None:
         match = re.search(r"wait\s+(\d+(?:\.\d+)?)\s+seconds?", body, flags=re.IGNORECASE)
         if match:
-            parsed_retry_after = _float_or_none(match.group(1))
+            parsed_retry_after = token_usage.float_or_none(match.group(1))
     exponential = 10.0 * (2 ** attempt)
     return min(max(exponential, parsed_retry_after or 0.0), 120.0)
-
-
-def _float_or_none(value: Any) -> float | None:
-    if value in (None, ""):
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
 
 
 def _hide_target(args: argparse.Namespace) -> bool:
