@@ -23,7 +23,11 @@ from synclaw.rollout.policy import (
     submission_similarity_to_target,
 )
 from synclaw.token_usage import int_or_none, trace_token_usage
-from synclaw.tools.synthesis import hidden_target_summary_fields, select_final_product
+from synclaw.tools.synthesis import (
+    hidden_target_summary_fields,
+    score_pathway_against_target,
+    select_final_product,
+)
 
 FINAL_EVENT_TYPES = {"final", "final_pathway", "pathway", "selected_submission", "submission", "submit_pathway"}
 TOOL_CALL_TYPES = {"tool_call", "tool_use", "function_call"}
@@ -79,10 +83,15 @@ def evaluate_trace_file(
     if final_validation and not final_validation["valid"]:
         final_smiles = None
 
-    scorable = bool(inferred_target and final_smiles)
-    similarity_result = chem.similarity(final_smiles, inferred_target) if scorable else {}
-    similarity_to_target = similarity_result.get("similarity")
-    identical_to_target = chem.molecules_identical(inferred_target, final_smiles) if scorable else None
+    scoring = score_pathway_against_target(
+        [final_smiles] if final_smiles else [],
+        target_smiles=inferred_target,
+        target_validation=chem.validate_smiles(inferred_target) if inferred_target else None,
+        preferred_smiles=None,
+        accepted=accepted is not False,
+    )
+    similarity_to_target = scoring["similarity_to_target"]
+    identical_to_target = scoring["identical_to_target"]
     runtime_seconds = _float_or_none(run_summary.get("runtime_seconds") if run_summary else None)
     token_usage = trace_token_usage(events, run_summary=run_summary)
     similarity_floor = _similarity_floor(tool_config)
@@ -114,8 +123,8 @@ def evaluate_trace_file(
         "has_pathway_text": bool(pathway_text),
         "similarity_to_target": similarity_to_target,
         "identical_to_target": identical_to_target,
-        "constitutional_similarity_to_target": similarity_result.get("constitutional_similarity"),
-        "stereo_aware_similarity_to_target": similarity_result.get("stereo_aware_similarity"),
+        "constitutional_similarity_to_target": scoring["constitutional_similarity_to_target"],
+        "stereo_aware_similarity_to_target": scoring["stereo_aware_similarity_to_target"],
         "runtime_seconds": runtime_seconds,
         **token_usage,
         **summarize_events(events),

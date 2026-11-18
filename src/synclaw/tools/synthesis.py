@@ -13,6 +13,7 @@ from typing import Any
 from synclaw.core import chem, db, fingerprint_index, reactions
 from synclaw.core.libraries import LibrarySelection, normalize_libraries
 from synclaw.core.toxicity import BLOCK_KEY, ToxicityConfig, ToxicityScreen, refusal_message
+from synclaw.tools.contracts import clamp_to_contract
 
 REVERSE_RANK_LIMIT = 25
 REVERSE_RANK_MAX_OUTCOMES = 10
@@ -90,10 +91,15 @@ class SynthesisTools:
     def search_building_blocks(
         self,
         query: str,
-        limit: int = 20,
+        limit: int = 10,
         include_near: bool = True,
         min_similarity: float = 0.15,
     ) -> dict[str, Any]:
+        """Look up a SMILES in stock: the exact match first, then near matches.
+
+        ``*`` browses the catalog. Hidden building blocks never appear.
+        """
+        limit = clamp_to_contract("search_building_blocks", "limit", limit)
         validation = chem.validate_smiles(query)
         with db.session(self.db_path) as conn:
             results = db.search_building_blocks(
@@ -109,7 +115,7 @@ class SynthesisTools:
         return {
             "query": query,
             "query_canonical_smiles": validation.get("canonical_smiles") if validation["valid"] else None,
-            "limit": max(1, min(int(limit), 100)),
+            "limit": limit,
             "include_near": include_near,
             "min_similarity": min_similarity,
             "count": len(results),
@@ -142,7 +148,7 @@ class SynthesisTools:
     def search_reaction_templates(
         self,
         query: str | None = None,
-        limit: int = 20,
+        limit: int = 10,
         library: LibrarySelection = None,
         reactant_smiles: list[str] | None = None,
         product_smiles: str | list[str] | None = None,
@@ -150,11 +156,17 @@ class SynthesisTools:
         try_permutations: bool = True,
         template_scan_limit: int = 5000,
     ) -> dict[str, Any]:
+        """Search templates by text, by reactant/product structure, or both.
+
+        With neither, return an overview of the reaction families. Given both, the two
+        searches run independently and return side by side. A configured library
+        selection overrides ``library``, so a caller cannot widen it.
+        """
         library = self.reaction_libraries or library
         text_query = (query or "").strip()
         has_text_query = bool(text_query and text_query != "*")
         has_molecule_query = bool(reactant_smiles or product_smiles)
-        result_limit = max(1, min(int(limit), 100))
+        result_limit = clamp_to_contract("search_reaction_templates", "limit", limit)
         if not has_text_query and not has_molecule_query:
             # With nothing to search for, list the reaction families to search by.
             with db.session(self.db_path) as conn:
@@ -212,7 +224,7 @@ class SynthesisTools:
                     "results": text_results,
                 }
             # Rank the whole structural match pool before truncating to the requested limit.
-            result = reactions.search_reaction_templates_structural_matches(
+            molecule_results = reactions.search_reaction_templates_structural_matches(
                 conn,
                 reactant_smiles=reactant_smiles,
                 product_smiles=product_smiles,
@@ -222,23 +234,24 @@ class SynthesisTools:
                 try_permutations=try_permutations,
                 template_scan_limit=template_scan_limit,
             )
-            if product_smiles and result.get("valid"):
-                self._rank_template_search_by_reverse_usefulness(conn, result, product_smiles)
+            if product_smiles and molecule_results.get("valid"):
+                self._rank_template_search_by_reverse_usefulness(conn, molecule_results, product_smiles)
             else:
-                result["reverse_ranking"] = {"applied": False, "reason": "product_smiles was not supplied"}
-        result["query"] = query
-        result["search_mode"] = "molecule"
-        result["results"] = list(result.get("results") or [])[:result_limit]
-        result["count"] = len(result["results"])
-        result["limit"] = result_limit
+                molecule_results["reverse_ranking"] = {"applied": False, "reason": "product_smiles was not supplied"}
+        matches = list(molecule_results.pop("results", None) or [])[:result_limit]
+        molecule_results.pop("count", None)
+        result = {**molecule_results, "query": query, "limit": result_limit}
         if has_text_query:
             # Text and molecule constraints are searched independently and returned side by side.
-            result["search_mode"] = "text_and_molecule"
-            result["structural_results"] = result.pop("results")
-            result["structural_count"] = result.pop("count")
-            result["text_results"] = text_results
-            result["text_count"] = len(text_results)
-        return result
+            return {
+                **result,
+                "search_mode": "text_and_molecule",
+                "structural_results": matches,
+                "structural_count": len(matches),
+                "text_results": text_results,
+                "text_count": len(text_results),
+            }
+        return {**result, "search_mode": "molecule", "results": matches, "count": len(matches)}
 
     def get_reaction_template(self, reaction_id: str) -> dict[str, Any]:
         with db.session(self.db_path) as conn:
@@ -257,6 +270,11 @@ class SynthesisTools:
         max_products: int = 100,
         try_permutations: bool = True,
     ) -> dict[str, Any]:
+        """Run a template forward and check an optional claimed product.
+
+        Reactants may be ``BB:<id>`` or any SMILES; unlike in submit_pathway, they need
+        not be in stock. A reaction SMARTS counts only if a library template reproduces it.
+        """
         with db.session(self.db_path) as conn:
             hidden_ids = self.hidden_building_block_ids
             resolved = [
@@ -282,7 +300,7 @@ class SynthesisTools:
                 reaction_id=reaction_id,
                 reactant_smiles=[item["smiles"] for item in resolved],
                 product_smiles=product_smiles,
-                max_products=max_products,
+                max_products=clamp_to_contract("simulate_reaction", "max_products", max_products),
                 try_permutations=try_permutations,
                 library=self.reaction_libraries,
             )
@@ -298,12 +316,18 @@ class SynthesisTools:
         min_similarity: float = 0.15,
         top_near_matches: int = 3,
     ) -> dict[str, Any]:
+        """Run a template backwards from product(s) to candidate reactant sets.
+
+        Stock matches for the precursors are planning evidence only; an unmatched
+        precursor may still be made as an intermediate.
+        """
+        top_near_matches = clamp_to_contract("simulate_reverse_reaction", "top_near_matches", top_near_matches)
         with db.session(self.db_path) as conn:
             result = reactions.simulate_reverse_reaction(
                 conn,
                 reaction_id=reaction_id,
                 product_smiles=product_smiles,
-                max_outcomes=max_outcomes,
+                max_outcomes=clamp_to_contract("simulate_reverse_reaction", "max_outcomes", max_outcomes),
                 library=self.reaction_libraries,
             )
             if result.get("reaction_executed"):
@@ -316,7 +340,7 @@ class SynthesisTools:
                 )
         result["include_near"] = include_near
         result["min_similarity"] = min_similarity
-        result["top_near_matches"] = max(0, min(int(top_near_matches), 10))
+        result["top_near_matches"] = top_near_matches
         _compact_reverse_reaction_result(result)
         return result
 
@@ -326,6 +350,7 @@ class SynthesisTools:
         result: dict[str, Any],
         product_smiles: str | list[str],
     ) -> None:
+        """Re-rank ``result["results"]`` in place by how well each template's reverse precursors are in stock."""
         matches = list(result.get("results") or [])
         enriched_count = min(len(matches), REVERSE_RANK_LIMIT)
         enriched = matches[:enriched_count]
@@ -370,7 +395,7 @@ class SynthesisTools:
         min_similarity: float = 0.0,
         top_near_matches: int = 0,
     ) -> None:
-        top_near_matches = max(0, min(int(top_near_matches), 10))
+        """Annotate a reverse-simulation ``result`` in place with building-block grounding for each candidate set."""
         exact_match_sets = 0
         exact_match_count = 0
         near_match_count = 0
@@ -574,6 +599,21 @@ class SynthesisTools:
                     result["actual_product_smiles"] = actual_step_product
                     intermediates[f"INT:{index}"] = actual_step_product
 
+        # INT:k counts as used when a step after k lists it. Position alone excludes forward
+        # and self references, and a failure in either step does not hide the use.
+        used_intermediates = {
+            str(ref)
+            for position, step in enumerate(steps, start=1)
+            if isinstance(refs := step.get("reactants") or step.get("reactant_refs"), list)
+            for ref in refs
+            if str(ref) in {f"INT:{earlier}" for earlier in range(1, position)}
+        }
+        issues.extend(
+            f"step {index}: INT:{index} is not used by a later step; every step must feed the final product"
+            for index in range(1, len(steps))
+            if f"INT:{index}" not in used_intermediates
+        )
+
         submitted_final = steps[-1].get("product_smiles") if steps else None
         submitted_final_validation = chem.validate_smiles(submitted_final) if submitted_final else None
         if not submitted_final_validation or not submitted_final_validation["valid"]:
@@ -598,7 +638,7 @@ class SynthesisTools:
 
         actual_final_candidates = _actual_final_candidates(step_results)
         all_steps_valid = bool(step_results) and all(result.get("valid") is True for result in step_results)
-        grounding = _building_block_grounding(step_results)
+        grounding = _summarize_reactant_grounding(step_results)
         accepted = not issues and all_steps_valid
         scoring = score_pathway_against_target(
             actual_final_candidates,
@@ -881,18 +921,16 @@ def _final_product_rank(product_smiles: str, target_smiles: str) -> tuple[float,
     )
 
 
-def _building_block_grounding(step_results: list[dict[str, Any]]) -> dict[str, Any]:
+def _summarize_reactant_grounding(step_results: list[dict[str, Any]]) -> dict[str, Any]:
     building_block_ids: set[int] = set()
     ungrounded: list[dict[str, Any]] = []
     for step in step_results:
         for reactant in step.get("resolved_reactants") or []:
-            if not isinstance(reactant, dict):
-                continue
             source = reactant.get("source")
             if source == "intermediate":
                 continue
             block = reactant.get("building_block")
-            if isinstance(block, dict) and block.get("id") is not None:
+            if block is not None:
                 building_block_ids.add(int(block["id"]))
                 continue
             ungrounded.append(

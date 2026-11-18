@@ -26,7 +26,7 @@ from synclaw.runners.mcp_server import (
     ToolWorkerPoolBroken,
     create_server,
 )
-from synclaw.tools.contracts import TOOL_SCHEMAS
+from synclaw.tools.contracts import TOOL_ARGUMENT_DEFAULTS, TOOL_SCHEMAS
 
 
 def _block_process_worker(marker_path: str) -> None:
@@ -108,6 +108,10 @@ def test_mcp_tool_schemas_remain_public_and_wrappers_are_async(
     for tool in tools.values():
         properties = tool.parameters["properties"]
         assert "max_concurrent_executions" not in properties
+        parameters = inspect.signature(tool.fn).parameters
+        for key, value in TOOL_ARGUMENT_DEFAULTS[tool.name].items():
+            if key != "steps":
+                assert parameters[key].default == value, (tool.name, key)
 
 
 def test_server_refuses_a_library_without_family_metadata_at_startup(tmp_path: Path) -> None:

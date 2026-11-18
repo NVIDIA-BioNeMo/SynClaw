@@ -3,13 +3,25 @@
 
 from __future__ import annotations
 
+import inspect
+import math
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from synclaw.core import db
 from synclaw.rollout.policy import prepare_tool_call
 from synclaw.tools.contracts import (
     MESSAGES_TOOL_SCHEMAS,
     RESPONSES_TOOL_SCHEMAS,
+    TOOL_ARGUMENT_DEFAULTS,
+    TOOL_ARGUMENT_SPECS,
     TOOL_SCHEMAS,
+    clamp_to_contract,
     filter_chat_tool_schemas,
 )
+from synclaw.tools.synthesis import SynthesisTools
 
 
 def test_transport_schemas_preserve_one_canonical_contract() -> None:
@@ -36,6 +48,39 @@ def test_tool_descriptions_carry_the_rules_prompts_leave_out() -> None:
     assert "not guaranteed to work forward" in descriptions["simulate_reverse_reaction"]
     for rule in ("BB:<id>", "INT:<step_number>", "steps: []", "best accepted route is kept"):
         assert rule in descriptions["submit_pathway"]
+
+
+def test_tool_method_defaults_match_the_contract() -> None:
+    for name, defaults in TOOL_ARGUMENT_DEFAULTS.items():
+        parameters = inspect.signature(getattr(SynthesisTools, name)).parameters
+        for key, value in defaults.items():
+            if key != "steps":
+                assert parameters[key].default == value, (name, key)
+
+
+def test_tool_methods_honor_the_advertised_maximum(tmp_path: Path) -> None:
+    maximum = TOOL_ARGUMENT_SPECS["search_building_blocks"]["limit"]["maximum"]
+    (tmp_path / "bbs.txt").write_text(
+        "SMILES\n" + "\n".join("C" * n for n in range(1, maximum + 5)), encoding="utf-8"
+    )
+    database = tmp_path / "test.sqlite"
+    db.ingest_building_blocks(tmp_path / "bbs.txt", database)
+    db.prepare_building_block_search(database)
+
+    result = SynthesisTools(database).search_building_blocks("*", limit=maximum * 5)
+
+    assert result["limit"] == result["count"] == maximum
+
+
+@pytest.mark.parametrize("value", [math.inf, -math.inf, math.nan, 2.5, True, "10", None])
+def test_clamp_to_contract_rejects_values_that_are_not_whole_numbers(value: Any) -> None:
+    with pytest.raises(ValueError, match="must be a whole number from 1 to 20"):
+        clamp_to_contract("search_building_blocks", "limit", value)
+
+
+@pytest.mark.parametrize(("value", "expected"), [(5, 5), (5.0, 5), (0, 1), (1e6, 20)])
+def test_clamp_to_contract_clamps_whole_numbers_to_the_schema_bounds(value: Any, expected: int) -> None:
+    assert clamp_to_contract("search_building_blocks", "limit", value) == expected
 
 
 def test_filtered_schemas_are_independent_copies() -> None:

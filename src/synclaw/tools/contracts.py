@@ -356,33 +356,34 @@ MESSAGES_TOOL_SCHEMAS = [
 TOOL_NAMES = tuple(tool["function"]["name"] for tool in TOOL_SCHEMAS)
 REQUIRED_TOOL_NAMES = frozenset({"submit_pathway"})
 
+TOOL_ARGUMENT_SPECS: dict[str, dict[str, dict[str, Any]]] = {
+    tool["function"]["name"]: tool["function"]["parameters"].get("properties", {}) for tool in TOOL_SCHEMAS
+}
 TOOL_ARGUMENT_DEFAULTS: dict[str, dict[str, Any]] = {
-    "search_building_blocks": {
-        "limit": 10,
-        "include_near": True,
-        "min_similarity": 0.15,
-    },
-    "search_reaction_templates": {
-        "limit": 10,
-        "run_forward": False,
-        "try_permutations": True,
-    },
-    "simulate_reaction": {"max_products": 100, "try_permutations": True},
-    "simulate_reverse_reaction": {
-        "max_outcomes": 50,
-        "include_near": True,
-        "min_similarity": 0.15,
-        "top_near_matches": 3,
-    },
-    "submit_pathway": {"steps": []},
+    name: {key: spec["default"] for key, spec in specs.items() if "default" in spec}
+    for name, specs in TOOL_ARGUMENT_SPECS.items()
+}
+TOOL_ARGUMENT_DEFAULTS["submit_pathway"]["steps"] = []
+TOOL_ALLOWED_ARGUMENTS: dict[str, frozenset[str]] = {
+    name: frozenset(specs) for name, specs in TOOL_ARGUMENT_SPECS.items()
 }
 
-TOOL_ALLOWED_ARGUMENTS: dict[str, frozenset[str]] = {
-    tool["function"]["name"]: frozenset(
-        tool["function"]["parameters"].get("properties", {})
-    )
-    for tool in TOOL_SCHEMAS
-}
+
+def clamp_to_contract(tool_name: str, argument: str, value: Any) -> int:
+    """Clamp a whole-number argument to the bounds its tool schema advertises.
+
+    Anything else (a boolean, string, fraction, NaN or infinity) raises ``ValueError``
+    instead of being coerced, so the caller sees the contract rather than a substituted value.
+    """
+
+    spec = TOOL_ARGUMENT_SPECS[tool_name][argument]
+    whole = isinstance(value, int) or (isinstance(value, float) and value.is_integer())
+    if isinstance(value, bool) or not whole:
+        raise ValueError(
+            f"{tool_name} argument '{argument}' must be a whole number from "
+            f"{spec['minimum']} to {spec['maximum']}, got {value!r}"
+        )
+    return max(spec["minimum"], min(int(value), spec["maximum"]))
 
 
 def normalize_excluded_tools(
@@ -504,7 +505,9 @@ __all__ = [
     "REQUIRED_TOOL_NAMES",
     "RESPONSES_TOOL_SCHEMAS",
     "TOOL_NAMES",
+    "TOOL_ARGUMENT_SPECS",
     "TOOL_SCHEMAS",
+    "clamp_to_contract",
     "filter_chat_tool_schemas",
     "filter_messages_tool_schemas",
     "filter_responses_tool_schemas",

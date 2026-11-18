@@ -6,11 +6,12 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
+from pathlib import Path
 from typing import Any
 
 import pytest
 
-from synclaw.core import chem
+from synclaw.core import chem, db
 from synclaw.rollout.budget import ContextBudgetSnapshot
 from synclaw.rollout.loop import (
     AssistantTurn,
@@ -30,7 +31,7 @@ from synclaw.rollout.policy import (
 )
 from synclaw.token_usage import aggregate_token_usage_from_events
 from synclaw.tools.contracts import filter_chat_tool_schemas
-from synclaw.tools.synthesis import score_pathway_against_target
+from synclaw.tools.synthesis import SynthesisTools, score_pathway_against_target
 
 
 class FakeTransport:
@@ -192,6 +193,67 @@ def test_local_tool_dispatcher_defaults_to_canonical_reaction_library() -> None:
     result = call_local_tool(LibraryTools(), "search_reaction_templates", {})
 
     assert result["library"] == ("synformer", "paroutes", "ord", "nvidia")
+    assert result["limit"] == 10
+
+
+def test_local_tool_dispatcher_does_not_hide_harness_errors() -> None:
+    class BrokenTools:
+        def mces(self, smiles_a: str, smiles_b: str) -> dict[str, Any]:
+            raise RuntimeError("index missing")
+
+    with pytest.raises(RuntimeError, match="index missing"):
+        call_local_tool(BrokenTools(), "mces", {"smiles_a": "C", "smiles_b": "CC"})
+
+
+def test_local_tool_dispatcher_returns_an_error_for_a_non_finite_limit(tmp_path: Path) -> None:
+    (tmp_path / "bbs.txt").write_text("SMILES\nCCO\n", encoding="utf-8")
+    database = tmp_path / "test.sqlite"
+    db.ingest_building_blocks(tmp_path / "bbs.txt", database)
+    # json.loads("1e999") is how a model's oversized number arrives.
+    arguments = {"query": "ester", "limit": json.loads("1e999")}
+
+    result = call_local_tool(SynthesisTools(database), "search_reaction_templates", arguments)
+
+    assert result["error"] == "invalid_tool_call"
+    assert "must be a whole number" in result["issues"][0]
+
+
+@pytest.mark.parametrize(
+    ("name", "arguments"),
+    [
+        ("simulate_reaction", {"reaction_id": "demo:R000", "reactants": ["BB:99999999999999999999"]}),
+        (
+            "submit_pathway",
+            {
+                "steps": [
+                    {
+                        "reaction_id": "demo:R000",
+                        "reactants": ["BB:99999999999999999999"],
+                        "product_smiles": "CC=O",
+                    }
+                ]
+            },
+        ),
+    ],
+)
+def test_local_tool_dispatcher_reports_an_out_of_range_building_block_id(
+    tmp_path: Path, name: str, arguments: dict[str, Any]
+) -> None:
+    (tmp_path / "bbs.txt").write_text("SMILES\nCCO\n", encoding="utf-8")
+    database = tmp_path / "test.sqlite"
+    db.ingest_building_blocks(tmp_path / "bbs.txt", database)
+
+    result = call_local_tool(SynthesisTools(database), name, arguments, target_smiles="CC=O")
+
+    assert "unknown building block reference: BB:99999999999999999999" in " ".join(result["issues"])
+
+
+@pytest.mark.parametrize("step", ["BB:1", 1, None])
+def test_local_tool_dispatcher_rejects_non_object_steps(step: Any) -> None:
+    result = call_local_tool(object(), "submit_pathway", {"steps": [step], "pathway_text": "x"})
+
+    assert result["error"] == "invalid_tool_call"
+    assert "array of objects" in result["issues"][0]
 
 
 @pytest.mark.parametrize("max_tool_calls", [2, 10])

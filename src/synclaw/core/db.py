@@ -656,7 +656,6 @@ def search_building_blocks(
         ValueError: The query is not a valid SMILES.
     """
 
-    limit = max(1, min(int(limit), 100))
     text = (query or "").strip()
     if not text or text == "*":
         cursor = conn.execute(
@@ -754,7 +753,8 @@ def _prepared_search_tables_exist(conn: sqlite3.Connection) -> bool:
 def get_building_block(
     conn: sqlite3.Connection, bb_id: int, *, hidden_ids: frozenset[int] = frozenset()
 ) -> dict[str, Any] | None:
-    if bb_id in hidden_ids:
+    # An ID outside SQLite's 64-bit INTEGER range cannot exist; binding it would raise OverflowError.
+    if bb_id in hidden_ids or not -(2**63) <= bb_id < 2**63:
         return None
     cursor = conn.execute(
         """
@@ -910,7 +910,6 @@ def search_reaction_templates(
 ) -> list[dict[str, Any]]:
     """Rank templates by TF-IDF similarity to a text query; an empty query or ``*`` lists them."""
 
-    limit = max(1, min(int(limit), 100))
     text = (query or "").strip()
     if not text or text == "*":
         return list_reaction_templates(conn, limit=limit, library=library)
