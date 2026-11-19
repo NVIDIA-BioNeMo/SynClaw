@@ -51,7 +51,7 @@ from synclaw.tasks.targets import (
     MAX_REACTANTS,
     OFFSET_FILE,
     REACTION_FILE,
-    TEMPLATE_ID_FILE,
+    REACTION_ID_FILE,
     line_offsets,
     read_smiles_lines,
 )
@@ -94,7 +94,7 @@ def _sha256(path: Path, chunk: int = 1 << 20) -> str:
 
 
 def load_template_records(libraries: Sequence[str]) -> list[dict[str, Any]]:
-    """Read the selected libraries' template records, deduplicated by template id.
+    """Read the selected libraries' template records, deduplicated by reaction id.
 
     A template is stored once in its owning library's file and records cross-library membership
     in `libraries`, so a union reads whole files and drops any id already seen.
@@ -120,7 +120,7 @@ def load_template_records(libraries: Sequence[str]) -> list[dict[str, Any]]:
 
 
 def write_templates(records: Sequence[dict[str, Any]], out_dir: Path) -> dict[str, Any]:
-    """Write reactions.txt / template_ids.txt, dropping what the engine cannot execute."""
+    """Write reactions.txt / reaction_ids.txt, dropping what the engine cannot execute."""
     _, AllChem, rdChemReactions = _rdkit_reaction_modules()
     kept: list[dict[str, Any]] = []
     dropped: list[tuple[str, str]] = []
@@ -147,7 +147,7 @@ def write_templates(records: Sequence[dict[str, Any]], out_dir: Path) -> dict[st
 
     with open(out_dir / REACTION_FILE, "w", newline="\n") as handle:
         handle.writelines(record["smarts"].strip() + "\n" for record in kept)
-    with open(out_dir / TEMPLATE_ID_FILE, "w", newline="\n") as handle:
+    with open(out_dir / REACTION_ID_FILE, "w", newline="\n") as handle:
         handle.writelines(record["reaction_id"] + "\n" for record in kept)
     with open(out_dir / DROPPED_TEMPLATE_FILE, "w", newline="\n") as handle:
         handle.write("reaction_id\treason\n")

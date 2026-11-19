@@ -16,7 +16,7 @@ order) from "no order produces it".
 
 Replay alone cannot see a template that changed or disappeared from the installed package, because
 it executes the SMARTS stored in the matrix directory -- the old definition replays against itself
-perfectly. That is reported separately, under `catalog_drift`: template ids the matrix has and the
+perfectly. That is reported separately, under `catalog_drift`: reaction ids the matrix has and the
 package does not, ids whose SMARTS no longer agree, and how many checked routes cite one. A route
 citing a dropped template replays here and is still unusable, since `search_reaction_templates`
 will never return that id to an agent.
@@ -37,7 +37,7 @@ from synclaw.core.reactions import _rdkit_reaction_modules
 from synclaw.tasks.targets import (
     NO_PRODUCTS_REASON,
     REACTION_FILE,
-    TEMPLATE_ID_FILE,
+    REACTION_ID_FILE,
     replay_route,
     route_records_products,
 )
@@ -80,14 +80,14 @@ def main() -> int:
 
     with open(args.matrix_dir / REACTION_FILE) as handle:
         smarts = [line.strip() for line in handle if line.strip()]
-    with open(args.matrix_dir / TEMPLATE_ID_FILE) as handle:
-        template_ids = [line.strip() for line in handle if line.strip()]
-    smarts_by_id = dict(zip(template_ids, smarts))
+    with open(args.matrix_dir / REACTION_ID_FILE) as handle:
+        reaction_ids = [line.strip() for line in handle if line.strip()]
+    smarts_by_id = dict(zip(reaction_ids, smarts))
 
     installed = installed_templates()
-    missing_from_catalog = {tid for tid in template_ids if tid not in installed}
+    missing_from_catalog = {tid for tid in reaction_ids if tid not in installed}
     changed_in_catalog = {
-        tid for tid in template_ids if tid in installed and installed[tid] != smarts_by_id[tid]
+        tid for tid in reaction_ids if tid in installed and installed[tid] != smarts_by_id[tid]
     }
     drifted = missing_from_catalog | changed_in_catalog
 
@@ -163,7 +163,7 @@ def main() -> int:
                 "failures": dict(reasons),
                 "catalog_drift": {
                     "installed_templates": len(installed),
-                    "matrix_templates": len(template_ids),
+                    "matrix_templates": len(reaction_ids),
                     "missing_from_catalog": sorted(missing_from_catalog),
                     "changed_in_catalog": sorted(changed_in_catalog),
                     "routes_citing_drift": routes_citing_drift,
