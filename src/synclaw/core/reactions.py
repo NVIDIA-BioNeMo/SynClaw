@@ -285,7 +285,7 @@ def apply_template_annotation(
     normalized: dict[str, Any],
     annotation: dict[str, Any],
     *,
-    replace_existing_tags: bool = True,
+    replace_existing_tags: bool,
 ) -> dict[str, Any]:
     """Apply curated model-facing metadata to a normalized template record."""
 
@@ -367,33 +367,20 @@ def _decode_inline_annotation_value(key: str, value: Any, *, source: str) -> Any
         return value
     text = value.strip()
     if key == "replace_tags":
-        if text.lower() in {"true", "false"}:
-            return text.lower() == "true"
-        return text
-    if key in {"search_terms", "search_exclusions"} and not text.startswith("["):
-        return _normalize_tags(text)
-    if key in {"retro_planning_notes", "execution_caveats"} and not text.startswith("["):
-        return text
-    structured_fields = {
-        "family_metadata",
-        "search_terms",
-        "search_exclusions",
-        "token_aliases",
-        "reactant_roles",
-        "retro_planning_notes",
-        "execution_caveats",
-        "overview",
-    }
-    if key not in structured_fields:
-        return text
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError as exc:
-        if key in {"search_terms", "search_exclusions"}:
-            return _normalize_tags(text)
-        if key in {"retro_planning_notes", "execution_caveats"}:
-            return text
-        raise ValueError(f"{source}: {key} must contain valid JSON") from exc
+        return text.lower() == "true" if text.lower() in {"true", "false"} else text
+    if key in {"search_terms", "search_exclusions", "retro_planning_notes", "execution_caveats"}:
+        if text.startswith("["):
+            try:
+                return json.loads(text)
+            except json.JSONDecodeError:
+                pass
+        return _normalize_tags(text) if key in {"search_terms", "search_exclusions"} else text
+    if key in {"family_metadata", "token_aliases", "reactant_roles", "overview"}:
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"{source}: {key} must contain valid JSON") from exc
+    return text
 
 
 def normalize_template_record(record: dict[str, Any], index: int, library: str) -> dict[str, Any]:
@@ -465,30 +452,17 @@ def _normalize_reaction_id(value: Any, *, index: int, library: str) -> str:
     return text
 
 
-def search_reaction_templates(
-    conn,
-    query: str,
-    limit: int = 20,
-    library: LibrarySelection = None,
-) -> list[dict[str, Any]]:
-    return db.search_reaction_templates(conn, query=query, limit=limit, library=library)
-
-
 def search_reaction_templates_structural_matches(
     conn,
     reactant_smiles: list[str] | None = None,
     product_smiles: str | list[str] | None = None,
-    limit: int = 20,
     library: LibrarySelection = None,
     run_forward: bool = False,
-    template_scan_limit: int = 5000,
 ) -> dict[str, Any]:
-    """Search reaction templates by structural reactant/product role matching."""
+    """Rank every selected template whose SMARTS roles structurally match the molecules."""
 
     reactant_inputs = _normalize_smiles_inputs(reactant_smiles)
     product_inputs = _normalize_smiles_inputs(product_smiles)
-    result_limit = max(1, min(int(limit), 50000))
-    scan_limit = max(result_limit, min(max(1, int(template_scan_limit)), 50000))
     if not reactant_inputs and not product_inputs:
         return {
             "valid": False,
@@ -499,7 +473,6 @@ def search_reaction_templates_structural_matches(
             "results": [],
             "library": library,
             "run_forward": run_forward,
-            "template_scan_limit": scan_limit,
         }
 
     reactant_validations = [chem.validate_smiles(smiles) for smiles in reactant_inputs]
@@ -516,14 +489,13 @@ def search_reaction_templates_structural_matches(
             "results": [],
             "library": library,
             "run_forward": run_forward,
-            "template_scan_limit": scan_limit,
         }
 
     Chem, AllChem, rdChemReactions = _rdkit_reaction_modules()
     reactant_mols = [Chem.MolFromSmiles(v["canonical_smiles"]) for v in reactant_validations]
     product_mols = [Chem.MolFromSmiles(v["canonical_smiles"]) for v in product_validations]
     requested_product_smiles = [str(v["canonical_smiles"]) for v in product_validations]
-    templates = db.list_reaction_templates(conn, limit=scan_limit, library=library)
+    templates = db.list_reaction_templates(conn, library=library)
     matches: list[dict[str, Any]] = []
     execution_issues: list[str] = []
 
@@ -556,11 +528,12 @@ def search_reaction_templates_structural_matches(
             and reactant_inputs
             and len(reactant_inputs) == reaction.GetNumReactantTemplates()
         ):
-            forward_result = simulate_reaction(
-                conn,
-                reaction_id=str(template["reaction_id"]),
-                reactant_smiles=[str(v["canonical_smiles"]) for v in reactant_validations],
-                max_products=50,
+            forward_result = _simulate_template(
+                template,
+                str(template["reaction_id"]),
+                [str(v["canonical_smiles"]) for v in reactant_validations],
+                None,
+                max_products=None,
             )
             generated_products = forward_result.get("generated_products") or []
             generated_sets = forward_result.get("generated_product_sets") or []
@@ -619,15 +592,13 @@ def search_reaction_templates_structural_matches(
         "reactants": reactant_validations,
         "products": product_validations,
         "library": library,
-        "limit": result_limit,
         "run_forward": run_forward,
-        "template_scan_limit": scan_limit,
         "scanned_template_count": len(templates),
         "matched_template_count": len(matches),
         "skipped_template_issue_count": len(execution_issues),
-        "skipped_template_issues": execution_issues[:10],
-        "count": min(len(matches), result_limit),
-        "results": matches[:result_limit],
+        "skipped_template_issues": execution_issues,
+        "count": len(matches),
+        "results": matches,
     }
     return result
 
@@ -695,7 +666,7 @@ def simulate_reaction(
 
 
 def is_reaction_smarts(reaction_id: Any) -> bool:
-    return ">>" in str(reaction_id)
+    return SMARTS_ARROW in str(reaction_id)
 
 
 def _simulate_reaction_smarts(
@@ -796,9 +767,7 @@ def _smarts_grounding_candidates(
         conn,
         reactant_smiles=reactant_smiles,
         product_smiles=product_smiles,
-        limit=50000,
         library=library,
-        template_scan_limit=50000,
     )
     for match in matches.get("results") or []:
         if exact is None or (match["reaction_id"], match["library"]) != (
@@ -911,10 +880,12 @@ def _simulate_template(
         }
 
     issues = list(product_issues)
-    if not generated and len(reactant_smiles) > 1:
+    if not generated:
         issues.append(
             "No products generated for the provided order or alternate reactant orders. "
             "Inspect reactant roles and try a different template or reactants."
+            if len(reactant_smiles) > 1
+            else "No products generated. Inspect the reactant role and try a different template or reactant."
         )
     used_order = (
         productive_orders[0] if productive_orders else list(range(1, len(reactant_smiles) + 1))
@@ -1102,15 +1073,10 @@ def _run_reaction_with_permutations(
     generated: set[str] = set()
     generated_product_sets: list[list[str]] = []
     seen_product_sets: set[tuple[str, ...]] = set()
-    seen_orders: set[tuple[int, ...]] = set()
     skipped_invalid_product_sets = 0
     for order in orders:
-        if order in seen_orders:
-            continue
-        seen_orders.add(order)
         attempted += 1
         order_product_sets = reaction.RunReactants(tuple(reactant_mols[index] for index in order))
-        order_generated = False
         for product_tuple in order_product_sets:
             product_set = _canonicalize_sanitized_molecule_tuple(product_tuple, Chem)
             if product_set is None:
@@ -1121,8 +1087,7 @@ def _run_reaction_with_permutations(
             seen_product_sets.add(product_set)
             generated_product_sets.append(list(product_set))
             generated.update(product_set)
-            order_generated = True
-        if order_generated:
+        if generated:
             productive_orders.append([index + 1 for index in order])
             break
     return (
@@ -1141,7 +1106,6 @@ def _run_reverse_reaction(
     *,
     max_outcomes: int,
 ) -> tuple[list[dict[str, Any]], list[list[int]], int, int]:
-    limit = max_outcomes
     generated: list[dict[str, Any]] = []
     seen: set[tuple[str, ...]] = set()
     identity = tuple(range(len(product_mols)))
@@ -1151,13 +1115,8 @@ def _run_reverse_reaction(
     attempted = 0
     skipped_invalid_sets = 0
     productive_orders: list[list[int]] = []
-    seen_orders: set[tuple[int, ...]] = set()
     for order in orders:
-        if order in seen_orders:
-            continue
-        seen_orders.add(order)
         attempted += 1
-        order_generated = False
         for reactant_tuple in reaction.RunReactants(tuple(product_mols[index] for index in order)):
             reactants = _canonicalize_sanitized_molecule_tuple(reactant_tuple, Chem)
             if reactants is None:
@@ -1172,14 +1131,10 @@ def _run_reverse_reaction(
                     "reactant_count": len(reactants),
                 }
             )
-            order_generated = True
-            if len(generated) >= limit:
+            if len(generated) >= max_outcomes:
                 break
-        if order_generated:
+        if generated:
             productive_orders.append([index + 1 for index in order])
-        if len(generated) >= limit:
-            break
-        if order_generated:
             break
     return generated, productive_orders, attempted, skipped_invalid_sets
 
@@ -1348,7 +1303,7 @@ def _infer_description(smarts: str) -> str:
 
 
 def _split_reaction_smarts(smarts: str) -> tuple[str, str]:
-    reactants, _, products = smarts.partition(">>")
+    reactants, _, products = smarts.partition(SMARTS_ARROW)
     if not products and ">" in smarts:
         parts = smarts.split(">")
         reactants = parts[0]
