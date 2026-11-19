@@ -121,7 +121,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Comma-separated budget overrides such as 'max_turns=40,max_tool_calls=75', or 'none' "
             "for the runner's budgets. Fields: max_turns, max_tool_calls, max_model_len, max_tokens "
             "(each a positive integer, or inf to leave it unstated and, except the context, unlimited) "
-            "and true|false for token_budget_feedback. "
+            "and true|false for budget_feedback. "
             "Repeat to give each task one set drawn uniformly "
             "at random; default: every task uses the runner's budgets."
         ),

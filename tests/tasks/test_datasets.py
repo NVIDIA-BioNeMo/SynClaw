@@ -64,7 +64,7 @@ def test_taskset_draws_budget_sets_independently_of_tool_exclusions(tmp_path):
     source = tmp_path / "targets.smi"
     source.write_text("SMILES\n" + "\n".join(["CCO", "CCN", "CCC", "c1ccccc1", "CC(=O)O", "CCCl"]) + "\n")
     tool_sets = [[], ["mces", "similarity"]]
-    budget_sets = [{}, parse_budget_set("max_turns=40,max_tool_calls=75,token_budget_feedback=false")]
+    budget_sets = [{}, parse_budget_set("max_turns=40,max_tool_calls=75,budget_feedback=false")]
 
     generate_llm_taskset(source, tmp_path / "tools.jsonl", dataset="d", tool_exclusion_sets=tool_sets)
     stats = generate_llm_taskset(
@@ -77,18 +77,18 @@ def test_taskset_draws_budget_sets_independently_of_tool_exclusions(tmp_path):
     budgeted = [row for row in rows if "max_turns" in row]
     assert budgeted and len(budgeted) < len(rows)
     for row in budgeted:
-        assert (row["max_turns"], row["max_tool_calls"], row["token_budget_feedback"]) == (40, 75, False)
+        assert (row["max_turns"], row["max_tool_calls"], row["budget_feedback"]) == (40, 75, False)
     # Rows without a set carry no budget fields, so they inherit the runner's.
-    assert all("max_tokens" not in row and "token_budget_feedback" not in row for row in rows if row not in budgeted)
+    assert all("max_tokens" not in row and "budget_feedback" not in row for row in rows if row not in budgeted)
     assert stats["budget_set_counts"] == {
         "none": len(rows) - len(budgeted),
-        "max_tool_calls=75,max_turns=40,token_budget_feedback=false": len(budgeted),
+        "budget_feedback=false,max_tool_calls=75,max_turns=40": len(budgeted),
     }
 
 
 @pytest.mark.parametrize(("text", "expected"), [
     ("max_turns=inf,max_model_len=inf,max_tool_calls=40", {"max_turns": "inf", "max_model_len": "inf", "max_tool_calls": 40}),
-    ("token_budget_feedback=false,max_turns=40", {"max_turns": 40, "token_budget_feedback": False}),
+    ("budget_feedback=false,max_turns=40", {"max_turns": 40, "budget_feedback": False}),
 ])
 def test_budget_sets_accept_inf_and_flags(text, expected):
     assert parse_budget_set(text) == expected
@@ -97,7 +97,7 @@ def test_budget_sets_accept_inf_and_flags(text, expected):
 @pytest.mark.parametrize(("text", "message"), [
     ("max_turns=0", "positive integer"),
     ("max_turns=4.5", "must be an integer"),
-    ("token_budget_feedback=no", "true or false"),
+    ("budget_feedback=no", "true or false"),
     ("max_turns", "name=value"),
     ("max_context=1000", "Unknown task budget"),
 ])

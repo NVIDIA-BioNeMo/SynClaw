@@ -457,16 +457,16 @@ def test_budget_cli_and_checkpoint_settings():
     parser = argparse.ArgumentParser()
     model_runner.add_arguments(parser)
     args = parser.parse_args(
-        ["--model", "fixture", "--max-model-len", "262144", "--no-token-budget-feedback"]
+        ["--model", "fixture", "--max-model-len", "262144", "--no-budget-feedback"]
     )
     assert args.max_model_len == 262144
-    assert args.token_budget_feedback is False
+    assert args.budget_feedback is False
     assert args.context_safety_margin_fraction == 1 / 32
     with pytest.raises(SystemExit):
         parser.parse_args(["--model", "fixture", "--max-model-len", "0"])
     args.responses_state_mode = "full"
     task = {"task_id": "t", "target_smiles": "CCO"}
-    config = RolloutPolicyConfig(max_model_len=262144, token_budget_feedback=False)
+    config = RolloutPolicyConfig(max_model_len=262144, budget_feedback=False)
     checkpoint = {
         "model": args.model,
         "provider": args.provider,
@@ -479,7 +479,7 @@ def test_budget_cli_and_checkpoint_settings():
     assert model_runner.checkpoint_matches_run(checkpoint, args, task, config)
     # The restored prompt states these budgets, so a resume under others is refused.
     for field, value in (
-        ("max_model_len", 100000), ("token_budget_feedback", True), ("max_turns", 40),
+        ("max_model_len", 100000), ("budget_feedback", True), ("max_turns", 40),
         ("max_tool_calls", 75), ("max_tokens", 16384), ("context_safety_margin_fraction", 0.0),
     ):
         assert not model_runner.checkpoint_matches_run({**checkpoint, field: value}, args, task, config)
@@ -509,7 +509,7 @@ def test_hosted_initial_budget_is_system_content_and_resume_preserves_it(tmp_pat
         "--max-turns", "37", "--max-tool-calls", str(max_tool_calls),
     ]
     if not enabled:
-        argv.append("--no-token-budget-feedback")
+        argv.append("--no-budget-feedback")
     args = parser.parse_args(argv)
     monkeypatch.setattr(model_runner, "resolve_api_key", lambda *args, **kwargs: "fixture-key")
     monkeypatch.setattr(prompts, "validate_model_run_database", lambda *args, **kwargs: None)
@@ -553,7 +553,7 @@ def test_task_budgets_set_the_prompt_request_and_checkpoint(tmp_path, monkeypatc
         "task_id": "fixture", "target_smiles": "CCO", "system_prompt": "Plan syntheses.",
         "question": "Make CCO.", "prompt_fingerprint": PROMPT_FINGERPRINT,
         "max_turns": 5, "max_tool_calls": 7, "max_model_len": 40000, "max_tokens": 1000,
-        "token_budget_feedback": False,
+        "budget_feedback": False,
     }) + "\n")
     parser = argparse.ArgumentParser()
     model_runner.add_arguments(parser)
@@ -583,7 +583,7 @@ def test_task_budgets_set_the_prompt_request_and_checkpoint(tmp_path, monkeypatc
     assert {name: checkpoint[name] for name in ("max_turns", "max_tool_calls", "max_model_len", "max_tokens")} == {
         "max_turns": 5, "max_tool_calls": 7, "max_model_len": 40000, "max_tokens": 1000,
     }
-    assert checkpoint["token_budget_feedback"] is False
+    assert checkpoint["budget_feedback"] is False
     # A task may not ask for more context than the runner allows.
     row = json.loads(taskset.read_text())
     taskset.write_text(json.dumps({**row, "max_model_len": 60000}) + "\n")

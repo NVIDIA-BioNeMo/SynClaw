@@ -115,7 +115,7 @@ def build_adhoc_task(smiles: str) -> dict[str, Any]:
 
 
 def parse_budget_set(text: str) -> dict[str, int | bool | str]:
-    """Parse ``max_turns=40,token_budget_feedback=false`` into task budget overrides; 'none' is empty."""
+    """Parse ``max_turns=40,budget_feedback=false`` into task budget overrides; 'none' is empty."""
 
     if text.strip() == "none":
         return {}

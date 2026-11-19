@@ -358,7 +358,7 @@ def run_model_from_args(args: argparse.Namespace) -> dict[str, Any]:
         context_safety_margin_fraction=getattr(
             args, "context_safety_margin_fraction", policy.DEFAULT_CONTEXT_SAFETY_MARGIN_FRACTION
         ),
-        token_budget_feedback=getattr(args, "token_budget_feedback", True),
+        budget_feedback=getattr(args, "budget_feedback", True),
         stop_condition=getattr(args, "stop_condition", policy.DEFAULT_STOP_CONDITION),
         turn_warning_remaining=args.turn_warning_remaining,
         force_submit_after_non_tool_turns=args.force_submit_after_non_tool_turns,
@@ -376,7 +376,7 @@ def run_model_from_args(args: argparse.Namespace) -> dict[str, Any]:
         checkpoint = load_checkpoint(resume_checkpoint_path)
         budget_checkpoint = checkpoint
         budget_feedback = BudgetFeedbackState.from_checkpoint(
-            checkpoint.get("token_budget_feedback_state")
+            checkpoint.get("budget_feedback_state")
         )
         if not checkpoint_matches_run(checkpoint, args, task, policy_config):
             raise RuntimeError(
@@ -460,7 +460,7 @@ def run_model_from_args(args: argparse.Namespace) -> dict[str, Any]:
             "top_p": getattr(args, "top_p", None),
             "sampling_seed": getattr(args, "sampling_seed", None),
             **policy_config.budget_fields,
-            "token_budget_feedback_state": rollout_state.budget_feedback.checkpoint_fields(),
+            "budget_feedback_state": rollout_state.budget_feedback.checkpoint_fields(),
             "task_id": task["task_id"],
             "target_smiles": task["target_smiles"],
             "hide_target_building_block": _hide_target(args),

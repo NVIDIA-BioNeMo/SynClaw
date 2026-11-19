@@ -398,7 +398,7 @@ def normalize_excluded_tools(
 TASK_BUDGET_FIELDS = ("max_turns", "max_tool_calls", "max_model_len", "max_tokens")
 # A budget of "inf" is not stated to the model; JSON has no infinity literal.
 UNLIMITED_BUDGET = "inf"
-TASK_FLAG_FIELDS = ("token_budget_feedback",)
+TASK_FLAG_FIELDS = ("budget_feedback",)
 TASK_OVERRIDE_FIELDS = (*TASK_BUDGET_FIELDS, *TASK_FLAG_FIELDS)
 
 

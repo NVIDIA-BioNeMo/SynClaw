@@ -108,7 +108,7 @@ class RolloutPolicyConfig:
     context_limit_stated: bool = True
     context_safety_margin_fraction: float = DEFAULT_CONTEXT_SAFETY_MARGIN_FRACTION
     # Progress messages only: remaining budgets, context warnings and the turn warning.
-    token_budget_feedback: bool = True
+    budget_feedback: bool = True
     # "exact" or a similarity: that submission ends the rollout, with coaching below it.
     # "model": no submission ends it and nothing coaches; a reply without a tool call ends it.
     stop_condition: StopCondition = DEFAULT_STOP_CONDITION
@@ -320,10 +320,10 @@ def add_rollout_flag_arguments(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
-        "--no-token-budget-feedback", dest="token_budget_feedback", action="store_false",
+        "--no-budget-feedback", dest="budget_feedback", action="store_false",
         help=(
             "Disable progress messages: remaining budgets, context warnings and the turn warning. "
-            "The system prompt still states the limits. A task's token_budget_feedback overrides it"
+            "The system prompt still states the limits. A task's budget_feedback overrides it"
         ),
     )
     parser.add_argument(
@@ -349,7 +349,7 @@ def turn_reminders(
     turns_remaining = None if config.max_turns is None else config.max_turns - turn_index
     if (
         turns_remaining is not None
-        and config.token_budget_feedback
+        and config.budget_feedback
         and config.turn_warning_remaining > 0
         and turns_remaining == config.turn_warning_remaining
         and turns_remaining > 1
@@ -1013,7 +1013,7 @@ def request_summary_fields(args: Any, config: RolloutPolicyConfig) -> dict[str, 
         "context_limit_stated": config.context_limit_stated,
         "context_safety_margin_fraction": config.context_safety_margin_fraction,
         "context_safety_margin_tokens": config.context_safety_margin_tokens,
-        "token_budget_feedback": config.token_budget_feedback,
+        "budget_feedback": config.budget_feedback,
         "stop_condition": config.stop_condition,
         "max_turns": config.max_turns,
         "max_tool_calls": config.max_tool_calls,
