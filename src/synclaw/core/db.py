@@ -843,7 +843,7 @@ def building_block_ids_matching_target(conn: sqlite3.Connection, smiles: str) ->
     That is the entry with the same canonical SMILES plus any entry that
     ``chem.matches_target`` accepts, such as a tautomer stored under different SMILES
     or one isomer of stereo the target leaves open. Those are found through the
-    Standard InChIKeys of the target's tautomers and open stereoisomers.
+    stereo-free first InChIKey block of each of the target's tautomers.
 
     Raises:
         ValueError: ``smiles`` is not a valid SMILES.
@@ -856,14 +856,17 @@ def building_block_ids_matching_target(conn: sqlite3.Connection, smiles: str) ->
     exact = get_building_block_by_canonical_smiles(conn, str(validation["canonical_smiles"]))
     if exact is not None:
         ids.add(int(exact["id"]))
-    keys = sorted(chem.target_match_inchi_keys(smiles))
-    # Stay under SQLite's limit on bound parameters per statement.
-    for start in range(0, len(keys), 500):
-        chunk = keys[start : start + 500]
+    try:
+        prefixes = sorted(chem.target_match_inchi_key_prefixes(smiles))
+    except ValueError:
+        # A wildcard target is valid SMILES but has no InChI; only its exact entry counts.
+        prefixes = []
+    for prefix in prefixes:
+        # A range over the full key uses the inchi_key index, which LIKE would not.
         rows = conn.execute(
             "SELECT id, canonical_smiles FROM building_blocks "
-            f"WHERE inchi_key IN ({', '.join('?' * len(chunk))})",
-            chunk,
+            "WHERE inchi_key >= ? AND inchi_key < ?",
+            (f"{prefix}-", f"{prefix}."),
         )
         for row in rows:
             if chem.matches_target(smiles, row["canonical_smiles"]):

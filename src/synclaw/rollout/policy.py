@@ -610,7 +610,7 @@ def handle_tool_result(
         if config.stop_condition == "exact" and similarity == 1.0:
             lead = (
                 "The validator accepted that pathway, but its product did not establish an "
-                "exact match to the target under Standard InChI identity. "
+                "exact match to the target. "
                 f"Its similarity_to_target was {similarity}; even 1.0 does not establish "
                 f"molecular identity. {PERSISTENCE_GUARANTEE_SENTENCE} "
                 "Try to identify an exact synthesis."

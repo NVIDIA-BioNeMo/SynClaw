@@ -32,7 +32,7 @@ from synclaw.core import chem
         ("O=C1CCCCC1", "OC1=CCCCC1"),
     ],
 )
-def test_tautomers_standard_inchi_keeps_apart_match(target, product):
+def test_tautomers_standard_inchi_keeps_apart_match(target: str, product: str) -> None:
     assert not chem.molecules_identical(target, product)
     assert chem.matches_target(target, product) is True
 
@@ -52,7 +52,7 @@ def test_tautomers_standard_inchi_keeps_apart_match(target, product):
         ),
     ],
 )
-def test_specific_isomer_of_open_target_stereo_matches(target, product):
+def test_specific_isomer_of_open_target_stereo_matches(target: str, product: str) -> None:
     assert chem.matches_target(target, product) is True
 
 
@@ -84,7 +84,7 @@ def test_specific_isomer_of_open_target_stereo_matches(target, product):
         ),
     ],
 )
-def test_missing_or_wrong_stereo_does_not_match(target, product):
+def test_missing_or_wrong_stereo_does_not_match(target: str, product: str) -> None:
     assert chem.matches_target(target, product) is False
 
 
@@ -99,7 +99,7 @@ def test_missing_or_wrong_stereo_does_not_match(target, product):
         ("[13CH3]O", "CO"),
     ],
 )
-def test_different_molecules_do_not_match(target, product):
+def test_different_molecules_do_not_match(target: str, product: str) -> None:
     assert chem.matches_target(target, product) is False
 
 
@@ -107,33 +107,33 @@ def test_different_molecules_do_not_match(target, product):
     ("target", "product"),
     [("CCO", "OCC"), ("[CH3:7][OH:2]", "OC"), ("O=c1cccc[nH]1", "Oc1ccccn1")],
 )
-def test_standard_inchi_identity_still_matches(target, product):
+def test_standard_inchi_identity_still_matches(target: str, product: str) -> None:
     assert chem.matches_target(target, product) is True
 
 
-def test_open_stereo_beyond_the_cap_is_compared_strictly(monkeypatch):
+def test_open_stereo_beyond_the_cap_is_compared_strictly(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(chem, "MAX_OPEN_STEREOISOMERS", 1)
     assert chem.matches_target("FC(Cl)Br", "F[C@H](Cl)Br") is False
     assert chem.matches_target("FC(Cl)Br", "FC(Cl)Br") is True
 
 
 @pytest.mark.parametrize("invalid", [None, "", "not-smiles", "*"])
-def test_invalid_inputs_cannot_be_compared(invalid):
+def test_invalid_inputs_cannot_be_compared(invalid: str | None) -> None:
     assert chem.matches_target(invalid, "CCO") is None
     assert chem.matches_target("CCO", invalid) is None
 
 
-def test_failed_inchi_conversion_cannot_be_compared(inchi_unavailable):
+def test_failed_inchi_conversion_cannot_be_compared(inchi_unavailable: None) -> None:
     assert chem.matches_target("CCO", "CCO") is None
 
 
-def test_lookup_keys_cover_tautomers_and_open_stereoisomers():
-    keys = chem.target_match_inchi_keys("FC(Cl)Br")
-    for stored in ("F[C@H](Cl)Br", "F[C@@H](Cl)Br", "FC(Cl)Br"):
-        assert Chem.MolToInchiKey(Chem.MolFromSmiles(stored)) in keys
-    assert Chem.MolToInchiKey(Chem.MolFromSmiles("OC1=CCCCC1")) in chem.target_match_inchi_keys(
-        "O=C1CCCCC1"
-    )
-    assert chem.target_match_inchi_keys("F[C@H](Cl)Br") == {
-        Chem.MolToInchiKey(Chem.MolFromSmiles("F[C@H](Cl)Br"))
-    }
+def test_lookup_prefixes_cover_tautomers_and_every_stereoisomer() -> None:
+    def prefix(smiles: str) -> str:
+        return Chem.MolToInchiKey(Chem.MolFromSmiles(smiles))[:14]
+
+    prefixes = chem.target_match_inchi_key_prefixes("CC(F)C(Cl)CC")
+    for stored in ("CC(F)C(Cl)CC", "C[C@H](F)C(Cl)CC", "C[C@H](F)[C@@H](Cl)CC"):
+        assert prefix(stored) in prefixes
+    assert prefix("OC1=CCCCC1") in chem.target_match_inchi_key_prefixes("O=C1CCCCC1")
+    with pytest.raises(ValueError, match="wildcard"):
+        chem.target_match_inchi_key_prefixes("*CCO")

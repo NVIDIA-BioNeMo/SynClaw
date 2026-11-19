@@ -351,25 +351,21 @@ def matches_target(target_smiles: str | None, product_smiles: str | None) -> boo
         return None
 
 
-def target_match_inchi_keys(target_smiles: str) -> frozenset[str]:
-    """Standard InChIKeys under which a molecule that :func:`matches_target` may be stored.
+def target_match_inchi_key_prefixes(target_smiles: str) -> frozenset[str]:
+    """First InChIKey blocks under which a molecule that :func:`matches_target` may be stored.
 
-    Covers the target's tautomers as drawn and, for each, every full assignment of the
-    stereo it leaves open. A stored entry that fixes only some of that stereo is not
-    covered. Candidates found by these keys must still be checked with ``matches_target``.
+    The first 14 characters of a Standard InChIKey hash the skeleton and hydrogens but
+    not stereo, so one prefix per tautomer of the target covers every stereoisomer of
+    it, including ones that fix only part of the stereo. Candidates found by these
+    prefixes must still be checked with ``matches_target``.
 
     Raises:
-        ValueError: ``target_smiles`` is not a valid SMILES.
+        ValueError: ``target_smiles`` is invalid or contains a wildcard atom.
     """
 
     target = _identity_mol(target_smiles)
-    keys: set[str] = set()
-    for tautomer in [target, *_TAUTOMERS.Enumerate(target)]:
-        for isomer in [tautomer, *(_open_stereoisomers(tautomer) or [])]:
-            key = _inchi_key(isomer)
-            if key:
-                keys.add(key)
-    return frozenset(keys)
+    keys = (_inchi_key(tautomer) for tautomer in [target, *_TAUTOMERS.Enumerate(target)])
+    return frozenset(key[:14] for key in keys if key)
 
 
 def similarity(

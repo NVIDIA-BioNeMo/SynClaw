@@ -368,7 +368,8 @@ def test_resume_requires_the_same_similarity_cutoff() -> None:
 def test_hidden_ids_cover_open_stereo_isomers_and_unmerged_tautomers(tmp_path: Path) -> None:
     # Standard InChI keeps cyclohexanone and its enol apart; exact-match scoring does not.
     (tmp_path / "bbs.txt").write_text(
-        "SMILES\nF[C@H](Cl)Br\nF[C@@H](Cl)Br\nFC(Cl)Br\nFC(Cl)I\nO=C1CCCCC1\nOC1=CCCCC1\n",
+        "SMILES\nF[C@H](Cl)Br\nF[C@@H](Cl)Br\nFC(Cl)Br\nFC(Cl)I\nO=C1CCCCC1\nOC1=CCCCC1\n"
+        "C[C@H](F)C(Cl)CC\nOC1=CC[C@H](F)C(Cl)C1\n",
         encoding="utf-8",
     )
     path = tmp_path / "test.sqlite"
@@ -377,3 +378,8 @@ def test_hidden_ids_cover_open_stereo_isomers_and_unmerged_tautomers(tmp_path: P
     assert _tools(path, "FC(Cl)Br").hidden_building_block_ids == {1, 2, 3}
     assert _tools(path, "F[C@H](Cl)Br").hidden_building_block_ids == {1}
     assert _tools(path, "O=C1CCCCC1").hidden_building_block_ids == {5, 6}
+    # Stock that fixes only part of the target's open stereo, also as a tautomer.
+    assert _tools(path, "CC(F)C(Cl)CC").hidden_building_block_ids == {7}
+    assert _tools(path, "O=C1CCC(F)C(Cl)C1").hidden_building_block_ids == {8}
+    # A wildcard target has no InChI, so only an entry with its exact SMILES is hidden.
+    assert _tools(path, "*CC").hidden_building_block_ids == frozenset()
