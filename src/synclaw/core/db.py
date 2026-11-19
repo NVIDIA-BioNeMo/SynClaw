@@ -164,20 +164,7 @@ def session(db_path: str | Path = DEFAULT_DB_PATH) -> Iterator[sqlite3.Connectio
 
 def init_db(db_path: str | Path = DEFAULT_DB_PATH) -> None:
     with session(db_path) as conn:
-        require_current_reaction_schema(conn, db_path)
         conn.executescript(SCHEMA)
-
-
-def require_current_reaction_schema(conn: sqlite3.Connection, db_path: str | Path) -> None:
-    """Fail with the fix if the reaction template table still uses the old ``template_id`` column."""
-
-    columns = {row[1] for row in conn.execute("PRAGMA table_info(reaction_templates)")}
-    if "template_id" in columns:
-        raise RuntimeError(
-            f"{db_path} stores reaction templates under the old template_id column, now named "
-            "reaction_id. Rename it in place, which leaves the building blocks untouched: "
-            f"sqlite3 {db_path} 'ALTER TABLE reaction_templates RENAME COLUMN template_id TO reaction_id'"
-        )
 
 
 def prepare_building_block_search(
