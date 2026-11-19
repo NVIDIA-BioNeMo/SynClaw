@@ -375,7 +375,7 @@ class SynthesisTools:
                 reaction_id=str(match.get("reaction_id") or ""),
                 product_smiles=product_smiles,
                 max_outcomes=REVERSE_RANK_MAX_OUTCOMES,
-                library=self.reaction_libraries,
+                library=match["library"],
             )
             if reverse_result.get("reaction_executed"):
                 # Ranking only counts exact stock matches.

@@ -959,6 +959,8 @@ def search_reaction_templates(
     """Rank templates by TF-IDF similarity to a text query."""
 
     text = query.strip()
+    if not text or text == "*":
+        raise ValueError(f"Reaction template text search needs a query, not {query!r}")
     index = _reaction_text_index(conn, normalize_libraries(library))
     query_terms = set(_text_terms(text))
     query_smarts_terms = set(_smarts_terms(text))
