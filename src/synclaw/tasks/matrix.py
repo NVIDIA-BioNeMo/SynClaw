@@ -112,9 +112,9 @@ def load_template_records(libraries: Sequence[str]) -> list[dict[str, Any]]:
                 if not line:
                     continue
                 record = json.loads(line)
-                if record["template_id"] in seen:
+                if record["reaction_id"] in seen:
                     continue
-                seen.add(record["template_id"])
+                seen.add(record["reaction_id"])
                 records.append(record)
     return records
 
@@ -127,20 +127,20 @@ def write_templates(records: Sequence[dict[str, Any]], out_dir: Path) -> dict[st
     for record in records:
         smarts = record["smarts"].strip()
         if "\t" in smarts or "\n" in smarts:
-            dropped.append((record["template_id"], "SMARTS contains a tab or newline"))
+            dropped.append((record["reaction_id"], "SMARTS contains a tab or newline"))
             continue
         try:
             reaction = AllChem.ReactionFromSmarts(smarts)
             rdChemReactions.ChemicalReaction.Initialize(reaction)
             num_reactants = reaction.GetNumReactantTemplates()
         except Exception as exc:  # noqa: BLE001 - the reason is reported, not handled
-            dropped.append((record["template_id"], f"RDKit could not initialize it: {exc}"))
+            dropped.append((record["reaction_id"], f"RDKit could not initialize it: {exc}"))
             continue
         if num_reactants == 0:
-            dropped.append((record["template_id"], "no reactant templates"))
+            dropped.append((record["reaction_id"], "no reactant templates"))
         elif num_reactants > MAX_REACTANTS:
             dropped.append(
-                (record["template_id"], f"{num_reactants} reactants; the engine supports <= {MAX_REACTANTS}")
+                (record["reaction_id"], f"{num_reactants} reactants; the engine supports <= {MAX_REACTANTS}")
             )
         else:
             kept.append(record)
@@ -148,9 +148,9 @@ def write_templates(records: Sequence[dict[str, Any]], out_dir: Path) -> dict[st
     with open(out_dir / REACTION_FILE, "w", newline="\n") as handle:
         handle.writelines(record["smarts"].strip() + "\n" for record in kept)
     with open(out_dir / TEMPLATE_ID_FILE, "w", newline="\n") as handle:
-        handle.writelines(record["template_id"] + "\n" for record in kept)
+        handle.writelines(record["reaction_id"] + "\n" for record in kept)
     with open(out_dir / DROPPED_TEMPLATE_FILE, "w", newline="\n") as handle:
-        handle.write("template_id\treason\n")
+        handle.write("reaction_id\treason\n")
         handle.writelines(f"{tid}\t{reason}\n" for tid, reason in dropped)
 
     by_library: dict[str, int] = {}

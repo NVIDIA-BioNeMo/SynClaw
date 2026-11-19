@@ -127,7 +127,7 @@ class ImportAndEvalTests(unittest.TestCase):
         templates = db_path.with_name("templates.jsonl")
         bbs = db_path.with_name("bbs.txt")
         templates.write_text(json.dumps({
-            "template_id": "R000", "smarts": "[C:1][O:2]>>[C:1]=[O:2]",
+            "reaction_id": "R000", "smarts": "[C:1][O:2]>>[C:1]=[O:2]",
             "family": "oxidation",
             "family_metadata": {
                 "description": "Fixture alcohol-to-carbonyl transformation.",
@@ -1760,7 +1760,7 @@ class ImportAndEvalTests(unittest.TestCase):
                 json.dumps(
                     {
                         "library": "demo",
-                        "template_id": "demo:R000",
+                        "reaction_id": "demo:R000",
                         "name": "Curated coupling template",
                         "family": "amide formation",
                         "family_metadata": {

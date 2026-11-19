@@ -177,10 +177,10 @@ def test_offsets_address_each_block_line(catalog: Path, tmp_path: Path) -> None:
 
 def test_templates_the_engine_cannot_run_are_dropped_with_a_reason(tmp_path: Path) -> None:
     records = [
-        {"template_id": "test:ok", "library": "test", "smarts": "[C:1][OH]>>[C:1]O"},
-        {"template_id": "test:four", "library": "test",
+        {"reaction_id": "test:ok", "library": "test", "smarts": "[C:1][OH]>>[C:1]O"},
+        {"reaction_id": "test:four", "library": "test",
          "smarts": "[C:1].[C:2].[C:3].[C:4]>>[C:1][C:2][C:3][C:4]"},
-        {"template_id": "test:broken", "library": "test", "smarts": "not a reaction"},
+        {"reaction_id": "test:broken", "library": "test", "smarts": "not a reaction"},
     ]
     stats = write_templates(records, tmp_path)
     assert stats["kept"] == 1 and stats["dropped"] == 2
@@ -196,7 +196,7 @@ def test_templates_come_from_the_installed_package(catalog: Path, tmp_path: Path
     """A directory built here cannot cite a template the package does not have."""
     directory = tmp_path / "matrix"
     build(catalog, directory)
-    known = {record["template_id"] for record in load_template_records(["synformer", "paroutes", "ord"])}
+    known = {record["reaction_id"] for record in load_template_records(["synformer", "paroutes", "ord"])}
     built = {line.strip() for line in open(directory / TEMPLATE_ID_FILE) if line.strip()}
     assert built and built <= known
     assert set(bundled_reaction_catalog()["sources"]) >= {"synformer"}

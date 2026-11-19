@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""A template is named reaction_id to the model; the catalog's template_id never reaches it."""
+"""A template is named reaction_id everywhere: in the catalog, in tool results and to the model."""
 
 from typing import Any
 
@@ -40,20 +40,19 @@ def _keys(value: Any) -> set[str]:
 
 
 @pytest.mark.parametrize("tool", ["search_reaction_templates", "simulate_reaction", "simulate_reverse_reaction"])
-def test_the_model_is_shown_reaction_id_for_a_template(tools, tool):
+def test_a_template_is_never_named_template_id(tools, tool):
     if tool == "search_reaction_templates":
         result = tools.search_reaction_templates(query="demo:R000")
     elif tool == "simulate_reaction":
         result = tools.simulate_reaction("demo:R000", [DIOL])
     else:
         result = tools.simulate_reverse_reaction("demo:R000", ALDEHYDE)
-    # The tool's own result, which the trace keeps, still names the catalog's identifier.
-    assert "template_id" in _keys(result)
 
     compact = compact_tool_result(tool, result)
 
-    assert "template_id" not in _keys(compact)
-    assert "reaction_id" in _keys(compact)
+    for shown in (result, compact):
+        assert "template_id" not in _keys(shown)
+        assert "reaction_id" in _keys(shown)
 
 
 def test_a_step_must_name_its_template_as_reaction_id(tools):
@@ -65,3 +64,4 @@ def test_a_step_must_name_its_template_as_reaction_id(tools):
     assert named["accepted"] is True
     assert catalog_named["accepted"] is False
     assert "step 1: reaction_id is required" in catalog_named["steps"][0]["issues"]
+

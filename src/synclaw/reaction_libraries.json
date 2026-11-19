@@ -8,22 +8,22 @@
     "synformer": {
       "file": "synformer/templates.jsonl",
       "templates": 114,
-      "sha256": "97bbb27a44f73af9d2218713e0843f448321686b0717e8194810d1fdcb8bb944"
+      "sha256": "3dd13b6fc750f3d8f8f9c5ec1c63feeb3d28439d3c2cc429d10764b61e8fddd5"
     },
     "paroutes": {
       "file": "paroutes/templates.jsonl",
       "templates": 176,
-      "sha256": "ba939e9db6376f0ffd77132903b36ef071fab292da525bb260dcb816bd7d4e92"
+      "sha256": "78fa9e09cae2c444b6825296c7e3bc9c20a4c294812bd4052f29550c026c3557"
     },
     "ord": {
       "file": "ord/templates.jsonl",
       "templates": 203,
-      "sha256": "3e7d18c47a1289c825bfe83813265b3eaf044e3382c5839e566aec36d977c335"
+      "sha256": "2a36581f18a5cc956afd067326784af2429bca1974add1df2629b30029ff156e"
     },
     "nvidia": {
       "file": "nvidia/templates.jsonl",
       "templates": 8,
-      "sha256": "33a39c9f3463a251c67f0efd92fabf390e276bbf0e40dd1b420e0db07d75318f"
+      "sha256": "c296afa704adebb353b75cd2131347dd37bb4da5af436de9a108e16fee4861e7"
     }
   }
 }

@@ -15,7 +15,7 @@ def test_reaction_template_search_returns_short_hits():
         "count": 1,
         "results": [
             {
-                "template_id": "synformer:R008",
+                "reaction_id": "synformer:R008",
                 "name": "Amide coupling",
                 "description": "Couples amines and carboxylic acids.",
                 "reaction_family": "amide formation",
@@ -96,7 +96,7 @@ def test_submit_pathway_compaction_keeps_validation_summary_without_verbose_echo
                 "valid": False,
                 "reaction_id": "synformer:R001",
                 "issues": ["Claimed product was not generated"],
-                "template": {"metadata_json": "huge", "template_id": "synformer:R001"},
+                "template": {"metadata_json": "huge", "reaction_id": "synformer:R001"},
                 "submitted_step": {
                     "reaction_id": "synformer:R001",
                     "reactants": ["BB:1"],
@@ -135,7 +135,7 @@ def test_simulate_reaction_compaction_keeps_products_and_short_template():
         "valid": True,
         "reaction_id": "synformer:R008",
         "template": {
-            "template_id": "synformer:R008",
+            "reaction_id": "synformer:R008",
             "name": "Amide coupling",
             "metadata_json": "huge",
         },
@@ -234,7 +234,7 @@ def test_building_block_compaction_keeps_a_rejected_query_error(tmp_path):
 
 def test_template_compaction_omits_empty_annotation_fields():
     template = {
-        "template_id": "demo:R001",
+        "reaction_id": "demo:R001",
         "name": "R001",
         "description": "",
         "reaction_family": "",
@@ -264,7 +264,7 @@ def test_reverse_planning_compaction_drops_fixed_next_step_text():
             },
             "results": [
                 {
-                    "template_id": "ord:R001",
+                    "reaction_id": "ord:R001",
                     "reverse_usefulness": {
                         "fully_grounded_candidate_sets": 0,
                         "recommended_next_step": next_step,
@@ -370,7 +370,7 @@ def test_simulate_reaction_compaction_returns_one_product_listing():
 
 def test_compaction_trims_template_detail_and_echoed_routes():
     template = {
-        "template_id": "ord:R011",
+        "reaction_id": "ord:R011",
         "reactant_count": 1,
         "product_count": 1,
         "reactant_roles": [

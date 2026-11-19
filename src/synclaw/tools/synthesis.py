@@ -358,7 +358,7 @@ class SynthesisTools:
         for match in enriched:
             reverse_result = reactions.simulate_reverse_reaction(
                 conn,
-                reaction_id=str(match.get("template_id") or ""),
+                reaction_id=str(match.get("reaction_id") or ""),
                 product_smiles=product_smiles,
                 max_outcomes=REVERSE_RANK_MAX_OUTCOMES,
                 library=self.reaction_libraries,
@@ -1097,7 +1097,7 @@ def _compact_reverse_reaction_result(result: dict[str, Any]) -> None:
     template = result.pop("template", None)
     if isinstance(template, dict):
         result["template_summary"] = {
-            "template_id": template.get("template_id"),
+            "reaction_id": template.get("reaction_id"),
             "reaction_family": template.get("reaction_family"),
             "description": template.get("description"),
             "reactant_roles": template.get("reactant_roles"),

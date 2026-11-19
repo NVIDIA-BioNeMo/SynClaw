@@ -67,7 +67,7 @@ def installed_templates() -> dict[str, str]:
                 line = line.strip()
                 if line:
                     record = json.loads(line)
-                    out.setdefault(record["template_id"], record["smarts"].strip())
+                    out.setdefault(record["reaction_id"], record["smarts"].strip())
     return out
 
 
@@ -93,12 +93,12 @@ def main() -> int:
 
     compiled: dict[str, Any] = {}
 
-    def reaction_for(template_id: str) -> Any:
-        if template_id not in compiled:
-            reaction = AllChem.ReactionFromSmarts(smarts_by_id[template_id])
+    def reaction_for(reaction_id: str) -> Any:
+        if reaction_id not in compiled:
+            reaction = AllChem.ReactionFromSmarts(smarts_by_id[reaction_id])
             rdChemReactions.ChemicalReaction.Initialize(reaction)
-            compiled[template_id] = reaction
-        return compiled[template_id]
+            compiled[reaction_id] = reaction
+        return compiled[reaction_id]
 
     def every_order(reaction: Any, mols: list[Any]) -> set[str]:
         found: set[str] = set()
@@ -141,7 +141,7 @@ def main() -> int:
             for failure in outcome["failures"]:
                 mols = [Chem.MolFromSmiles(s) for s in failure["reactants"]]
                 if all(m is not None for m in mols) and failure["expected"] in every_order(
-                    reaction_for(failure["template_id"]), mols
+                    reaction_for(failure["reaction_id"]), mols
                 ):
                     reasons["only from a later reactant order"] += 1
                     diagnosed += 1

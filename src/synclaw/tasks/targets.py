@@ -455,12 +455,12 @@ def replay_route(
     Chem, AllChem, rdChemReactions = _rdkit_reaction_modules()
     compiled = {} if compiled is None else compiled
 
-    def reaction_for(template_id: str) -> Any:
-        if template_id not in compiled:
-            reaction = AllChem.ReactionFromSmarts(smarts_by_id[template_id])
+    def reaction_for(reaction_id: str) -> Any:
+        if reaction_id not in compiled:
+            reaction = AllChem.ReactionFromSmarts(smarts_by_id[reaction_id])
             rdChemReactions.ChemicalReaction.Initialize(reaction)
-            compiled[template_id] = reaction
-        return compiled[template_id]
+            compiled[reaction_id] = reaction
+        return compiled[reaction_id]
 
     tokens = pathway.split(";")
     if not route_records_products(pathway, smarts_by_id):
@@ -482,7 +482,7 @@ def replay_route(
             del stack[-count:]
             stack.append(("pending", token, reactants))
         elif stack and isinstance(stack[-1], tuple):
-            _, template_id, reactants = stack[-1]
+            _, reaction_id, reactants = stack[-1]
             steps += 1
             mols = [Chem.MolFromSmiles(smiles) for smiles in reactants]
             if any(mol is None for mol in mols):
@@ -490,13 +490,13 @@ def replay_route(
                 ok = False
                 break
             generated, *_ = _run_reaction_with_optional_permutations(
-                reaction_for(template_id), mols, Chem, try_permutations=True
+                reaction_for(reaction_id), mols, Chem, try_permutations=True
             )
             if token in generated:
                 steps_ok += 1
             else:
                 reasons.append("not reproduced")
-                failures.append({"template_id": template_id, "reactants": list(reactants), "expected": token})
+                failures.append({"reaction_id": reaction_id, "reactants": list(reactants), "expected": token})
                 ok = False
             stack[-1] = token
         else:

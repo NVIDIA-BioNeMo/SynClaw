@@ -62,6 +62,7 @@ def build_initial_messages(
 
 def validate_model_run_database(db_path: str | Path, *, library: LibrarySelection = None) -> None:
     with db.session(db_path) as conn:
+        db.require_current_reaction_schema(conn, db_path)
         building_blocks = conn.execute("SELECT COUNT(*) FROM building_blocks").fetchone()[0]
         reaction_templates = conn.execute("SELECT COUNT(*) FROM reaction_templates").fetchone()[0]
     if building_blocks <= 0 or reaction_templates <= 0:
