@@ -157,7 +157,6 @@ class SynthesisTools:
         reactant_smiles: list[str] | None = None,
         product_smiles: str | list[str] | None = None,
         run_forward: bool = False,
-        template_scan_limit: int = 5000,
     ) -> dict[str, Any]:
         """Search templates by text, by reactant/product structure, or both.
 
@@ -217,7 +216,7 @@ class SynthesisTools:
             }
         with db.session(self.db_path) as conn:
             text_results = (
-                reactions.search_reaction_templates(
+                db.search_reaction_templates(
                     conn, query=text_query, limit=result_limit, library=library
                 )
                 if has_text_query
@@ -239,10 +238,8 @@ class SynthesisTools:
                 conn,
                 reactant_smiles=reactant_smiles,
                 product_smiles=product_smiles,
-                limit=max(result_limit, min(max(1, int(template_scan_limit)), 50000)),
                 library=library,
                 run_forward=run_forward,
-                template_scan_limit=template_scan_limit,
             )
             if product_smiles and molecule_results.get("valid"):
                 self._rank_template_search_by_reverse_usefulness(
@@ -378,7 +375,7 @@ class SynthesisTools:
                 reaction_id=str(match.get("reaction_id") or ""),
                 product_smiles=product_smiles,
                 max_outcomes=REVERSE_RANK_MAX_OUTCOMES,
-                library=self.reaction_libraries,
+                library=match["library"],
             )
             if reverse_result.get("reaction_executed"):
                 # Ranking only counts exact stock matches.

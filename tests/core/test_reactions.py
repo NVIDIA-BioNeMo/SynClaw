@@ -1273,6 +1273,40 @@ class ReactionTemplateTests(unittest.TestCase):
             self.assertTrue(forward["requested_products_generated"]["CC(C)(C(=O)O)n1ccnc1"])
             self.assertTrue(forward["requested_product_set_generated"])
 
+    def test_search_simulates_the_matched_library_template(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "test.sqlite"
+            db.init_db(db_path)
+            with db.session(db_path) as conn:
+                for library, smarts in (
+                    ("first", "[C:1][OH:2]>>[C:1]=[O:2]"),
+                    ("second", "[C:1][OH:2]>>[C:1][O:2]C"),
+                ):
+                    db.upsert_reaction_template(
+                        conn,
+                        reaction_id="shared:R001",
+                        library=library,
+                        name=library,
+                        description=library,
+                        smarts=smarts,
+                        tags_json="[]",
+                        metadata_json="{}",
+                    )
+                with self.assertRaisesRegex(ValueError, "needs a query"):
+                    db.search_reaction_templates(conn, " ")
+            db.prepare_building_block_search(db_path)
+            tools = SynthesisTools(db_path)
+
+            forward = tools.search_reaction_templates(
+                reactant_smiles=["CO"], run_forward=True, library="second"
+            )
+            reverse = tools.search_reaction_templates(product_smiles="COC", library="second")
+
+            match = forward["results"][0]["structure_match"]
+            self.assertEqual(match["forward_simulation"]["generated_products"], ["COC"])
+            usefulness = reverse["results"][0]["reverse_usefulness"]
+            self.assertEqual(usefulness["best_candidate_reactants"], ["CO"])
+
     def test_search_reaction_templates_ranks_by_reverse_usefulness(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)

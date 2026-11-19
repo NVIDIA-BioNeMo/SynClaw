@@ -956,11 +956,11 @@ def search_reaction_templates(
     limit: int = 20,
     library: LibrarySelection = None,
 ) -> list[dict[str, Any]]:
-    """Rank templates by TF-IDF similarity to a text query; an empty query or ``*`` lists them."""
+    """Rank templates by TF-IDF similarity to a text query."""
 
-    text = (query or "").strip()
+    text = query.strip()
     if not text or text == "*":
-        return list_reaction_templates(conn, limit=limit, library=library)
+        raise ValueError(f"Reaction template text search needs a query, not {query!r}")
     index = _reaction_text_index(conn, normalize_libraries(library))
     query_terms = set(_text_terms(text))
     query_smarts_terms = set(_smarts_terms(text))
@@ -1107,7 +1107,7 @@ def _reaction_text_index(
 ) -> _ReactionTextIndex:
     database_path = _main_database_path(conn)
     if not database_path or conn.in_transaction:
-        return _ReactionTextIndex(list_reaction_templates(conn, limit=50000, library=libraries))
+        return _ReactionTextIndex(list_reaction_templates(conn, library=libraries))
     return _cached_reaction_text_index(
         database_path, libraries, *_reaction_template_revision(conn, libraries)
     )
@@ -1122,35 +1122,26 @@ def _cached_reaction_text_index(
 ) -> _ReactionTextIndex:
     conn = connect(database_path)
     try:
-        return _ReactionTextIndex(list_reaction_templates(conn, limit=50000, library=libraries))
+        return _ReactionTextIndex(list_reaction_templates(conn, library=libraries))
     finally:
         conn.close()
 
 
 def list_reaction_templates(
     conn: sqlite3.Connection,
-    limit: int = 5000,
     library: LibrarySelection = None,
 ) -> list[dict[str, Any]]:
-    """Return reaction templates for structural scans.
+    """Return every template in the selected libraries, in library and ID order."""
 
-    The natural-language search endpoint intentionally caps results tightly for
-    model use. Structural matching needs a broader deterministic scan over the
-    local library.
-    """
-
-    limit = max(1, min(int(limit), 50000))
     where, params = _reaction_library_filter(library)
-    where_sql = f"WHERE {where}"
     cursor = conn.execute(
         f"""
         SELECT reaction_id, library, name, description, smarts, tags_json, metadata_json
         FROM reaction_templates
-        {where_sql}
+        WHERE {where}
         ORDER BY library, reaction_id
-        LIMIT ?
         """,
-        (*params, limit),
+        params,
     )
     return [_reaction_template_row(row) for row in cursor.fetchall()]
 

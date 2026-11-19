@@ -331,7 +331,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Product SMILES to match; repeat for multi-product templates",
     )
     rxn_search.add_argument("--run-forward", action="store_true")
-    rxn_search.add_argument("--template-scan-limit", type=int, default=5000)
     rxn_search.add_argument("--db", default=str(db.DEFAULT_DB_PATH))
     rxn_search.set_defaults(func=_cmd_tool_search_reaction_templates)
     rxn_get = tools_sub.add_parser("get-reaction", help="Fetch one reaction template")
@@ -608,7 +607,6 @@ def _cmd_tool_search_reaction_templates(args: argparse.Namespace) -> dict[str, A
         limit=args.limit,
         library=args.library,
         run_forward=args.run_forward,
-        template_scan_limit=args.template_scan_limit,
     )
 
 

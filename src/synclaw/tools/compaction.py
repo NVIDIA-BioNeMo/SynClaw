@@ -287,16 +287,18 @@ def _summarize_template(template: Any) -> Any:
         forward = structure.get("forward_simulation")
         if isinstance(forward, dict):
             output["structure_match"]["forward_simulation"] = _drop_empty(
-                _copy_keys(
-                    forward,
-                    [
-                        "reaction_executed",
-                        "generated_products",
-                        "requested_products_generated",
-                        "requested_product_set_generated",
-                        "issues",
-                    ],
-                )
+                {
+                    **_copy_keys(forward, ["reaction_executed"]),
+                    **_generated_products(forward),
+                    **_copy_keys(
+                        forward,
+                        [
+                            "requested_products_generated",
+                            "requested_product_set_generated",
+                            "issues",
+                        ],
+                    ),
+                }
             )
     if isinstance(template.get("reverse_usefulness"), dict):
         output["reverse_usefulness"] = _drop_empty(

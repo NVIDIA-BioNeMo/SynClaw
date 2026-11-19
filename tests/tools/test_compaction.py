@@ -3,8 +3,26 @@
 
 from synclaw.core import db
 from synclaw.rollout.loop import call_local_tool
-from synclaw.tools.compaction import compact_tool_result
+from synclaw.tools.compaction import MAX_RETURNED_PRODUCTS, compact_tool_result
 from synclaw.tools.synthesis import SynthesisTools
+
+
+def test_search_hit_forward_products_are_capped_like_simulate_reaction():
+    products = [f"C{'C' * index}O" for index in range(MAX_RETURNED_PRODUCTS + 5)]
+    forward = {
+        "reaction_executed": True,
+        "generated_products": products,
+        "generated_product_count": len(products),
+    }
+    hit = {"reaction_id": "demo:R000", "structure_match": {"forward_simulation": forward}}
+
+    compact = compact_tool_result("search_reaction_templates", {"results": [hit]})
+
+    assert compact["results"][0]["structure_match"]["forward_simulation"] == {
+        "reaction_executed": True,
+        "generated_products": products[:MAX_RETURNED_PRODUCTS],
+        "generated_product_count": len(products),
+    }
 
 
 def test_reaction_template_search_returns_short_hits():

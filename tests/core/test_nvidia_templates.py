@@ -60,6 +60,7 @@ CASES = [
 def test_nvidia_rule_products(tools, reaction_id, reactants, expected):
     result = tools.simulate_reaction(reaction_id, reactants)
     assert set(result["generated_products"]) == {_canonical(s) for s in expected}
+    assert bool(result["issues"]) == (not expected)
 
 
 # Reverse simulation gives exact precursors: no radicals on the alcohol carbon or aniline nitrogen.
