@@ -85,9 +85,9 @@ def meets_submission_floor(
 ) -> bool:
     """Apply the same success criterion during rollouts and trace evaluation.
 
-    Identity must come from ``compare_molecular_identity`` in Standard InChI
-    mode. Callers must separately require validator acceptance. Numeric floors
-    allow an identity match even when normalized tautomers have low similarity;
+    Identity must come from ``chem.matches_target``. Callers must separately
+    require validator acceptance. Numeric floors allow an identity match even
+    when normalized tautomers have low similarity;
     ``exact`` requires identity and never falls back to fingerprint similarity.
     ``model`` is scored like ``exact``, though no submission ends its rollouts.
     """
@@ -892,7 +892,7 @@ def submission_identical_to_target(
     submission: dict[str, Any] | None,
     target_smiles: str | None,
 ) -> bool | None:
-    """Standard InChI identity between an accepted submission's product and the target."""
+    """Whether an accepted submission's product is the target under ``chem.matches_target``."""
 
     if not submission or submission.get("accepted") is not True or not target_smiles:
         return None
@@ -901,7 +901,7 @@ def submission_identical_to_target(
     final_smiles = submission.get("actual_final_smiles") or submission.get("final_smiles")
     if not final_smiles:
         return None
-    return chem.molecules_identical(str(target_smiles), str(final_smiles))
+    return chem.matches_target(str(target_smiles), str(final_smiles))
 
 
 def _submission_fingerprint_similarity(

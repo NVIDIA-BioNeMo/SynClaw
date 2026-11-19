@@ -837,11 +837,13 @@ def get_building_block_by_canonical_smiles(
     return _row_dict(row) if row is not None and row["id"] not in hidden_ids else None
 
 
-def building_block_ids_identical_to(conn: sqlite3.Connection, smiles: str) -> frozenset[int]:
-    """IDs of every stock entry that exact-match scoring would count as this molecule.
+def building_block_ids_matching_target(conn: sqlite3.Connection, smiles: str) -> frozenset[int]:
+    """IDs of every stock entry that exact-match scoring would count as this target.
 
-    That is the entry with the same canonical SMILES plus any entry with the same
-    Standard InChI, such as a tautomer stored under different SMILES.
+    That is the entry with the same canonical SMILES plus any entry that
+    ``chem.matches_target`` accepts, such as a tautomer stored under different SMILES
+    or one isomer of stereo the target leaves open. Those are found through the
+    Standard InChIKeys of the target's tautomers and open stereoisomers.
 
     Raises:
         ValueError: ``smiles`` is not a valid SMILES.
@@ -854,13 +856,17 @@ def building_block_ids_identical_to(conn: sqlite3.Connection, smiles: str) -> fr
     exact = get_building_block_by_canonical_smiles(conn, str(validation["canonical_smiles"]))
     if exact is not None:
         ids.add(int(exact["id"]))
-    inchi_key = validation["properties"].get("inchi_key")
-    if inchi_key:
+    keys = sorted(chem.target_match_inchi_keys(smiles))
+    # Stay under SQLite's limit on bound parameters per statement.
+    for start in range(0, len(keys), 500):
+        chunk = keys[start : start + 500]
         rows = conn.execute(
-            "SELECT id, canonical_smiles FROM building_blocks WHERE inchi_key = ?", (inchi_key,)
+            "SELECT id, canonical_smiles FROM building_blocks "
+            f"WHERE inchi_key IN ({', '.join('?' * len(chunk))})",
+            chunk,
         )
         for row in rows:
-            if chem.molecules_identical(smiles, row["canonical_smiles"]):
+            if chem.matches_target(smiles, row["canonical_smiles"]):
                 ids.add(int(row["id"]))
     return frozenset(ids)
 
