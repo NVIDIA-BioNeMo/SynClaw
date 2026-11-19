@@ -956,11 +956,9 @@ def search_reaction_templates(
     limit: int = 20,
     library: LibrarySelection = None,
 ) -> list[dict[str, Any]]:
-    """Rank templates by TF-IDF similarity to a text query; an empty query or ``*`` lists them."""
+    """Rank templates by TF-IDF similarity to a text query."""
 
-    text = (query or "").strip()
-    if not text or text == "*":
-        return list_reaction_templates(conn, limit=limit, library=library)
+    text = query.strip()
     index = _reaction_text_index(conn, normalize_libraries(library))
     query_terms = set(_text_terms(text))
     query_smarts_terms = set(_smarts_terms(text))
@@ -1129,22 +1127,19 @@ def _cached_reaction_text_index(
 
 def list_reaction_templates(
     conn: sqlite3.Connection,
-    limit: int | None = None,
     library: LibrarySelection = None,
 ) -> list[dict[str, Any]]:
-    """Return the selected libraries' templates in library and ID order, all of them by default."""
+    """Return every template in the selected libraries, in library and ID order."""
 
     where, params = _reaction_library_filter(library)
-    limit_sql, limit_params = ("", ()) if limit is None else ("LIMIT ?", (limit,))
     cursor = conn.execute(
         f"""
         SELECT reaction_id, library, name, description, smarts, tags_json, metadata_json
         FROM reaction_templates
         WHERE {where}
         ORDER BY library, reaction_id
-        {limit_sql}
         """,
-        (*params, *limit_params),
+        params,
     )
     return [_reaction_template_row(row) for row in cursor.fetchall()]
 
