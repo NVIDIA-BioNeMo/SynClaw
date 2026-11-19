@@ -51,14 +51,24 @@ def test_invalid_smiles_is_a_clean_error() -> None:
 def test_task_set_selection_is_unchanged(tmp_path) -> None:
     taskset = tmp_path / "tasks.jsonl"
     rows = [
-        {"task_id": f"t{i}", "target_smiles": "CCO", "system_prompt": "s", "question": "q",
-         "prompt_fingerprint": PROMPT_FINGERPRINT}
+        {
+            "task_id": f"t{i}",
+            "target_smiles": "CCO",
+            "system_prompt": "s",
+            "question": "q",
+            "prompt_fingerprint": PROMPT_FINGERPRINT,
+        }
         for i in range(2)
     ]
     taskset.write_text("".join(json.dumps(row) + "\n" for row in rows))
 
     assert model_runner.resolve_run_task(_args("--taskset", str(taskset)))["task_id"] == "t0"
-    assert model_runner.resolve_run_task(_args("--taskset", str(taskset), "--task-index", "1"))["task_id"] == "t1"
+    assert (
+        model_runner.resolve_run_task(_args("--taskset", str(taskset), "--task-index", "1"))[
+            "task_id"
+        ]
+        == "t1"
+    )
 
 
 def test_empty_taskset_is_an_error_not_the_default(tmp_path, monkeypatch) -> None:
@@ -78,8 +88,15 @@ def test_empty_taskset_is_an_error_not_the_default(tmp_path, monkeypatch) -> Non
 def test_bad_target_is_reported_before_the_missing_api_key(monkeypatch, flags, message) -> None:
     monkeypatch.delenv("TEST_SYNCLAW_API_KEY", raising=False)
     args = _args(
-        "--provider", "custom", "--api-mode", "chat", "--base-url", "https://example.test/v1",
-        "--api-key-env", "TEST_SYNCLAW_API_KEY", *flags,
+        "--provider",
+        "custom",
+        "--api-mode",
+        "chat",
+        "--base-url",
+        "https://example.test/v1",
+        "--api-key-env",
+        "TEST_SYNCLAW_API_KEY",
+        *flags,
     )
 
     with pytest.raises(RuntimeError, match=message):
@@ -89,8 +106,16 @@ def test_bad_target_is_reported_before_the_missing_api_key(monkeypatch, flags, m
 def test_missing_api_key_is_reported_for_a_valid_target(monkeypatch) -> None:
     monkeypatch.delenv("TEST_SYNCLAW_API_KEY", raising=False)
     args = _args(
-        "--provider", "custom", "--api-mode", "chat", "--base-url", "https://example.test/v1",
-        "--api-key-env", "TEST_SYNCLAW_API_KEY", "--smiles", "CCO",
+        "--provider",
+        "custom",
+        "--api-mode",
+        "chat",
+        "--base-url",
+        "https://example.test/v1",
+        "--api-key-env",
+        "TEST_SYNCLAW_API_KEY",
+        "--smiles",
+        "CCO",
     )
 
     with pytest.raises(RuntimeError, match="TEST_SYNCLAW_API_KEY is not set"):
@@ -99,9 +124,16 @@ def test_missing_api_key_is_reported_for_a_valid_target(monkeypatch) -> None:
 
 def test_run_sends_the_smiles_target_to_the_model(tmp_path, monkeypatch) -> None:
     args = _args(
-        "--api-mode", "chat", "--base-url", "https://example.test/v1",
-        "--smiles", "CCO", "--db", str(tmp_path / "unused.sqlite"),
-        "--trace", str(tmp_path / "trace.jsonl"),
+        "--api-mode",
+        "chat",
+        "--base-url",
+        "https://example.test/v1",
+        "--smiles",
+        "CCO",
+        "--db",
+        str(tmp_path / "unused.sqlite"),
+        "--trace",
+        str(tmp_path / "trace.jsonl"),
     )
     monkeypatch.setattr(model_runner, "resolve_api_key", lambda *a, **k: "fixture-key")
     monkeypatch.setattr(prompts, "validate_model_run_database", lambda *a, **k: None)

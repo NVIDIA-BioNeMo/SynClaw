@@ -13,8 +13,22 @@ from synclaw.core import chem, db, fingerprint_index
 from synclaw.tools.synthesis import SynthesisTools
 
 CATALOG = [
-    "CCO", "CCCO", "CCOC", "OCCO", "CCCCO", "COCCO", "CCN", "CCCl", "c1ccccc1O", "c1ccccc1N",
-    "Cc1ccccc1O", "OC(=O)c1ccccc1", "CC(C)O", "CC(=O)O", "NCCO", "C1CCOC1",
+    "CCO",
+    "CCCO",
+    "CCOC",
+    "OCCO",
+    "CCCCO",
+    "COCCO",
+    "CCN",
+    "CCCl",
+    "c1ccccc1O",
+    "c1ccccc1N",
+    "Cc1ccccc1O",
+    "OC(=O)c1ccccc1",
+    "CC(C)O",
+    "CC(=O)O",
+    "NCCO",
+    "C1CCOC1",
 ]
 
 
@@ -22,7 +36,8 @@ def test_threshold_query_returns_every_match_without_top_k_or_tie_caps() -> None
     count = fingerprint_index.MAX_TIED_RESULTS + 17
     packed = fingerprint_index.pack_fingerprint(chem.constitutional_morgan_fingerprint("CCO"))
     index = fingerprint_index.FingerprintIndex(
-        ids=np.arange(1, count + 1), fingerprints=np.tile(packed, (count, 1)),
+        ids=np.arange(1, count + 1),
+        fingerprints=np.tile(packed, (count, 1)),
         popcounts=np.full(count, np.bitwise_count(packed).sum()),
     )
     query = chem.constitutional_morgan_fingerprint("CCO")
@@ -35,7 +50,9 @@ def test_threshold_query_handles_empty_fingerprints() -> None:
     fingerprints = np.zeros((2, fingerprint_index.WORDS), dtype=np.uint64)
     fingerprints[1, 0] = 1
     index = fingerprint_index.FingerprintIndex(
-        ids=np.array([1, 2]), fingerprints=fingerprints, popcounts=np.array([0, 1]),
+        ids=np.array([1, 2]),
+        fingerprints=fingerprints,
+        popcounts=np.array([0, 1]),
     )
     empty = DataStructs.ExplicitBitVect(chem.MORGAN_N_BITS)
     assert index.top_k(empty, None, min_similarity=1) == [(1, 1.0)]
@@ -49,8 +66,11 @@ def test_similarity_filter_is_exhaustive_inclusive_and_cached(
     catalog = [target, "C[C@@H](O)CC", target + ".[Na+]", "CO", "c1ccccc1"]
     db_path = _prepared(tmp_path, catalog)
     cutoff = chem.similarity(target, catalog[2])["constitutional_similarity"]
-    expected = {i for i, smiles in enumerate(catalog, 1)
-                if chem.similarity(target, smiles)["constitutional_similarity"] >= cutoff} | {5}
+    expected = {
+        i
+        for i, smiles in enumerate(catalog, 1)
+        if chem.similarity(target, smiles)["constitutional_similarity"] >= cutoff
+    } | {5}
     original = fingerprint_index.FingerprintIndex.top_k
     scans = []
 
@@ -60,29 +80,39 @@ def test_similarity_filter_is_exhaustive_inclusive_and_cached(
 
     monkeypatch.setattr(fingerprint_index.FingerprintIndex, "top_k", tracked)
     tools = SynthesisTools(
-        db_path, hidden_target_smiles=target, hidden_similarity=cutoff,
+        db_path,
+        hidden_target_smiles=target,
+        hidden_similarity=cutoff,
         hidden_building_block_ids=frozenset({5}),
     )
     assert tools.hidden_building_block_ids == expected
-    assert {row["id"] for row in tools.search_building_blocks("*")["results"]} == set(range(1, 6)) - expected
+    assert {row["id"] for row in tools.search_building_blocks("*")["results"]} == set(
+        range(1, 6)
+    ) - expected
     for bb_id in expected:
         assert not tools.get_building_block(bb_id)["found"]
         assert not tools.submit_pathway(building_block=f"BB:{bb_id}")["accepted"]
         assert not tools.submit_pathway(building_block=catalog[bb_id - 1])["accepted"]
     assert scans == [None]
-    assert SynthesisTools(db_path, hidden_target_smiles=target, hidden_similarity=1).hidden_building_block_ids == {1, 2}
+    assert SynthesisTools(
+        db_path, hidden_target_smiles=target, hidden_similarity=1
+    ).hidden_building_block_ids == {1, 2}
 
 
 @pytest.mark.parametrize("cutoff", [-0.1, 1.1, float("nan"), float("inf")])
 def test_similarity_filter_rejects_invalid_cutoffs(tmp_path: Path, cutoff: float) -> None:
     with pytest.raises(RuntimeError, match="cutoff"):
-        SynthesisTools(tmp_path / "unused.sqlite", hidden_target_smiles="CO", hidden_similarity=cutoff)
+        SynthesisTools(
+            tmp_path / "unused.sqlite", hidden_target_smiles="CO", hidden_similarity=cutoff
+        )
 
 
 def test_similarity_filter_requires_a_target_and_supports_zero(tmp_path: Path) -> None:
     with pytest.raises(RuntimeError, match="target"):
         SynthesisTools(tmp_path / "unused.sqlite", hidden_similarity=0.95)
-    tools = SynthesisTools(_prepared(tmp_path, CATALOG), hidden_target_smiles="CO", hidden_similarity=0)
+    tools = SynthesisTools(
+        _prepared(tmp_path, CATALOG), hidden_target_smiles="CO", hidden_similarity=0
+    )
     assert tools.hidden_building_block_ids == set(range(1, len(CATALOG) + 1))
 
 
@@ -98,7 +128,9 @@ def _write(path: Path, smiles: list[str]) -> Path:
     return path
 
 
-def test_search_returns_the_exhaustive_tanimoto_top_k(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_search_returns_the_exhaustive_tanimoto_top_k(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     # Several stored chunks, so the index is assembled across chunk boundaries.
     monkeypatch.setattr(fingerprint_index, "STORED_CHUNK_ROWS", 3)
     db_path = _prepared(tmp_path, CATALOG)
@@ -137,7 +169,10 @@ def test_search_ranks_the_matching_stereoisomer_first(tmp_path: Path) -> None:
 
     # Constitutionally all three tie, so only the stereo-aware score separates them.
     assert len({row["constitutional_similarity"] for row in results}) == 1
-    assert results[0]["canonical_smiles"] == chem.validate_smiles("C[C@H](N)C(=O)O")["canonical_smiles"]
+    assert (
+        results[0]["canonical_smiles"]
+        == chem.validate_smiles("C[C@H](N)C(=O)O")["canonical_smiles"]
+    )
     assert results[0]["similarity"] > results[-1]["similarity"]
 
 
@@ -149,18 +184,27 @@ def test_invalid_smiles_query_is_rejected(tmp_path: Path) -> None:
 def test_a_running_process_sees_blocks_added_by_a_new_prepare(tmp_path: Path) -> None:
     db_path = _prepared(tmp_path, CATALOG[:4])
     tools = SynthesisTools(db_path)
-    assert tools.search_building_blocks("CCCCC", limit=1)["results"][0]["canonical_smiles"] != "CCCCCO"
+    assert (
+        tools.search_building_blocks("CCCCC", limit=1)["results"][0]["canonical_smiles"] != "CCCCCO"
+    )
 
     db.ingest_building_blocks(_write(tmp_path / "more.txt", ["CCCCCO"]), db_path)
     db.prepare_building_block_search(db_path)
 
-    assert tools.search_building_blocks("CCCCC", limit=1)["results"][0]["canonical_smiles"] == "CCCCCO"
+    assert (
+        tools.search_building_blocks("CCCCC", limit=1)["results"][0]["canonical_smiles"] == "CCCCCO"
+    )
 
 
 def test_a_staged_copy_is_searchable_on_its_own(tmp_path: Path) -> None:
-    staged = db.stage_prepared_search_database(_prepared(tmp_path, CATALOG), destination_directory=tmp_path / "stage")
+    staged = db.stage_prepared_search_database(
+        _prepared(tmp_path, CATALOG), destination_directory=tmp_path / "stage"
+    )
 
-    assert SynthesisTools(staged).search_building_blocks("CCCCl", limit=1)["results"][0]["match_type"] == "near"
+    assert (
+        SynthesisTools(staged).search_building_blocks("CCCCl", limit=1)["results"][0]["match_type"]
+        == "near"
+    )
 
 
 def test_tools_for_a_missing_database_do_not_create_it(tmp_path: Path) -> None:

@@ -38,7 +38,9 @@ def test_transport_schemas_preserve_one_canonical_contract() -> None:
 
 
 def test_tool_descriptions_carry_the_rules_prompts_leave_out() -> None:
-    descriptions = {tool["function"]["name"]: tool["function"]["description"] for tool in TOOL_SCHEMAS}
+    descriptions = {
+        tool["function"]["name"]: tool["function"]["description"] for tool in TOOL_SCHEMAS
+    }
 
     assert "not purchasable in this database" in descriptions["search_building_blocks"]
     assert "intermediate" in descriptions["search_building_blocks"]
@@ -79,7 +81,9 @@ def test_clamp_to_contract_rejects_values_that_are_not_whole_numbers(value: Any)
 
 
 @pytest.mark.parametrize(("value", "expected"), [(5, 5), (5.0, 5), (0, 1), (1e6, 20)])
-def test_clamp_to_contract_clamps_whole_numbers_to_the_schema_bounds(value: Any, expected: int) -> None:
+def test_clamp_to_contract_clamps_whole_numbers_to_the_schema_bounds(
+    value: Any, expected: int
+) -> None:
     assert clamp_to_contract("search_building_blocks", "limit", value) == expected
 
 
@@ -125,7 +129,5 @@ def test_prepare_tool_call_ignores_non_contract_arguments_consistently() -> None
     )
 
     assert "provider_only" not in prepared.dispatch_arguments
-    assert prepared.event_payload["ignored_arguments"] == {
-        "provider_only": "ignored"
-    }
+    assert prepared.event_payload["ignored_arguments"] == {"provider_only": "ignored"}
     assert prepared.dispatch_arguments["max_products"] == 100

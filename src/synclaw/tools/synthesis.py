@@ -77,9 +77,11 @@ class SynthesisTools:
                 db.require_prepared_building_block_search(self.db_path)
                 index = fingerprint_index.load_fingerprint_index(conn, self.db_path)
                 target_ids |= {
-                    bb_id for bb_id, _ in index.top_k(
+                    bb_id
+                    for bb_id, _ in index.top_k(
                         chem.constitutional_morgan_fingerprint(self.hidden_target_smiles),
-                        None, min_similarity=self.hidden_similarity,
+                        None,
+                        min_similarity=self.hidden_similarity,
                     )
                 }
             return self._hidden_ids | target_ids
@@ -114,7 +116,9 @@ class SynthesisTools:
         near_count = sum(1 for item in results if item.get("match_type") == "near")
         return {
             "query": query,
-            "query_canonical_smiles": validation.get("canonical_smiles") if validation["valid"] else None,
+            "query_canonical_smiles": validation.get("canonical_smiles")
+            if validation["valid"]
+            else None,
             "limit": limit,
             "include_near": include_near,
             "min_similarity": min_similarity,
@@ -193,13 +197,19 @@ class SynthesisTools:
                         "family": family["family"],
                         "template_count": family["count"],
                         "search_terms": list(family.get("query_hints") or []),
-                        **({"description": family["description"]} if family.get("description") else {}),
+                        **(
+                            {"description": family["description"]}
+                            if family.get("description")
+                            else {}
+                        ),
                     }
                     for family in families
                 ],
                 "less_common_transformations": [
                     {
-                        "name": template.get("name") or template.get("reaction_family") or "unusual transformation",
+                        "name": template.get("name")
+                        or template.get("reaction_family")
+                        or "unusual transformation",
                         "search_terms": list(template.get("query_hints") or [])[:3],
                     }
                     for template in overview.get("notable_templates") or []
@@ -207,7 +217,9 @@ class SynthesisTools:
             }
         with db.session(self.db_path) as conn:
             text_results = (
-                reactions.search_reaction_templates(conn, query=text_query, limit=result_limit, library=library)
+                reactions.search_reaction_templates(
+                    conn, query=text_query, limit=result_limit, library=library
+                )
                 if has_text_query
                 else []
             )
@@ -233,9 +245,14 @@ class SynthesisTools:
                 template_scan_limit=template_scan_limit,
             )
             if product_smiles and molecule_results.get("valid"):
-                self._rank_template_search_by_reverse_usefulness(conn, molecule_results, product_smiles)
+                self._rank_template_search_by_reverse_usefulness(
+                    conn, molecule_results, product_smiles
+                )
             else:
-                molecule_results["reverse_ranking"] = {"applied": False, "reason": "product_smiles was not supplied"}
+                molecule_results["reverse_ranking"] = {
+                    "applied": False,
+                    "reason": "product_smiles was not supplied",
+                }
         matches = list(molecule_results.pop("results", None) or [])[:result_limit]
         molecule_results.pop("count", None)
         result = {**molecule_results, "query": query, "limit": result_limit}
@@ -317,13 +334,17 @@ class SynthesisTools:
         Stock matches for the precursors are planning evidence only; an unmatched
         precursor may still be made as an intermediate.
         """
-        top_near_matches = clamp_to_contract("simulate_reverse_reaction", "top_near_matches", top_near_matches)
+        top_near_matches = clamp_to_contract(
+            "simulate_reverse_reaction", "top_near_matches", top_near_matches
+        )
         with db.session(self.db_path) as conn:
             result = reactions.simulate_reverse_reaction(
                 conn,
                 reaction_id=reaction_id,
                 product_smiles=product_smiles,
-                max_outcomes=clamp_to_contract("simulate_reverse_reaction", "max_outcomes", max_outcomes),
+                max_outcomes=clamp_to_contract(
+                    "simulate_reverse_reaction", "max_outcomes", max_outcomes
+                ),
                 library=self.reaction_libraries,
             )
             if result.get("reaction_executed"):
@@ -430,9 +451,12 @@ class SynthesisTools:
                         "smiles": smiles_text,
                         "valid_smiles": valid_smiles,
                         "has_exact_building_block_match": bool(exact_matches),
-                        "exact_building_block_matches": [_compact_building_block_match(match) for match in exact_matches],
+                        "exact_building_block_matches": [
+                            _compact_building_block_match(match) for match in exact_matches
+                        ],
                         "top_near_building_block_matches": [
-                            _compact_building_block_match(match) for match in near_matches[:top_near_matches]
+                            _compact_building_block_match(match)
+                            for match in near_matches[:top_near_matches]
                         ],
                         "grounding_note": (
                             "Exact BB match: can be submitted as a starting reactant."
@@ -447,18 +471,22 @@ class SynthesisTools:
                     "smiles": detail["smiles"],
                     "has_exact_building_block_match": detail["has_exact_building_block_match"],
                     "exact_submit_references": [
-                        match["submit_reference"] for match in detail["exact_building_block_matches"]
+                        match["submit_reference"]
+                        for match in detail["exact_building_block_matches"]
                     ],
                     "top_near_submit_references": [
-                        match["submit_reference"] for match in detail["top_near_building_block_matches"]
+                        match["submit_reference"]
+                        for match in detail["top_near_building_block_matches"]
                     ],
                 }
                 for detail in reactant_details
             ]
-            candidate["all_reactants_have_exact_building_block_match"] = bool(reactant_details) and all(
-                detail["has_exact_building_block_match"] for detail in reactant_details
-            )
-            candidate["all_precursors_grounded"] = candidate["all_reactants_have_exact_building_block_match"]
+            candidate["all_reactants_have_exact_building_block_match"] = bool(
+                reactant_details
+            ) and all(detail["has_exact_building_block_match"] for detail in reactant_details)
+            candidate["all_precursors_grounded"] = candidate[
+                "all_reactants_have_exact_building_block_match"
+            ]
             candidate["grounding_summary"] = (
                 "All reverse precursors exactly match purchasable building blocks."
                 if candidate["all_precursors_grounded"]
@@ -467,9 +495,7 @@ class SynthesisTools:
             if candidate["all_reactants_have_exact_building_block_match"]:
                 exact_match_sets += 1
         if exact_match_sets:
-            recommended_next_step = (
-                "A fully grounded reverse candidate exists. Verify it forward with simulate_reaction before submitting."
-            )
+            recommended_next_step = "A fully grounded reverse candidate exists. Verify it forward with simulate_reaction before submitting."
         elif result.get("candidate_reactant_sets"):
             recommended_next_step = (
                 "No fully grounded reverse candidate was found. Search exact building blocks for useful fragments, "
@@ -521,6 +547,7 @@ class SynthesisTools:
         if target_validation is not None and not target_validation["valid"]:
             issues.append(f"target_smiles invalid: {target_validation['error']}")
         if not steps:
+
             def purchase(extra_issues: list[str]) -> dict[str, Any]:
                 return _direct_purchase_submission(
                     self.db_path,
@@ -552,9 +579,15 @@ class SynthesisTools:
                 if not reaction_id:
                     result = {"valid": False, "issues": [f"step {index}: reaction_id is required"]}
                 elif not isinstance(refs, list) or not refs:
-                    result = {"valid": False, "issues": [f"step {index}: reactants must be a non-empty list"]}
+                    result = {
+                        "valid": False,
+                        "issues": [f"step {index}: reactants must be a non-empty list"],
+                    }
                 elif not product:
-                    result = {"valid": False, "issues": [f"step {index}: product_smiles is required"]}
+                    result = {
+                        "valid": False,
+                        "issues": [f"step {index}: product_smiles is required"],
+                    }
                 else:
                     resolved = [
                         _resolve_reactant_ref(
@@ -611,7 +644,9 @@ class SynthesisTools:
         )
 
         submitted_final = steps[-1].get("product_smiles") if steps else None
-        submitted_final_validation = chem.validate_smiles(submitted_final) if submitted_final else None
+        submitted_final_validation = (
+            chem.validate_smiles(submitted_final) if submitted_final else None
+        )
         if not submitted_final_validation or not submitted_final_validation["valid"]:
             issues.append(
                 "final step product_smiles invalid: "
@@ -624,16 +659,21 @@ class SynthesisTools:
         products = [
             ("product" if index == len(step_results) else "intermediate", smiles)
             for index, result in enumerate(step_results, start=1)
-            for smiles in dict.fromkeys([
-                *(result.get("generated_products") or []), result.get("actual_product_smiles"),
-            ])
+            for smiles in dict.fromkeys(
+                [
+                    *(result.get("generated_products") or []),
+                    result.get("actual_product_smiles"),
+                ]
+            )
         ]
         block = self.screen.check([target, *products])
         if block and block["refused"]:
             issues.append(refusal_message(block))
 
         actual_final_candidates = _actual_final_candidates(step_results)
-        all_steps_valid = bool(step_results) and all(result.get("valid") is True for result in step_results)
+        all_steps_valid = bool(step_results) and all(
+            result.get("valid") is True for result in step_results
+        )
         grounding = _summarize_reactant_grounding(step_results)
         accepted = not issues and all_steps_valid
         scoring = score_pathway_against_target(
@@ -677,7 +717,10 @@ class SynthesisTools:
 
 
 def hidden_target_event(
-    target_smiles: str, hidden_ids: frozenset[int], *, hide_target: bool = True,
+    target_smiles: str,
+    hidden_ids: frozenset[int],
+    *,
+    hide_target: bool = True,
     similarity_threshold: float | None = None,
 ) -> dict[str, Any]:
     """Record stock exclusions, including whether the target was explicitly hidden."""
@@ -735,10 +778,18 @@ def _direct_purchase_submission(
             issues.append(f"building_block: {resolved['issue']}")
 
     block = resolved.get("building_block") if isinstance(resolved, dict) else None
-    final_smiles = str(block["canonical_smiles"]) if isinstance(block, dict) and block.get("canonical_smiles") else None
+    final_smiles = (
+        str(block["canonical_smiles"])
+        if isinstance(block, dict) and block.get("canonical_smiles")
+        else None
+    )
     final_validation = chem.validate_smiles(final_smiles) if final_smiles else None
-    referenced_ids = [int(block["id"])] if isinstance(block, dict) and block.get("id") is not None else []
-    accepted = not issues and bool(final_validation and final_validation["valid"]) and bool(referenced_ids)
+    referenced_ids = (
+        [int(block["id"])] if isinstance(block, dict) and block.get("id") is not None else []
+    )
+    accepted = (
+        not issues and bool(final_validation and final_validation["valid"]) and bool(referenced_ids)
+    )
     scoring = score_pathway_against_target(
         [final_smiles] if final_smiles else [],
         target_smiles=target_smiles,
@@ -753,7 +804,9 @@ def _direct_purchase_submission(
                 "ref": building_block,
                 "smiles": resolved.get("smiles") if isinstance(resolved, dict) else None,
                 "source": resolved.get("source") if isinstance(resolved, dict) else None,
-                "issue": resolved.get("issue") if isinstance(resolved, dict) else "not grounded to a building block",
+                "issue": resolved.get("issue")
+                if isinstance(resolved, dict)
+                else "not grounded to a building block",
             }
         )
     grounding = {
@@ -763,7 +816,9 @@ def _direct_purchase_submission(
     }
     error_message = None
     if not accepted:
-        issue_text = "; ".join(_unique_strings(issues)) if issues else "building_block is not grounded"
+        issue_text = (
+            "; ".join(_unique_strings(issues)) if issues else "building_block is not grounded"
+        )
         error_message = (
             f"The zero-step direct-purchase submission was rejected: {issue_text}. "
             "Submit steps: [] only with building_block set to BB:<id> or an exact building-block SMILES."
@@ -895,7 +950,8 @@ def select_final_product(
     # An exact generated product must outrank a fingerprint collision or a
     # high-scoring analogue, including when InChI normalizes a tautomer.
     exact_candidates = [
-        product for product in candidates
+        product
+        for product in candidates
         if chem.compare_molecular_identity(target_smiles, product)["identical"]
     ]
     if exact_candidates:
@@ -935,7 +991,8 @@ def _summarize_reactant_grounding(step_results: list[dict[str, Any]]) -> dict[st
                     "ref": reactant.get("ref"),
                     "smiles": reactant.get("smiles"),
                     "source": source,
-                    "issue": reactant.get("issue") or "reactant is not grounded to a building block",
+                    "issue": reactant.get("issue")
+                    or "reactant is not grounded to a building block",
                 }
             )
     return {
@@ -988,7 +1045,9 @@ def _submission_error_message(
             "Correct the reaction template/reactant count/reactants and resubmit a route that generates a product."
         )
     if not parts:
-        parts.append("The submitted pathway was rejected. Inspect the per-step validation results and resubmit.")
+        parts.append(
+            "The submitted pathway was rejected. Inspect the per-step validation results and resubmit."
+        )
     return " ".join(parts)
 
 
@@ -1102,13 +1161,19 @@ def _compact_reverse_reaction_result(result: dict[str, Any]) -> None:
         }
     products = result.pop("products", None)
     if isinstance(products, list):
-        product_errors = [product.get("error") for product in products if isinstance(product, dict) and product.get("error")]
+        product_errors = [
+            product.get("error")
+            for product in products
+            if isinstance(product, dict) and product.get("error")
+        ]
         canonical = [
             product.get("canonical_smiles")
             for product in products
             if isinstance(product, dict) and product.get("canonical_smiles")
         ]
-        result["product_valid"] = bool(products) and not product_errors and len(canonical) == len(products)
+        result["product_valid"] = (
+            bool(products) and not product_errors and len(canonical) == len(products)
+        )
         result["product_canonical_smiles"] = canonical[0] if len(canonical) == 1 else canonical
         if product_errors:
             result["product_error"] = "; ".join(str(error) for error in product_errors)
@@ -1137,7 +1202,12 @@ def _resolve_reactant_ref(
         block = db.get_building_block(conn, bb_id, hidden_ids=hidden_ids)
         if block is None:
             return {"ref": ref, "issue": f"unknown building block reference: {ref}"}
-        return {"ref": ref, "smiles": block["canonical_smiles"], "source": "building_block", "building_block": block}
+        return {
+            "ref": ref,
+            "smiles": block["canonical_smiles"],
+            "source": "building_block",
+            "building_block": block,
+        }
     if text.startswith("INT:"):
         if intermediates is None or text not in intermediates:
             return {"ref": ref, "issue": f"unknown intermediate reference: {ref}"}
@@ -1159,4 +1229,9 @@ def _resolve_reactant_ref(
                 "Submit BB:<id> or an exact building-block SMILES."
             ),
         }
-    return {"ref": ref, "smiles": block["canonical_smiles"], "source": "building_block_smiles", "building_block": block}
+    return {
+        "ref": ref,
+        "smiles": block["canonical_smiles"],
+        "source": "building_block_smiles",
+        "building_block": block,
+    }

@@ -29,11 +29,7 @@ def combine_summary_csvs(inputs: list[str | Path], output: str | Path) -> dict[s
                 rows.append(
                     {
                         "source_summary_file": str(path),
-                        **{
-                            str(key): value or ""
-                            for key, value in row.items()
-                            if key
-                        },
+                        **{str(key): value or "" for key, value in row.items() if key},
                     }
                 )
 

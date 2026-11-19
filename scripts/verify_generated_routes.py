@@ -46,7 +46,9 @@ from synclaw.tasks.targets import (
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tsv", type=Path, required=True, help="Generated TSV with intermediates")
-    parser.add_argument("--matrix-dir", type=Path, required=True, help="MatrixDir the TSV was generated from")
+    parser.add_argument(
+        "--matrix-dir", type=Path, required=True, help="MatrixDir the TSV was generated from"
+    )
     parser.add_argument("--limit", type=int, help="Check a random sample of this many routes")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(

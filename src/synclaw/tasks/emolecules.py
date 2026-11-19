@@ -275,7 +275,9 @@ def _check_policy(multicomponent: str) -> None:
         raise RuntimeError(f"multicomponent must be one of {MULTICOMPONENT_POLICIES}")
 
 
-def _manifest_matches(manifest_path: Path, *, source_sha256: str, output_path: Path, multicomponent: str) -> bool:
+def _manifest_matches(
+    manifest_path: Path, *, source_sha256: str, output_path: Path, multicomponent: str
+) -> bool:
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     except (FileNotFoundError, json.JSONDecodeError):

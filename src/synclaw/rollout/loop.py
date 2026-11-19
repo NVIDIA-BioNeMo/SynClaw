@@ -96,7 +96,11 @@ class ToolExecution:
 
 class RolloutTransport(Protocol):
     async def complete(
-        self, messages: Sequence[dict[str, Any]], *, tools: Sequence[dict[str, Any]], tool_choice: Any,
+        self,
+        messages: Sequence[dict[str, Any]],
+        *,
+        tools: Sequence[dict[str, Any]],
+        tool_choice: Any,
         max_output_tokens: int | None,
     ) -> AssistantTurn: ...
     def append_user(self, message: dict[str, Any]) -> None: ...
@@ -138,9 +142,7 @@ class LocalToolExecutor:
         del assistant_turn
         return [self._execute_one(call, target_smiles=target_smiles) for call in calls]
 
-    def _execute_one(
-        self, call: PreparedToolCall, *, target_smiles: str
-    ) -> ToolExecution:
+    def _execute_one(self, call: PreparedToolCall, *, target_smiles: str) -> ToolExecution:
         started_at = time.perf_counter()
         if call.argument_error is not None:
             return ToolExecution(
@@ -195,9 +197,7 @@ def call_local_tool(
             return tools.search_reaction_templates(
                 query=_optional_str(arguments, "query"),
                 reactant_smiles=_optional_str_list(arguments, "reactant_smiles", name),
-                product_smiles=_optional_str_or_str_list(
-                    arguments, "product_smiles", name
-                ),
+                product_smiles=_optional_str_or_str_list(arguments, "product_smiles", name),
                 limit=arguments["limit"],
                 library=reaction_library or None,
                 run_forward=arguments["run_forward"],
@@ -248,18 +248,14 @@ def _optional_str(arguments: dict[str, Any], key: str) -> str | None:
     return str(value)
 
 
-def _required_array(
-    arguments: dict[str, Any], key: str, tool_name: str
-) -> list[Any]:
+def _required_array(arguments: dict[str, Any], key: str, tool_name: str) -> list[Any]:
     value = arguments.get(key)
     if not isinstance(value, list):
         raise ValueError(f"{tool_name} argument '{key}' must be a JSON array")
     return value
 
 
-def _optional_array(
-    arguments: dict[str, Any], key: str, tool_name: str
-) -> list[Any] | None:
+def _optional_array(arguments: dict[str, Any], key: str, tool_name: str) -> list[Any] | None:
     value = arguments.get(key)
     if value in (None, ""):
         return None
@@ -268,15 +264,11 @@ def _optional_array(
     return value
 
 
-def _required_str_list(
-    arguments: dict[str, Any], key: str, tool_name: str
-) -> list[str]:
+def _required_str_list(arguments: dict[str, Any], key: str, tool_name: str) -> list[str]:
     return [str(item) for item in _required_array(arguments, key, tool_name)]
 
 
-def _optional_str_list(
-    arguments: dict[str, Any], key: str, tool_name: str
-) -> list[str] | None:
+def _optional_str_list(arguments: dict[str, Any], key: str, tool_name: str) -> list[str] | None:
     value = arguments.get(key)
     if value in (None, ""):
         return None
@@ -308,9 +300,7 @@ def _optional_str_or_str_list(
         return [str(item) for item in value]
     if isinstance(value, str):
         return value
-    raise ValueError(
-        f"{tool_name} argument '{key}' must be a string or JSON array of strings"
-    )
+    raise ValueError(f"{tool_name} argument '{key}' must be a string or JSON array of strings")
 
 
 class ControlledTermination(RuntimeError):
@@ -321,7 +311,9 @@ class ControlledTermination(RuntimeError):
 
 
 def request_output_budget(
-    snapshot: ContextBudgetSnapshot, *, safety_margin_tokens: int,
+    snapshot: ContextBudgetSnapshot,
+    *,
+    safety_margin_tokens: int,
 ) -> ContextBudgetSnapshot:
     """Clip one request's output cap to the context its input leaves, less a safety margin.
 
@@ -339,7 +331,11 @@ def request_output_budget(
             )
         return snapshot
     cap = snapshot.max_output_tokens
-    allowed = remaining - safety_margin_tokens if cap is None else min(cap, remaining - safety_margin_tokens)
+    allowed = (
+        remaining - safety_margin_tokens
+        if cap is None
+        else min(cap, remaining - safety_margin_tokens)
+    )
     if allowed <= 0:
         raise ControlledTermination(
             "context_window_exceeded",
@@ -385,9 +381,7 @@ async def run_rollout(
     """Run the canonical BioNeMo-SynClaw loop independently of model and tool transports."""
     if config.max_turns is None and budget_provider is None:
         raise ValueError("Unlimited turns need a budget_provider to end the rollout")
-    state = state or RolloutState(
-        messages=[dict(row) for row in task.initial_messages], events=[]
-    )
+    state = state or RolloutState(messages=[dict(row) for row in task.initial_messages], events=[])
 
     async def record(event: dict[str, Any] | None, turn: int | None = None) -> None:
         if event is not None:
@@ -401,9 +395,7 @@ async def run_rollout(
         for message in state.messages:
             await record(_message_event(message, task.target_smiles), 0)
 
-    reason, partial, termination_kind, termination_message = (
-        "no_submission", False, None, None
-    )
+    reason, partial, termination_kind, termination_message = ("no_submission", False, None, None)
     termination: ControlledTermination | None = None
     turn_indices = (
         itertools.count(start_turn_index)
@@ -415,7 +407,14 @@ async def run_rollout(
             await _append_harness_feedback(state, transport, task, reminder, record)
         if config.budget_feedback and budget_provider is not None:
             await _emit_budget_feedback(
-                state, transport, task, config, tool_schemas, budget_provider, turn_index, record,
+                state,
+                transport,
+                task,
+                config,
+                tool_schemas,
+                budget_provider,
+                turn_index,
+                record,
             )
         tool_choice = response_or_chat_tool_choice(
             api_mode="chat",
@@ -432,14 +431,22 @@ async def run_rollout(
         try:
             try:
                 request_budget = request_output_budget(
-                    snapshot, safety_margin_tokens=config.context_safety_margin_tokens,
+                    snapshot,
+                    safety_margin_tokens=config.context_safety_margin_tokens,
                 )
             except ControlledTermination:
-                await record(_request_budget_event(task, turn_index, snapshot, config, sent=False), turn_index)
+                await record(
+                    _request_budget_event(task, turn_index, snapshot, config, sent=False),
+                    turn_index,
+                )
                 raise
-            await record(_request_budget_event(task, turn_index, request_budget, config), turn_index)
+            await record(
+                _request_budget_event(task, turn_index, request_budget, config), turn_index
+            )
             turn = await transport.complete(
-                tuple(state.messages), tools=tool_schemas, tool_choice=tool_choice,
+                tuple(state.messages),
+                tools=tool_schemas,
+                tool_choice=tool_choice,
                 max_output_tokens=request_budget.max_output_tokens,
             )
         except ControlledTermination as exc:
@@ -465,13 +472,17 @@ async def run_rollout(
             cap = request_budget.max_output_tokens
             if cap is not None and (config.max_tokens is None or cap < config.max_tokens):
                 # The cap had been clipped to the context left, so the context ran out.
-                partial, termination_kind, reason = True, "context_window_exceeded", "context_window_exceeded"
-                termination_message = (
-                    f"The response reached the {cap}-token output cap that the remaining context allowed."
+                partial, termination_kind, reason = (
+                    True,
+                    "context_window_exceeded",
+                    "context_window_exceeded",
                 )
+                termination_message = f"The response reached the {cap}-token output cap that the remaining context allowed."
             else:
                 partial, termination_kind, reason = True, "max_tokens", "max_tokens"
-                termination_message = f"The provider stopped generation with finish_reason={finish_reason!r}."
+                termination_message = (
+                    f"The provider stopped generation with finish_reason={finish_reason!r}."
+                )
             await record(
                 _termination_event(task, turn_index, reason, termination_message, finish_reason),
                 turn_index,
@@ -480,7 +491,9 @@ async def run_rollout(
 
         raw_calls = list(message.get("tool_calls") or [])
         if not raw_calls:
-            decision = handle_no_tool_response(config, state.policy, content=str(message.get("content") or ""))
+            decision = handle_no_tool_response(
+                config, state.policy, content=str(message.get("content") or "")
+            )
             if decision.finish_reason is not None:
                 reason = decision.finish_reason
                 break
@@ -491,7 +504,9 @@ async def run_rollout(
             reason = "assistant_stopped_without_tools"
             break
 
-        prepared = [_prepare_call(call, len(state.events) + index) for index, call in enumerate(raw_calls)]
+        prepared = [
+            _prepare_call(call, len(state.events) + index) for index, call in enumerate(raw_calls)
+        ]
         # Trace events retain the raw call, but providers only see canonical JSON on later turns.
         # This keeps a recoverable argument error from poisoning the conversation history.
         message["tool_calls"] = [_canonical_tool_call(item) for item in prepared]
@@ -504,7 +519,8 @@ async def run_rollout(
                 config,
                 call_limit=(
                     config.max_tool_calls - state.policy.total_tool_calls
-                    if config.max_tool_calls > 0 else None
+                    if config.max_tool_calls > 0
+                    else None
                 ),
                 target_smiles=task.target_smiles,
                 assistant_turn=turn_index + 1,
@@ -520,7 +536,9 @@ async def run_rollout(
             result = execution.result
             model_result = compact_tool_result(item.name, result)
             result_json = json.dumps(model_result, sort_keys=True, separators=(",", ":"))
-            state.messages.append({"role": "tool", "tool_call_id": item.call_id, "content": result_json})
+            state.messages.append(
+                {"role": "tool", "tool_call_id": item.call_id, "content": result_json}
+            )
             transport.append_tool(item, result_json)
             payload = {
                 "result": result,
@@ -537,8 +555,12 @@ async def run_rollout(
             if execution.outcome == "over_budget":
                 continue
             decision = handle_tool_result(
-                config, state.policy, name=item.name, arguments=item.dispatch_arguments,
-                result=result, target_smiles=task.target_smiles,
+                config,
+                state.policy,
+                name=item.name,
+                arguments=item.dispatch_arguments,
+                result=result,
+                target_smiles=task.target_smiles,
             )
             if decision.repair is not None:
                 repairs.append(decision.repair)
@@ -557,9 +579,12 @@ async def run_rollout(
             reason = tool_limit_finish_reason(state.policy)
             break
         if terminal is not None:
-            reason = "tool_limit_final_submission" if not terminal_meets_floor and (
-                state.policy.tool_limit_finalization_requested or terminal_due_to_limit
-            ) else "terminal_submission"
+            reason = (
+                "tool_limit_final_submission"
+                if not terminal_meets_floor
+                and (state.policy.tool_limit_finalization_requested or terminal_due_to_limit)
+                else "terminal_submission"
+            )
             break
         for repair in repairs:
             await _append_harness_feedback(state, transport, task, repair, record)
@@ -572,11 +597,18 @@ async def run_rollout(
         )
     if termination is not None:
         partial, termination_kind, termination_message, reason = (
-            True, termination.kind, str(termination), termination.kind
+            True,
+            termination.kind,
+            str(termination),
+            termination.kind,
         )
         await record(
             _termination_event(
-                task, turn_index, termination.kind, str(termination), termination.provider_finish_reason,
+                task,
+                turn_index,
+                termination.kind,
+                str(termination),
+                termination.provider_finish_reason,
             ),
             turn_index,
         )
@@ -591,19 +623,29 @@ async def run_rollout(
     if selected_event is not None:
         await record(selected_event, config.max_turns)
     return RolloutResult(
-        state, reason, submission, arguments, partial,
-        termination_kind, termination_message,
+        state,
+        reason,
+        submission,
+        arguments,
+        partial,
+        termination_kind,
+        termination_message,
     )
 
 
 async def _recover_output_limit(
-    state: RolloutState, transport: RolloutTransport, task: RolloutTask,
-    finish_reason: str, record: Callable[..., Awaitable[None]],
+    state: RolloutState,
+    transport: RolloutTransport,
+    task: RolloutTask,
+    finish_reason: str,
+    record: Callable[..., Awaitable[None]],
 ) -> bool:
     """Resolve unexecuted calls and request one shorter continuation, without extra budget."""
     message = state.messages[-1]
     raw_calls = list(message.get("tool_calls") or [])
-    if any(not call.get("id") or not (call.get("function") or {}).get("name") for call in raw_calls):
+    if any(
+        not call.get("id") or not (call.get("function") or {}).get("name") for call in raw_calls
+    ):
         return False  # Cannot safely pair a partial call without its provider ID/name.
     content = (
         "Your previous response hit its output-token limit and was truncated. "
@@ -619,14 +661,22 @@ async def _recover_output_limit(
         # As with ordinary argument repair, replay valid JSON while retaining raw trace data.
         message["tool_calls"] = [_canonical_tool_call(call) for call in prepared]
         for raw, call in zip(raw_calls, prepared, strict=True):
-            result_json = json.dumps({
-                "error": "output_limit_truncation", "executed": False,
-                "message": "Not executed: the assistant response was truncated. Reissue the complete call.",
-                # Canonical replay replaces malformed JSON; retain its useful prefix as data.
-                **({"truncated_arguments": raw["function"].get("arguments")}
-                   if call.argument_error else {}),
-            })
-            state.messages.append({"role": "tool", "tool_call_id": call.call_id, "content": result_json})
+            result_json = json.dumps(
+                {
+                    "error": "output_limit_truncation",
+                    "executed": False,
+                    "message": "Not executed: the assistant response was truncated. Reissue the complete call.",
+                    # Canonical replay replaces malformed JSON; retain its useful prefix as data.
+                    **(
+                        {"truncated_arguments": raw["function"].get("arguments")}
+                        if call.argument_error
+                        else {}
+                    ),
+                }
+            )
+            state.messages.append(
+                {"role": "tool", "tool_call_id": call.call_id, "content": result_json}
+            )
             transport.append_tool(call, result_json)
         # These are protocol error replies, not executed chemistry calls or scored submissions.
     else:
@@ -638,22 +688,34 @@ async def _recover_output_limit(
             reasoning = previous.get("reasoning_content")
             if previous["role"] == "assistant" and reasoning:
                 state.messages[index] = {
-                    **previous, "reasoning_content": "",
+                    **previous,
+                    "reasoning_content": "",
                     "content": f"[Prior reasoning]\n{reasoning}\n[/Prior reasoning]\n\n"
                     + (previous.get("content") or ""),
                 }
     await _append_harness_feedback(state, transport, task, content, record)
-    await record({
-        "event_type": "output_limit_recovery", "target_smiles": task.target_smiles,
-        "payload": {"assistant_turn": state.assistant_turns, "provider_finish_reason": finish_reason,
-                    "discarded_tool_calls": len(raw_calls)},
-    })
+    await record(
+        {
+            "event_type": "output_limit_recovery",
+            "target_smiles": task.target_smiles,
+            "payload": {
+                "assistant_turn": state.assistant_turns,
+                "provider_finish_reason": finish_reason,
+                "discarded_tool_calls": len(raw_calls),
+            },
+        }
+    )
     return True
 
 
 async def _execute_tools(
-    calls: list[PreparedToolCall], executor: ToolExecutor, config: RolloutPolicyConfig,
-    *, call_limit: int | None, target_smiles: str, assistant_turn: int,
+    calls: list[PreparedToolCall],
+    executor: ToolExecutor,
+    config: RolloutPolicyConfig,
+    *,
+    call_limit: int | None,
+    target_smiles: str,
+    assistant_turn: int,
 ) -> list[ToolExecution]:
     results: list[ToolExecution | None] = [None] * len(calls)
     pending: list[tuple[int, PreparedToolCall]] = []
@@ -676,7 +738,9 @@ async def _execute_tools(
             pending.append((index, item))
         else:
             arguments = item.arguments if item.argument_error else item.dispatch_arguments
-            results[index] = ToolExecution(tool_argument_error(item.name, error, arguments), outcome=outcome)
+            results[index] = ToolExecution(
+                tool_argument_error(item.name, error, arguments), outcome=outcome
+            )
     if pending:
         executed = list(
             await executor.execute(
@@ -686,32 +750,47 @@ async def _execute_tools(
             )
         )
         if len(executed) != len(pending):
-            raise RuntimeError(f"Tool executor returned {len(executed)} results for {len(pending)} calls")
+            raise RuntimeError(
+                f"Tool executor returned {len(executed)} results for {len(pending)} calls"
+            )
         for (index, _), result in zip(pending, executed, strict=True):
             results[index] = result
     return [result for result in results if result is not None]
 
 
 def _commit_input_update(
-    state: RolloutState, transport: RolloutTransport, message: dict[str, Any],
+    state: RolloutState,
+    transport: RolloutTransport,
+    message: dict[str, Any],
 ) -> None:
     transport.replace_last_input(message)
     state.messages[-1] = message
 
 
-async def _append_harness_feedback(state: RolloutState, transport: RolloutTransport, task: RolloutTask,
-                       content: str, record: Callable[..., Awaitable[None]]) -> None:
+async def _append_harness_feedback(
+    state: RolloutState,
+    transport: RolloutTransport,
+    task: RolloutTask,
+    content: str,
+    record: Callable[..., Awaitable[None]],
+) -> None:
     # Policy warnings and repair guidance also belong to the current tool turn.
     # Preserve that boundary for models which clear thinking on a new user turn.
     if state.messages and state.messages[-1]["role"] == "tool":
         updated = with_harness_feedback(state.messages, content, field="notice")
         assert updated is not None
         _commit_input_update(state, transport, updated[-1])
-        await record({
-            "event_type": "harness_feedback", "target_smiles": task.target_smiles,
-            "payload": {"content": content, "message_index": len(state.messages) - 1,
-                        "message_role": "tool"},
-        })
+        await record(
+            {
+                "event_type": "harness_feedback",
+                "target_smiles": task.target_smiles,
+                "payload": {
+                    "content": content,
+                    "message_index": len(state.messages) - 1,
+                    "message_role": "tool",
+                },
+            }
+        )
         return
     message = {"role": "user", "content": content}
     state.messages.append(message)
@@ -731,8 +810,10 @@ async def _emit_budget_feedback(
 ) -> None:
     feedback = state.budget_feedback
     turns_remaining = (
-        1 if state.policy.tool_limit_finalization_requested
-        else None if config.max_turns is None
+        1
+        if state.policy.tool_limit_finalization_requested
+        else None
+        if config.max_turns is None
         else config.max_turns - turn_index
     )
     if not config.context_limit_stated:
@@ -741,13 +822,20 @@ async def _emit_budget_feedback(
 
         def budget_provider(messages: Any, tools: Any) -> ContextBudgetSnapshot:
             return replace(provider(messages, tools), context_window_tokens=None)
+
     tool_calls_remaining = (
         max(0, config.max_tool_calls - state.policy.total_tool_calls)
-        if config.max_tool_calls > 0 else None
+        if config.max_tool_calls > 0
+        else None
     )
     content, snapshot, status = prepare_budget_feedback(
-        budget_provider, state.messages, tool_schemas, feedback, turn_index=turn_index,
-        turns_remaining=turns_remaining, tool_calls_remaining=tool_calls_remaining,
+        budget_provider,
+        state.messages,
+        tool_schemas,
+        feedback,
+        turn_index=turn_index,
+        turns_remaining=turns_remaining,
+        tool_calls_remaining=tool_calls_remaining,
         context_warning_remaining_fraction=config.context_warning_remaining_fraction,
         context_critical_remaining_fraction=config.context_critical_remaining_fraction,
     )
@@ -767,19 +855,26 @@ async def _emit_budget_feedback(
         if (
             remaining_tokens is not None
             and snapshot.context_window_tokens is not None
-            and remaining_tokens <= snapshot.context_window_tokens * config.context_warning_remaining_fraction
+            and remaining_tokens
+            <= snapshot.context_window_tokens * config.context_warning_remaining_fraction
         ):
             feedback.context_warning_sent = True
-    await record({
-        "event_type": "token_budget", "target_smiles": task.target_smiles,
-        "payload": {
-            **snapshot.trace_fields(), "turn_index": turn_index, "status": status,
-            "turns_remaining": turns_remaining, "tool_calls_remaining": tool_calls_remaining,
-            "content": content,
-            "message_index": len(state.messages) - 1 if content else None,
-            "message_role": state.messages[-1]["role"] if content else None,
-        },
-    })
+    await record(
+        {
+            "event_type": "token_budget",
+            "target_smiles": task.target_smiles,
+            "payload": {
+                **snapshot.trace_fields(),
+                "turn_index": turn_index,
+                "status": status,
+                "turns_remaining": turns_remaining,
+                "tool_calls_remaining": tool_calls_remaining,
+                "content": content,
+                "message_index": len(state.messages) - 1 if content else None,
+                "message_role": state.messages[-1]["role"] if content else None,
+            },
+        }
+    )
 
 
 def _prepare_call(raw: dict[str, Any], index: int) -> PreparedToolCall:
@@ -787,7 +882,8 @@ def _prepare_call(raw: dict[str, Any], index: int) -> PreparedToolCall:
     return prepare_tool_call(
         raw_name=function.get("name", raw.get("name")),
         raw_arguments=function.get("arguments", raw.get("arguments")),
-        raw_tool_call=raw, event_index=index,
+        raw_tool_call=raw,
+        event_index=index,
     )
 
 
@@ -807,19 +903,36 @@ def _canonical_tool_call(call: PreparedToolCall) -> dict[str, Any]:
 
 
 def _message_event(message: dict[str, Any], target: str) -> dict[str, Any]:
-    return {"event_type": "message", "role": message["role"], "target_smiles": target, "payload": dict(message)}
+    return {
+        "event_type": "message",
+        "role": message["role"],
+        "target_smiles": target,
+        "payload": dict(message),
+    }
 
 
 def _tool_event(kind: str, task: RolloutTask, name: str, payload: dict[str, Any]) -> dict[str, Any]:
-    return {"event_type": kind, "tool_name": name, "target_smiles": task.target_smiles, "payload": payload}
+    return {
+        "event_type": kind,
+        "tool_name": name,
+        "target_smiles": task.target_smiles,
+        "payload": payload,
+    }
 
 
 def _request_budget_event(
-    task: RolloutTask, turn: int, budget: ContextBudgetSnapshot, config: RolloutPolicyConfig,
-    *, sent: bool = True,
+    task: RolloutTask,
+    turn: int,
+    budget: ContextBudgetSnapshot,
+    config: RolloutPolicyConfig,
+    *,
+    sent: bool = True,
 ) -> dict[str, Any]:
     payload = {
-        **budget.trace_fields(), "turn_index": turn, "configured_output_tokens": config.max_tokens, "sent": sent,
+        **budget.trace_fields(),
+        "turn_index": turn,
+        "configured_output_tokens": config.max_tokens,
+        "sent": sent,
     }
     if not sent:
         # No output fit, so the rollout ended before this request.
@@ -827,16 +940,36 @@ def _request_budget_event(
     return {"event_type": "request_budget", "target_smiles": task.target_smiles, "payload": payload}
 
 
-def _termination_event(task: RolloutTask, turn: int, kind: str, message: str,
-                       provider_reason: str | None) -> dict[str, Any]:
-    return {"event_type": "controlled_termination", "target_smiles": task.target_smiles,
-            "payload": {"kind": kind, "message": message, "assistant_turn": turn + 1,
-                        "provider_finish_reason": provider_reason}}
+def _termination_event(
+    task: RolloutTask, turn: int, kind: str, message: str, provider_reason: str | None
+) -> dict[str, Any]:
+    return {
+        "event_type": "controlled_termination",
+        "target_smiles": task.target_smiles,
+        "payload": {
+            "kind": kind,
+            "message": message,
+            "assistant_turn": turn + 1,
+            "provider_finish_reason": provider_reason,
+        },
+    }
 
 
 __all__ = [
-    "AssistantTurn", "ControlledTermination", "LocalToolExecutor",
-    "RolloutResult", "RolloutState", "RolloutTask", "RolloutTransport", "ToolExecution",
-    "ToolExecutor", "call_local_tool", "request_output_budget", "run_rollout",
-    "INTENTIONAL_REASONS", "STOPPED_WITHOUT_ROUTE_REASONS", "TURN_LIMIT_REASONS", "stop_category",
+    "AssistantTurn",
+    "ControlledTermination",
+    "LocalToolExecutor",
+    "RolloutResult",
+    "RolloutState",
+    "RolloutTask",
+    "RolloutTransport",
+    "ToolExecution",
+    "ToolExecutor",
+    "call_local_tool",
+    "request_output_budget",
+    "run_rollout",
+    "INTENTIONAL_REASONS",
+    "STOPPED_WITHOUT_ROUTE_REASONS",
+    "TURN_LIMIT_REASONS",
+    "stop_category",
 ]

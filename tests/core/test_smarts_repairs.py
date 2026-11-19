@@ -47,7 +47,11 @@ CASES = [
     ("synformer:R077", ["CC(=O)NN", "OC(=N)OC"], set()),
     ("synformer:R090", ["CC(=O)CCC(C)=O", "C[NH3+]"], {"Cc1ccc(C)n1C"}),
     ("synformer:R105", ["CC(=O)c1ccccc1C(=O)O", "Cc1ccc(Br)cc1"], {"CC(=O)c1ccccc1-c1ccc(C)cc1"}),
-    ("synformer:R105", ["O=C(O)c1ccccc1[N+](=O)[O-]", "Brc1ccccc1"], {"O=[N+]([O-])c1ccccc1-c1ccccc1"}),
+    (
+        "synformer:R105",
+        ["O=C(O)c1ccccc1[N+](=O)[O-]", "Brc1ccccc1"],
+        {"O=[N+]([O-])c1ccccc1-c1ccccc1"},
+    ),
     ("ord:R199", ["CI", "CC1(C)COC(c2ccccc2)=N1"], {"Cc1ccccc1C1=NC(C)(C)CO1"}),
     ("ord:R199", ["CCCC[Li]", "c1ccccc1"], set()),
     ("ord:R202", ["C=O", "CCNCC"], {"CCN(C)CC"}),
@@ -68,12 +72,15 @@ def test_repaired_rule_products(tools, reaction_id, reactants, expected):
 
 
 # Exact precursor SMILES exclude radicals and dummy atoms from reverse execution.
-@pytest.mark.parametrize(("reaction_id", "reactants", "product"), [
-    ("synformer:R051", ["CC(=O)NN", "CC(=O)O"], "Cc1nnc(C)o1"),
-    ("synformer:R062", ["CC(=O)NN", "CN=C=S"], "CNc1nnc(C)o1"),
-    ("synformer:R070", ["NC(=S)N(C)C", "CC(=O)NN"], "Cc1nnc(N(C)C)[nH]1"),
-    ("synformer:R077", ["CC(=O)NN", "CC(=N)OC"], "Cc1nnc(C)[nH]1"),
-])
+@pytest.mark.parametrize(
+    ("reaction_id", "reactants", "product"),
+    [
+        ("synformer:R051", ["CC(=O)NN", "CC(=O)O"], "Cc1nnc(C)o1"),
+        ("synformer:R062", ["CC(=O)NN", "CN=C=S"], "CNc1nnc(C)o1"),
+        ("synformer:R070", ["NC(=S)N(C)C", "CC(=O)NN"], "Cc1nnc(N(C)C)[nH]1"),
+        ("synformer:R077", ["CC(=O)NN", "CC(=N)OC"], "Cc1nnc(C)[nH]1"),
+    ],
+)
 def test_hydrogen_queries_recover_precursors(tools, reaction_id, reactants, product):
     forward = tools.simulate_reaction(reaction_id, reactants)
     assert set(forward["generated_products"]) == {_canonical(product)}
@@ -86,18 +93,34 @@ def test_hydrogen_queries_recover_precursors(tools, reaction_id, reactants, prod
 # The labelled donor atom must reach the product (same unlabelled product before and after).
 LABELS = [
     ("paroutes:PRECF08F5BBF5F", ["[13CH2]=CCOc1ccccc1"], "C=C[13CH2]c1ccccc1O"),
-    ("ord:R053", [ARYL_BROMIDE, "CCCC[Sn](CCCC)(CCCC)[13CH]=C"],
-     "C=[13CH]c1c(CC)nc(CCC)n(Cc2ccc(-c3ccccc3C#N)cc2)c1=O"),
-    ("ord:R065", [ENAMINONE, "[15NH2]Nc1ccccc1"], "Cc1cccc(-n2ccc(=O)c(-c3cc[15n]n3-c3ccccc3)n2)c1"),
-    ("ord:R194", ["[13CH3][P+](c1ccccc1)(c1ccccc1)c1ccccc1", "O=Cc1ccc(Cl)nc1"], "[13CH2]=Cc1ccc(Cl)nc1"),
-    ("ord:R200", ["CC[Mg]Br", "COC(=[18O])COc1ccc(C(CC)(CC)c2cc(C)cs2)cc1C", "CC[Mg]Br"],
-     "CCC([18OH])(CC)COc1ccc(C(CC)(CC)c2cc(C)cs2)cc1C"),
+    (
+        "ord:R053",
+        [ARYL_BROMIDE, "CCCC[Sn](CCCC)(CCCC)[13CH]=C"],
+        "C=[13CH]c1c(CC)nc(CCC)n(Cc2ccc(-c3ccccc3C#N)cc2)c1=O",
+    ),
+    (
+        "ord:R065",
+        [ENAMINONE, "[15NH2]Nc1ccccc1"],
+        "Cc1cccc(-n2ccc(=O)c(-c3cc[15n]n3-c3ccccc3)n2)c1",
+    ),
+    (
+        "ord:R194",
+        ["[13CH3][P+](c1ccccc1)(c1ccccc1)c1ccccc1", "O=Cc1ccc(Cl)nc1"],
+        "[13CH2]=Cc1ccc(Cl)nc1",
+    ),
+    (
+        "ord:R200",
+        ["CC[Mg]Br", "COC(=[18O])COc1ccc(C(CC)(CC)c2cc(C)cs2)cc1C", "CC[Mg]Br"],
+        "CCC([18OH])(CC)COc1ccc(C(CC)(CC)c2cc(C)cs2)cc1C",
+    ),
 ]
 
 
 @pytest.mark.parametrize(("reaction_id", "reactants", "expected"), LABELS)
 def test_repaired_rule_atom_correspondence(tools, reaction_id, reactants, expected):
-    reaction = rdChemReactions.ReactionFromSmarts(tools.get_reaction_template(reaction_id)["template"]["smarts"])
+    reaction = rdChemReactions.ReactionFromSmarts(
+        tools.get_reaction_template(reaction_id)["template"]["smarts"]
+    )
     products = set()
     for output in reaction.RunReactants(tuple(Chem.MolFromSmiles(s) for s in reactants)):
         Chem.SanitizeMol(output[0])
@@ -107,6 +130,8 @@ def test_repaired_rule_atom_correspondence(tools, reaction_id, reactants, expect
 
 def test_triazole_rule_matches_its_product_in_reverse(tools):
     # R065 once read [nHo+0] (holmium), so the reversed rule matched nothing.
-    reactants, products = tools.get_reaction_template("synformer:R065")["template"]["smarts"].split(">>")
+    reactants, products = tools.get_reaction_template("synformer:R065")["template"]["smarts"].split(
+        ">>"
+    )
     reverse = rdChemReactions.ReactionFromSmarts(f"{products}>>{reactants}")
     assert reverse.RunReactants((Chem.MolFromSmiles("Cc1nc(-c2cn(-c3ccccc3)nn2)c(C)s1"),))

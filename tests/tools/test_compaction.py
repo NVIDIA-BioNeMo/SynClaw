@@ -217,14 +217,15 @@ def test_building_block_compaction_keeps_one_reference_one_smiles_and_the_match(
     ]
 
 
-
 def test_building_block_compaction_keeps_a_rejected_query_error(tmp_path):
     database = tmp_path / "test.sqlite"
     (tmp_path / "bbs.txt").write_text("SMILES\nCCO\n", encoding="utf-8")
     db.ingest_building_blocks(tmp_path / "bbs.txt", database)
     db.prepare_building_block_search(database)
 
-    rejected = call_local_tool(SynthesisTools(database), "search_building_blocks", {"query": "C1CC("})
+    rejected = call_local_tool(
+        SynthesisTools(database), "search_building_blocks", {"query": "C1CC("}
+    )
     compact = compact_tool_result("search_building_blocks", rejected)
 
     assert compact["valid"] is False
@@ -243,7 +244,9 @@ def test_template_compaction_omits_empty_annotation_fields():
         "reactant_roles": [],
     }
 
-    search = compact_tool_result("search_reaction_templates", {"query": "R001", "results": [template]})
+    search = compact_tool_result(
+        "search_reaction_templates", {"query": "R001", "results": [template]}
+    )
     simulate = compact_tool_result(
         "simulate_reaction", {"reaction_id": "demo:R001", "valid": True, "template": template}
     )
@@ -251,6 +254,7 @@ def test_template_compaction_omits_empty_annotation_fields():
     expected = {"reaction_id": "demo:R001", "name": "R001", "smarts": "[C:1]=[O:2]>>[C:1][O:2]"}
     assert search["results"] == [expected]
     assert simulate["template"] == expected
+
 
 def test_reverse_planning_compaction_drops_fixed_next_step_text():
     next_step = "No fully grounded reverse candidate was found."

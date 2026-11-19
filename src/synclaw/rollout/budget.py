@@ -56,7 +56,8 @@ class ContextBudgetSnapshot:
 
     def trace_fields(self) -> dict[str, Any]:
         return {
-            **asdict(self), "remaining_tokens": self.remaining_tokens,
+            **asdict(self),
+            "remaining_tokens": self.remaining_tokens,
             "request_output_tokens": self.max_output_tokens,
         }
 
@@ -178,9 +179,7 @@ class ContextTokenEstimator:
         occupied = None
         source = "unavailable"
         opaque = _opaque_input(payload)
-        if not opaque and (
-            not server_managed or self.continuation_tokens is not None
-        ):
+        if not opaque and (not server_managed or self.continuation_tokens is not None):
             occupied = math.ceil(serialized_input_bytes(payload) * self.tokens_per_byte)
             source = "provider_calibrated_utf8" if self.calibrated else "utf8_estimate"
             if server_managed:
@@ -205,10 +204,11 @@ class ContextTokenEstimator:
             or not isinstance(payload, dict)
             or not isinstance(payload.get("input"), list)
             or len(payload["input"]) < self.replay_prefix_length
-            or _replay_prefix_digest(payload, self.replay_prefix_length) != self.replay_prefix_digest
+            or _replay_prefix_digest(payload, self.replay_prefix_length)
+            != self.replay_prefix_digest
         ):
             return None
-        appended = payload["input"][self.replay_prefix_length:]
+        appended = payload["input"][self.replay_prefix_length :]
         if _opaque_input(appended):
             return None
         # Count only the appended JSON list contents and its separator from the
@@ -282,9 +282,11 @@ def _feedback_text(
     # A limit is restated only if it differs from the one the model was told.
     parts = limit_sentences(
         snapshot.context_window_tokens
-        if snapshot.context_window_tokens != state.announced_context_limit else None,
+        if snapshot.context_window_tokens != state.announced_context_limit
+        else None,
         snapshot.max_output_tokens
-        if snapshot.max_output_tokens != state.announced_output_limit else None,
+        if snapshot.max_output_tokens != state.announced_output_limit
+        else None,
     )
     remaining = [
         f"{count} {noun}{'' if count == 1 else 's'}"
@@ -293,7 +295,9 @@ def _feedback_text(
     ]
     remaining_tokens = snapshot.remaining_tokens
     if remaining_tokens is not None:
-        count = f"~{_rounded_tokens(remaining_tokens)}" if snapshot.estimated else str(remaining_tokens)
+        count = (
+            f"~{_rounded_tokens(remaining_tokens)}" if snapshot.estimated else str(remaining_tokens)
+        )
         remaining.append(f"{count} context tokens")
     if remaining:
         parts.append("Remaining: " + ", ".join(remaining) + ".")
@@ -323,7 +327,10 @@ def _rounded_tokens(count: int) -> str:
 
 
 def with_harness_feedback(
-    messages: Sequence[dict[str, Any]], content: str, *, field: str = "budget",
+    messages: Sequence[dict[str, Any]],
+    content: str,
+    *,
+    field: str = "budget",
 ) -> list[dict[str, Any]] | None:
     """Attach feedback to pending input without creating another user turn.
 
@@ -360,7 +367,8 @@ def initialize_budget_feedback(config: RolloutPolicyConfig) -> BudgetFeedbackSta
     """
 
     return BudgetFeedbackState(
-        announced_context_limit=config.stated_max_model_len, announced_output_limit=config.max_tokens,
+        announced_context_limit=config.stated_max_model_len,
+        announced_output_limit=config.max_tokens,
     )
 
 
@@ -387,7 +395,10 @@ def prepare_budget_feedback(
     if snapshot.input_tokens is not None:
         snapshot = replace(snapshot, input_tokens=snapshot.input_tokens + FEEDBACK_ALLOWANCE_TOKENS)
     content = _feedback_text(
-        snapshot, state, turns_remaining=turns_remaining, tool_calls_remaining=tool_calls_remaining,
+        snapshot,
+        state,
+        turns_remaining=turns_remaining,
+        tool_calls_remaining=tool_calls_remaining,
         context_warning_remaining_fraction=context_warning_remaining_fraction,
         context_critical_remaining_fraction=context_critical_remaining_fraction,
     )

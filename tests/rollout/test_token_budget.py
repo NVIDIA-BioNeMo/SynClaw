@@ -50,9 +50,12 @@ def with_allowance(snapshot):
 @pytest.mark.parametrize("context", [50000, None])
 def test_initial_limits_are_in_system_prompt_and_not_repeated_in_feedback(context):
     # A finite turn budget, so the config is valid with no context limit too.
-    config = RolloutPolicyConfig(max_tool_calls=150, max_turns=40, max_model_len=context, max_tokens=1000)
+    config = RolloutPolicyConfig(
+        max_tool_calls=150, max_turns=40, max_model_len=context, max_tokens=1000
+    )
     messages = build_initial_messages(
-        task={"system_prompt": "Plan syntheses.", "question": "Plan CCO."}, config=config,
+        task={"system_prompt": "Plan syntheses.", "question": "Plan CCO."},
+        config=config,
     )
     state = initialize_budget_feedback(config)
     assert len(messages) == 2
@@ -66,7 +69,11 @@ def test_initial_limits_are_in_system_prompt_and_not_repeated_in_feedback(contex
         return replace(provider(messages, tools), context_window_tokens=context)
 
     content, snapshot, status = prepare_budget_feedback(
-        configured, messages, [], state, turn_index=0,
+        configured,
+        messages,
+        [],
+        state,
+        turn_index=0,
     )
     if context is None:
         assert content is None and status == "unavailable_or_unchanged"
@@ -97,7 +104,13 @@ def test_combined_feedback_counts_turn_and_tool_text_in_its_token_estimate():
     state = BudgetFeedbackState(50000, 1000)
     messages = [{"role": "user", "content": "plan"}]
     content, snapshot, status = prepare_budget_feedback(
-        estimated, messages, [], state, turn_index=1, turns_remaining=79, tool_calls_remaining=145,
+        estimated,
+        messages,
+        [],
+        state,
+        turn_index=1,
+        turns_remaining=79,
+        tool_calls_remaining=145,
     )
     assert status == "emitted"
     assert content.startswith(
@@ -119,11 +132,18 @@ def test_feedback_warns_near_context_limit_without_reducing_output_cap():
 
     def near_limit(messages, tools):
         return ContextBudgetSnapshot(
-            262144, 231000 + serialized_input_bytes(messages), 32768, estimated=True,
+            262144,
+            231000 + serialized_input_bytes(messages),
+            32768,
+            estimated=True,
         )
 
     text, snapshot, status = prepare_budget_feedback(
-        near_limit, messages, [], BudgetFeedbackState(262144, 32768), turn_index=5,
+        near_limit,
+        messages,
+        [],
+        BudgetFeedbackState(262144, 32768),
+        turn_index=5,
     )
     assert status == "emitted"
     assert "This response is limited to" not in text
@@ -134,18 +154,23 @@ def test_feedback_warns_near_context_limit_without_reducing_output_cap():
     assert json.loads(messages[-1]["content"]) == {"result": "CCO"}  # Preview is pure.
 
 
-@pytest.mark.parametrize("remaining,warning_sent,expected", [
-    (5001, False, None),
-    (5000, False, "Context is running low."),
-    (4999, False, "Context is running low."),
-    (5000, True, None),
-    (2501, True, None),
-    (2500, False, "Your context window is nearly exhausted."),
-    (2500, True, "Your context window is nearly exhausted."),
-    (2499, True, "Your context window is nearly exhausted."),
-    (None, False, None),
-])
-def test_context_submission_warning_thresholds_do_not_consume_state(remaining, warning_sent, expected):
+@pytest.mark.parametrize(
+    "remaining,warning_sent,expected",
+    [
+        (5001, False, None),
+        (5000, False, "Context is running low."),
+        (4999, False, "Context is running low."),
+        (5000, True, None),
+        (2501, True, None),
+        (2500, False, "Your context window is nearly exhausted."),
+        (2500, True, "Your context window is nearly exhausted."),
+        (2499, True, "Your context window is nearly exhausted."),
+        (None, False, None),
+    ],
+)
+def test_context_submission_warning_thresholds_do_not_consume_state(
+    remaining, warning_sent, expected
+):
     def assessed(messages, tools):
         occupied = None if remaining is None else 10000 - remaining - FEEDBACK_ALLOWANCE_TOKENS
         return ContextBudgetSnapshot(10000, occupied, 1000, estimated=False)
@@ -153,7 +178,11 @@ def test_context_submission_warning_thresholds_do_not_consume_state(remaining, w
     state = BudgetFeedbackState(10000, 1000, context_warning_sent=warning_sent)
     original = state.checkpoint_fields()
     content, _, status = prepare_budget_feedback(
-        assessed, [{"role": "user", "content": "plan"}], [], state, turn_index=0,
+        assessed,
+        [{"role": "user", "content": "plan"}],
+        [],
+        state,
+        turn_index=0,
         turns_remaining=80,
     )
     assert status == "emitted"
@@ -166,23 +195,33 @@ def test_context_submission_warning_thresholds_do_not_consume_state(remaining, w
 
 def test_feedback_never_creates_a_user_turn_after_an_assistant():
     messages = [{"role": "assistant", "content": "done", "reasoning_content": "retained"}]
-    text, _, status = prepare_budget_feedback(provider, messages, [], BudgetFeedbackState(), turn_index=1)
+    text, _, status = prepare_budget_feedback(
+        provider, messages, [], BudgetFeedbackState(), turn_index=1
+    )
     assert text is None and status == "no_pending_input"
     assert messages[0]["reasoning_content"] == "retained"
 
 
-@pytest.mark.parametrize("tool_calls,expected", [
-    (None, "Remaining: 1 turn."),
-    (0, "Remaining: 1 turn, 0 tool calls."),
-    (1, "Remaining: 1 turn, 1 tool call."),
-])
+@pytest.mark.parametrize(
+    "tool_calls,expected",
+    [
+        (None, "Remaining: 1 turn."),
+        (0, "Remaining: 1 turn, 0 tool calls."),
+        (1, "Remaining: 1 turn, 1 tool call."),
+    ],
+)
 def test_known_rollout_counts_remain_available_without_context_usage(tool_calls, expected):
     def unknown(messages, tools):
         return ContextBudgetSnapshot(context_window_tokens=50000, max_output_tokens=1000)
 
     content, snapshot, status = prepare_budget_feedback(
-        unknown, [], [], BudgetFeedbackState(50000, 1000), turn_index=3,
-        turns_remaining=1, tool_calls_remaining=tool_calls,
+        unknown,
+        [],
+        [],
+        BudgetFeedbackState(50000, 1000),
+        turn_index=3,
+        turns_remaining=1,
+        tool_calls_remaining=tool_calls,
     )
     assert status == "emitted" and content == expected
     assert snapshot.remaining_tokens is None
@@ -341,11 +380,16 @@ def test_opaque_replay_uses_latest_usage_and_only_new_readable_input(ciphertext_
     estimator = ContextTokenEstimator()
     request = {"input": [{"role": "user", "content": "plan"}], "tools": []}
     output = [{"type": "reasoning", "id": "rs_1", "encrypted_content": "x" * ciphertext_size}]
-    estimator.observe(request, {
-        "input_tokens": 16_725, "output_tokens": 349,
-        "input_tokens_details": {"cached_tokens": 7_857},
-        "output_tokens_details": {"reasoning_tokens": 99},
-    }, replay_output=output)
+    estimator.observe(
+        request,
+        {
+            "input_tokens": 16_725,
+            "output_tokens": 349,
+            "input_tokens_details": {"cached_tokens": 7_857},
+            "output_tokens_details": {"reasoning_tokens": 99},
+        },
+        replay_output=output,
+    )
     retained = {**request, "input": [*request["input"], *output]}
 
     def snapshot(payload):
@@ -355,9 +399,17 @@ def test_opaque_replay_uses_latest_usage_and_only_new_readable_input(ciphertext_
     assert snapshot(retained).input_tokens == 17_074
     assert snapshot(retained).source == "provider_usage_plus_replay_delta"
     assert snapshot(retained).estimated
-    following = {**retained, "input": [*retained["input"], {
-        "type": "function_call_output", "call_id": "call1", "output": "result",
-    }]}
+    following = {
+        **retained,
+        "input": [
+            *retained["input"],
+            {
+                "type": "function_call_output",
+                "call_id": "call1",
+                "output": "result",
+            },
+        ],
+    }
     assert snapshot(following).input_tokens > 17_074
     rate = estimator.tokens_per_byte
     estimator.observe(following, {"input_tokens": 31_519, "output_tokens": 415}, replay_output=[])
@@ -393,14 +445,24 @@ def test_replay_anchor_survives_sorted_json_checkpoint():
     request = {"input": [{"role": "user", "content": "plan"}], "tools": []}
     output = [{"type": "reasoning", "id": "rs_1", "encrypted_content": "opaque"}]
     estimator.observe(request, {"input_tokens": 1000, "output_tokens": 100}, replay_output=output)
-    checkpoint = json.loads(json.dumps({
-        "estimator": estimator.checkpoint_fields(),
-        "payload": {**request, "input": [*request["input"], *output]},
-    }, sort_keys=True))
+    checkpoint = json.loads(
+        json.dumps(
+            {
+                "estimator": estimator.checkpoint_fields(),
+                "payload": {**request, "input": [*request["input"], *output]},
+            },
+            sort_keys=True,
+        )
+    )
     restored = ContextTokenEstimator.from_checkpoint(checkpoint["estimator"])
-    assert restored.snapshot(
-        checkpoint["payload"], context_window_tokens=10000, max_output_tokens=1000,
-    ).input_tokens == 1100
+    assert (
+        restored.snapshot(
+            checkpoint["payload"],
+            context_window_tokens=10000,
+            max_output_tokens=1000,
+        ).input_tokens
+        == 1100
+    )
 
 
 class _Transport:
@@ -433,16 +495,25 @@ class _Tools:
 
 
 def _run(
-    transport, *, state=None, start=0, enabled=True, budget_provider=provider,
-    max_tool_calls=150, max_turns=4,
+    transport,
+    *,
+    state=None,
+    start=0,
+    enabled=True,
+    budget_provider=provider,
+    max_tool_calls=150,
+    max_turns=4,
 ):
     return asyncio.run(
         run_rollout(
             task=RolloutTask("fixture", "CCO", ({"role": "user", "content": "plan"},)),
             # No safety margin, so near-full contexts still send requests and reach the warnings.
             config=RolloutPolicyConfig(
-                max_turns=max_turns, turn_warning_remaining=3, budget_feedback=enabled,
-                max_tool_calls=max_tool_calls, context_safety_margin_fraction=0,
+                max_turns=max_turns,
+                turn_warning_remaining=3,
+                budget_feedback=enabled,
+                max_tool_calls=max_tool_calls,
+                context_safety_margin_fraction=0,
             ),
             transport=transport,
             tool_executor=_Tools(),
@@ -454,28 +525,41 @@ def _run(
     )
 
 
-@pytest.mark.parametrize("remaining", [
-    [5001, 5000, 4000, 2501, 2500, 2000, 3000],
-    [2000, 3000, 2000],  # Jump straight to the stronger warning, then recalibrate upward.
-])
+@pytest.mark.parametrize(
+    "remaining",
+    [
+        [5001, 5000, 4000, 2501, 2500, 2000, 3000],
+        [2000, 3000, 2000],  # Jump straight to the stronger warning, then recalibrate upward.
+    ],
+)
 def test_context_warnings_repeat_only_below_quarter_and_preserve_reasoning(remaining):
     def assessed(messages, tools):
         turn = sum(m["role"] == "assistant" for m in messages)
         occupied = 10000 - remaining[turn] - FEEDBACK_ALLOWANCE_TOKENS
         return ContextBudgetSnapshot(10000, occupied, 1000, estimated=False)
 
-    transport = _Transport([
-        *[
-            AssistantTurn({
-                "reasoning_content": "retained reasoning",
-                "tool_calls": [{"id": f"call{i}", "function": {
-                    "name": "search_building_blocks", "arguments": '{"query":"CCO"}',
-                }}],
-            })
-            for i in range(len(remaining) - 1)
-        ],
-        ControlledTermination("fixture", "end"),
-    ])
+    transport = _Transport(
+        [
+            *[
+                AssistantTurn(
+                    {
+                        "reasoning_content": "retained reasoning",
+                        "tool_calls": [
+                            {
+                                "id": f"call{i}",
+                                "function": {
+                                    "name": "search_building_blocks",
+                                    "arguments": '{"query":"CCO"}',
+                                },
+                            }
+                        ],
+                    }
+                )
+                for i in range(len(remaining) - 1)
+            ],
+            ControlledTermination("fixture", "end"),
+        ]
+    )
     result = _run(transport, budget_provider=assessed, max_turns=80)
     budgets = [e["payload"] for e in result.state.events if e["event_type"] == "token_budget"]
     assert [b["remaining_tokens"] for b in budgets] == remaining
@@ -491,11 +575,14 @@ def test_context_warnings_repeat_only_below_quarter_and_preserve_reasoning(remai
         if i:
             assert messages[-1]["role"] == "tool"
             assert json.loads(messages[-1]["content"])["budget"] == content
-            assert all(m["reasoning_content"] == "retained reasoning"
-                       for m in messages if m["role"] == "assistant")
-    restored = BudgetFeedbackState.from_checkpoint(json.loads(json.dumps(
-        result.state.budget_feedback.checkpoint_fields()
-    )))
+            assert all(
+                m["reasoning_content"] == "retained reasoning"
+                for m in messages
+                if m["role"] == "assistant"
+            )
+    restored = BudgetFeedbackState.from_checkpoint(
+        json.loads(json.dumps(result.state.budget_feedback.checkpoint_fields()))
+    )
     assert restored.context_warning_sent
 
 
@@ -508,10 +595,11 @@ def test_context_warning_survives_failed_request_resume_without_repetition():
         _run(_Transport([RuntimeError("offline")]), state=state, budget_provider=assessed)
     assert state.budget_feedback.context_warning_sent
     resumed = RolloutState(
-        messages=copy.deepcopy(state.messages), events=copy.deepcopy(state.events),
-        budget_feedback=BudgetFeedbackState.from_checkpoint(json.loads(json.dumps(
-            state.budget_feedback.checkpoint_fields()
-        ))),
+        messages=copy.deepcopy(state.messages),
+        events=copy.deepcopy(state.events),
+        budget_feedback=BudgetFeedbackState.from_checkpoint(
+            json.loads(json.dumps(state.budget_feedback.checkpoint_fields()))
+        ),
     )
     transport = _Transport([ControlledTermination("fixture", "end")])
     _run(transport, state=resumed, budget_provider=assessed)
@@ -519,7 +607,11 @@ def test_context_warning_survives_failed_request_resume_without_repetition():
     assert sum(e["event_type"] == "token_budget" for e in resumed.events) == 1
     # A later turn at the same occupancy keeps its counts but omits the one-time instruction.
     content, _, status = prepare_budget_feedback(
-        assessed, [{"role": "tool", "content": '{}'}], [], resumed.budget_feedback, turn_index=1,
+        assessed,
+        [{"role": "tool", "content": "{}"}],
+        [],
+        resumed.budget_feedback,
+        turn_index=1,
     )
     assert status == "emitted" and "submit_pathway" not in content
 
@@ -631,7 +723,9 @@ def test_loop_feedback_handles_disabled_or_exhausted_tool_limit(limit, used, tur
     state.policy.total_tool_calls = used
     transport = _Transport([ControlledTermination("fixture", "end")])
     result = _run(transport, state=state, max_tool_calls=limit)
-    budget = next(e["payload"] for e in result.state.events if e.get("event_type") == "token_budget")
+    budget = next(
+        e["payload"] for e in result.state.events if e.get("event_type") == "token_budget"
+    )
     assert budget["turns_remaining"] == turns
     assert budget["tool_calls_remaining"] == remaining
     content = transport.requests[0][0][-1]["content"]
@@ -647,19 +741,36 @@ def test_unlimited_budgets_drop_their_clauses_from_the_prompt():
     task = {"system_prompt": "Plan syntheses.", "question": "Plan CCO."}
 
     def prompt(**budgets):
-        return build_initial_messages(task=task, config=RolloutPolicyConfig(**budgets))[0]["content"]
+        return build_initial_messages(task=task, config=RolloutPolicyConfig(**budgets))[0][
+            "content"
+        ]
 
-    assert prompt(
-        max_tool_calls=0, max_turns=None, max_tokens=None, max_model_len=50000, context_limit_stated=False,
-    ) == "Plan syntheses."
-    turns_only = prompt(max_tool_calls=0, max_turns=40, max_tokens=None, max_model_len=50000, context_limit_stated=False)
+    assert (
+        prompt(
+            max_tool_calls=0,
+            max_turns=None,
+            max_tokens=None,
+            max_model_len=50000,
+            context_limit_stated=False,
+        )
+        == "Plan syntheses."
+    )
+    turns_only = prompt(
+        max_tool_calls=0,
+        max_turns=40,
+        max_tokens=None,
+        max_model_len=50000,
+        context_limit_stated=False,
+    )
     assert turns_only == "Plan syntheses.\n\nUse no more than 40 assistant turns."
     context_only = prompt(max_tool_calls=0, max_turns=None, max_tokens=None, max_model_len=50000)
     assert context_only.startswith("Plan syntheses.\n\nYour context-window budget is 50000 tokens")
     assert "Use no more than" not in context_only and "capped" not in context_only
 
 
-@pytest.mark.parametrize(("input_tokens", "expected"), [(100000, 50000 - 8192 - 0), (None, 50000 - 8192)])
+@pytest.mark.parametrize(
+    ("input_tokens", "expected"), [(100000, 50000 - 8192 - 0), (None, 50000 - 8192)]
+)
 def test_an_unlimited_output_cap_is_bounded_only_by_the_context(input_tokens, expected):
     snapshot = ContextBudgetSnapshot(150000 if input_tokens else 50000, input_tokens, None)
 
@@ -668,11 +779,14 @@ def test_an_unlimited_output_cap_is_bounded_only_by_the_context(input_tokens, ex
     assert budget.max_output_tokens == expected
 
 
-@pytest.mark.parametrize(("input_tokens", "expected"), [
-    (100000, 32768),  # Room for the full cap.
-    (240000, 13952),  # 262144 - 240000 - 8192: clipped to the context left.
-    (254000, None),  # Nothing left after the margin: end before the request.
-])
+@pytest.mark.parametrize(
+    ("input_tokens", "expected"),
+    [
+        (100000, 32768),  # Room for the full cap.
+        (240000, 13952),  # 262144 - 240000 - 8192: clipped to the context left.
+        (254000, None),  # Nothing left after the margin: end before the request.
+    ],
+)
 def test_each_request_is_clipped_and_recorded_before_it_is_sent(input_tokens, expected):
     sent = []
 
@@ -681,12 +795,16 @@ def test_each_request_is_clipped_and_recorded_before_it_is_sent(input_tokens, ex
             sent.append(max_output_tokens)
             raise ControlledTermination("context_window_exceeded", "provider rejected the request")
 
-    result = asyncio.run(run_rollout(
-        task=RolloutTask("fixture", "CCO", ({"role": "user", "content": "plan"},)),
-        config=RolloutPolicyConfig(max_model_len=262144),
-        transport=Recording([]), tool_executor=_Tools(), tool_schemas=[],
-        budget_provider=lambda *_: ContextBudgetSnapshot(262144, input_tokens, 32768),
-    ))
+    result = asyncio.run(
+        run_rollout(
+            task=RolloutTask("fixture", "CCO", ({"role": "user", "content": "plan"},)),
+            config=RolloutPolicyConfig(max_model_len=262144),
+            transport=Recording([]),
+            tool_executor=_Tools(),
+            tool_schemas=[],
+            budget_provider=lambda *_: ContextBudgetSnapshot(262144, input_tokens, 32768),
+        )
+    )
 
     budget = next(e["payload"] for e in result.state.events if e["event_type"] == "request_budget")
     assert result.termination_kind == "context_window_exceeded"
@@ -694,4 +812,6 @@ def test_each_request_is_clipped_and_recorded_before_it_is_sent(input_tokens, ex
     assert sent == ([] if expected is None else [expected])
     assert budget["request_output_tokens"] == (expected or 0)
     assert budget["sent"] is (expected is not None)
-    assert budget_summary_fields(result.state.events)["last_request_output_tokens"] == (expected or 0)
+    assert budget_summary_fields(result.state.events)["last_request_output_tokens"] == (
+        expected or 0
+    )

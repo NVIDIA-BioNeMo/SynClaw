@@ -55,10 +55,15 @@ def _submit_call(arguments: dict) -> dict:
     """A submit_pathway call event as the rollout loop records it."""
 
     call = prepare_tool_call(
-        raw_name="submit_pathway", raw_arguments=arguments, raw_tool_call={}, event_index=0,
+        raw_name="submit_pathway",
+        raw_arguments=arguments,
+        raw_tool_call={},
+        event_index=0,
     )
     return {
-        "event_type": "tool_call", "tool_name": "submit_pathway", "target_smiles": TARGET,
+        "event_type": "tool_call",
+        "tool_name": "submit_pathway",
+        "target_smiles": TARGET,
         "payload": call.event_payload,
     }
 
@@ -125,9 +130,7 @@ def test_replay_keeps_the_target_hidden_when_the_run_did(db_path: Path) -> None:
     hidden_event = hidden_target_event(TARGET, frozenset({1}))
 
     assert replay_selected_submission([call], db_path, TARGET)["accepted"] is True
-    replayed = replay_selected_submission(
-        [hidden_event, call], db_path, TARGET, hide_target=True
-    )
+    replayed = replay_selected_submission([hidden_event, call], db_path, TARGET, hide_target=True)
     assert replayed["accepted"] is False
 
 
@@ -142,48 +145,87 @@ def test_summary_fields_report_the_setting_and_hidden_ids() -> None:
     }
 
 
-@pytest.mark.parametrize(("flags", "hidden_ids", "hide_target"), [
-    (["--hide-target-building-block"], frozenset({1}), True),
-    (["--hide-building-block-id", "2"], frozenset({2}), False),
-    (["--hide-target-building-block", "--hide-building-block-id", "2"], frozenset({1, 2}), True),
-    (["--hide-building-block-similarity", "1"], frozenset({1}), True),
-])
+@pytest.mark.parametrize(
+    ("flags", "hidden_ids", "hide_target"),
+    [
+        (["--hide-target-building-block"], frozenset({1}), True),
+        (["--hide-building-block-id", "2"], frozenset({2}), False),
+        (
+            ["--hide-target-building-block", "--hide-building-block-id", "2"],
+            frozenset({1, 2}),
+            True,
+        ),
+        (["--hide-building-block-similarity", "1"], frozenset({1}), True),
+    ],
+)
 def test_hosted_run_records_the_hidden_target(
-    tmp_path: Path, db_path: Path, monkeypatch: pytest.MonkeyPatch,
-    flags: list[str], hidden_ids: frozenset[int], hide_target: bool,
+    tmp_path: Path,
+    db_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    flags: list[str],
+    hidden_ids: frozenset[int],
+    hide_target: bool,
 ) -> None:
     taskset = tmp_path / "tasks.jsonl"
     taskset.write_text(
-        json.dumps({
-            "task_id": "fixture", "target_smiles": TARGET, "system_prompt": "Plan syntheses.",
-            "question": "Make the target.", "prompt_fingerprint": PROMPT_FINGERPRINT,
-        })
+        json.dumps(
+            {
+                "task_id": "fixture",
+                "target_smiles": TARGET,
+                "system_prompt": "Plan syntheses.",
+                "question": "Make the target.",
+                "prompt_fingerprint": PROMPT_FINGERPRINT,
+            }
+        )
         + "\n"
     )
     parser = argparse.ArgumentParser()
     model_runner.add_arguments(parser)
-    args = parser.parse_args([
-        "--model", "fixture", "--api-mode", "chat", "--taskset", str(taskset),
-        "--db", str(db_path), "--trace", str(tmp_path / "trace.jsonl"),
-        "--summary-output", str(tmp_path / "summary.csv"), "--max-turns", "1",
-        *flags,
-    ])
+    args = parser.parse_args(
+        [
+            "--model",
+            "fixture",
+            "--api-mode",
+            "chat",
+            "--taskset",
+            str(taskset),
+            "--db",
+            str(db_path),
+            "--trace",
+            str(tmp_path / "trace.jsonl"),
+            "--summary-output",
+            str(tmp_path / "summary.csv"),
+            "--max-turns",
+            "1",
+            *flags,
+        ]
+    )
     monkeypatch.setattr(model_runner, "resolve_api_key", lambda *args, **kwargs: "fixture-key")
-    monkeypatch.setattr(model_runner.prompts, "validate_model_run_database", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        model_runner.prompts, "validate_model_run_database", lambda *args, **kwargs: None
+    )
     requests = []
     scans = []
     original = fingerprint_index.FingerprintIndex.top_k
+
     def tracked(self, query, k, **kwargs):
         if k is None:
             scans.append(True)
         return original(self, query, k, **kwargs)
+
     monkeypatch.setattr(fingerprint_index.FingerprintIndex, "top_k", tracked)
+
     def completion(**kwargs):
         # The runner must resolve similarity exclusions before the first provider call.
         if args.hide_building_block_similarity is not None:
             assert scans == [True]
         requests.append(True)
-        return {"choices": [{"message": {"role": "assistant", "content": "Done."}, "finish_reason": "stop"}]}
+        return {
+            "choices": [
+                {"message": {"role": "assistant", "content": "Done."}, "finish_reason": "stop"}
+            ]
+        }
+
     monkeypatch.setattr(
         model_runner,
         "chat_completion",
@@ -195,7 +237,9 @@ def test_hosted_run_records_the_hidden_target(
     events = [json.loads(line) for line in Path(args.trace).read_text().splitlines()]
     assert requests
     assert events[0] == hidden_target_event(
-        TARGET, hidden_ids, hide_target=hide_target,
+        TARGET,
+        hidden_ids,
+        hide_target=hide_target,
         similarity_threshold=args.hide_building_block_similarity,
     )
     assert summary["target_hidden_from_stock"] is hide_target
@@ -249,7 +293,8 @@ def test_fixed_ids_replay_without_target_hiding(db_path: Path) -> None:
     assert replay_selected_submission([call], db_path, TARGET)["accepted"]
     assert not replay_selected_submission([event, call], db_path, TARGET)["accepted"]
     assert hidden_target_summary_fields([event]) == {
-        "target_hidden_from_stock": False, "hidden_building_block_ids": "[2]",
+        "target_hidden_from_stock": False,
+        "hidden_building_block_ids": "[2]",
     }
 
 
@@ -263,10 +308,18 @@ def test_fixed_ids_must_exist(db_path: Path, bb_id: int) -> None:
 def test_resume_requires_the_same_fixed_set() -> None:
     parser = argparse.ArgumentParser()
     model_runner.add_arguments(parser)
-    args = parser.parse_args([
-        "--model", "fixture", "--hide-building-block-id", "2",
-        "--hide-building-block-id", "1", "--hide-building-block-id", "2",
-    ])
+    args = parser.parse_args(
+        [
+            "--model",
+            "fixture",
+            "--hide-building-block-id",
+            "2",
+            "--hide-building-block-id",
+            "1",
+            "--hide-building-block-id",
+            "2",
+        ]
+    )
     task = {"task_id": "fixture", "target_smiles": TARGET}
     checkpoint = {"model": "fixture", "provider": args.provider, "api_mode": args.api_mode, **task}
     config = model_runner.policy.RolloutPolicyConfig()
@@ -299,8 +352,12 @@ def test_resume_requires_the_same_similarity_cutoff() -> None:
     args = parser.parse_args(["--model", "fixture", "--hide-building-block-similarity", "0.95"])
     task = {"task_id": "fixture", "target_smiles": TARGET}
     checkpoint = {
-        "model": "fixture", "provider": args.provider, "api_mode": args.api_mode, **task,
-        "hide_target_building_block": True, "hide_building_block_similarity": 0.9,
+        "model": "fixture",
+        "provider": args.provider,
+        "api_mode": args.api_mode,
+        **task,
+        "hide_target_building_block": True,
+        "hide_building_block_similarity": 0.9,
     }
     config = model_runner.policy.RolloutPolicyConfig()
     assert not model_runner.checkpoint_matches_run(checkpoint, args, task, config)

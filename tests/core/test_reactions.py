@@ -13,13 +13,7 @@ from synclaw.paths import REPO_ROOT
 from synclaw.tools.synthesis import SynthesisTools
 
 QUERY_ANNOTATIONS = REPO_ROOT / "tests" / "fixtures" / "reaction_template_query_cases.jsonl"
-PRODUCTION_ANNOTATIONS = (
-    REPO_ROOT
-    / "data"
-    / "reaction_templates"
-    / "synformer"
-    / "templates.jsonl"
-)
+PRODUCTION_ANNOTATIONS = REPO_ROOT / "data" / "reaction_templates" / "synformer" / "templates.jsonl"
 
 
 class ReactionTemplateTests(unittest.TestCase):
@@ -71,7 +65,9 @@ class ReactionTemplateTests(unittest.TestCase):
             )
             ingest_reaction_templates(source, db_path=db_path, library="demo")
 
-            result = SynthesisTools(db_path).search_reaction_templates("alcohol carbonyl product", limit=5)
+            result = SynthesisTools(db_path).search_reaction_templates(
+                "alcohol carbonyl product", limit=5
+            )
 
             self.assertEqual(result["count"], 1)
             self.assertEqual(result["results"][0]["reaction_id"], "demo:R001")
@@ -164,7 +160,9 @@ class ReactionTemplateTests(unittest.TestCase):
             )
             ingest_reaction_templates(source, db_path=db_path, library="demo")
 
-            result = SynthesisTools(db_path).search_reaction_templates("cyanide substitution nitrile", limit=5)
+            result = SynthesisTools(db_path).search_reaction_templates(
+                "cyanide substitution nitrile", limit=5
+            )
             template = SynthesisTools(db_path).get_reaction_template("demo:R000")["template"]
 
             self.assertEqual(result["count"], 0)
@@ -558,7 +556,10 @@ class ReactionTemplateTests(unittest.TestCase):
             names = ["coupling coupling coupling", "coupling", "coupling", "suzuki", "coupling"]
             source.write_text(
                 "".join(
-                    json.dumps({"reaction_id": f"R{index:03d}", "smarts": "[C:1]>>[C:1]", "name": name}) + "\n"
+                    json.dumps(
+                        {"reaction_id": f"R{index:03d}", "smarts": "[C:1]>>[C:1]", "name": name}
+                    )
+                    + "\n"
                     for index, name in enumerate(names)
                 ),
                 encoding="utf-8",
@@ -614,7 +615,9 @@ class ReactionTemplateTests(unittest.TestCase):
             # Atom-map digits, element letters and stopwords must not match every template.
             self.assertEqual(tools.search_reaction_templates("zzz 1")["count"], 0)
             self.assertEqual(tools.search_reaction_templates("make a thing with the N")["count"], 0)
-            self.assertEqual(tools.search_reaction_templates("imines")["results"][0]["reaction_id"], "demo:R001")
+            self.assertEqual(
+                tools.search_reaction_templates("imines")["results"][0]["reaction_id"], "demo:R001"
+            )
 
     def test_smarts_queries_match_exact_and_partial_template_smarts(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -627,7 +630,10 @@ class ReactionTemplateTests(unittest.TestCase):
             ]
             source.write_text(
                 "".join(
-                    json.dumps({"reaction_id": f"R{index:03d}", "smarts": value, "name": "coupling"}) + "\n"
+                    json.dumps(
+                        {"reaction_id": f"R{index:03d}", "smarts": value, "name": "coupling"}
+                    )
+                    + "\n"
                     for index, value in enumerate(smarts)
                 ),
                 encoding="utf-8",
@@ -656,7 +662,9 @@ class ReactionTemplateTests(unittest.TestCase):
             tmp_path = Path(tmp)
             source = tmp_path / "templates.txt"
             db_path = tmp_path / "test.sqlite"
-            source.write_text(("[C:1][O:2]>>[C:1]=[O:2]\n" * 44) + "[N:1].[C:2]>>[N:1][C:2]\n", encoding="utf-8")
+            source.write_text(
+                ("[C:1][O:2]>>[C:1]=[O:2]\n" * 44) + "[N:1].[C:2]>>[N:1][C:2]\n", encoding="utf-8"
+            )
             ingest_reaction_templates(source, db_path=db_path, library="demo")
 
             result = SynthesisTools(db_path).get_reaction_template("demo:R044")
@@ -699,7 +707,9 @@ class ReactionTemplateTests(unittest.TestCase):
                 annotations_path=QUERY_ANNOTATIONS,
             )
 
-            result = SynthesisTools(db_path).search_reaction_templates("urea amine coupling", limit=5)
+            result = SynthesisTools(db_path).search_reaction_templates(
+                "urea amine coupling", limit=5
+            )
 
             self.assertEqual(result["count"], 1)
             self.assertEqual(result["results"][0]["reaction_id"], "demo:R000")
@@ -822,8 +832,7 @@ class ReactionTemplateTests(unittest.TestCase):
             annotations = tmp_path / "annotations.jsonl"
             db_path = tmp_path / "test.sqlite"
             source.write_text(
-                "[#6:1][C:2](=O)[#6:3].[#6:4][NH:5]>>"
-                "[#6:4][N:5][C:2]([#6:1])([#6:3])C(=O)O\n",
+                "[#6:1][C:2](=O)[#6:3].[#6:4][NH:5]>>[#6:4][N:5][C:2]([#6:1])([#6:3])C(=O)O\n",
                 encoding="utf-8",
             )
             annotations.write_text(
@@ -858,13 +867,20 @@ class ReactionTemplateTests(unittest.TestCase):
                 + "\n",
                 encoding="utf-8",
             )
-            ingest_reaction_templates(source, db_path=db_path, library="demo", annotations_path=annotations)
+            ingest_reaction_templates(
+                source, db_path=db_path, library="demo", annotations_path=annotations
+            )
 
             with db.session(db_path) as conn:
                 overview = db.reaction_template_library_overview(conn, library="demo")
 
-            self.assertEqual(overview["notable_templates"][0]["name"], "Ketone addition with quaternary carboxylation")
-            self.assertIn("quaternary carboxylic acid", overview["notable_templates"][0]["query_hints"])
+            self.assertEqual(
+                overview["notable_templates"][0]["name"],
+                "Ketone addition with quaternary carboxylation",
+            )
+            self.assertIn(
+                "quaternary carboxylic acid", overview["notable_templates"][0]["query_hints"]
+            )
 
     def test_simulate_reaction_checks_claimed_product(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1063,7 +1079,11 @@ class ReactionTemplateTests(unittest.TestCase):
             self.assertTrue(result["valid"])
             self.assertEqual(result["execution_backend"], "rdkit")
             self.assertEqual(result["candidate_reactant_sets"][0]["reactants"], ["CO"])
-            self.assertFalse(result["candidate_reactant_sets"][0]["all_reactants_have_exact_building_block_match"])
+            self.assertFalse(
+                result["candidate_reactant_sets"][0][
+                    "all_reactants_have_exact_building_block_match"
+                ]
+            )
 
     def test_simulate_reverse_reaction_preserves_reactant_tuples(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1175,7 +1195,9 @@ class ReactionTemplateTests(unittest.TestCase):
             self.assertTrue(result["valid"])
             self.assertEqual(result["candidate_reactant_sets"], [])
             self.assertEqual(result["skipped_invalid_candidate_set_count"], 1)
-            self.assertIn("RDKit did not produce any valid reverse precursor sets", result["issues"][0])
+            self.assertIn(
+                "RDKit did not produce any valid reverse precursor sets", result["issues"][0]
+            )
             self.assertIn("does not prove the template cannot work forward", result["issues"][0])
 
     def test_search_reaction_templates_matches_molecule_roles(self):
@@ -1345,7 +1367,8 @@ class ReactionTemplateTests(unittest.TestCase):
             # Both templates fit the product; the grounded alcohol split ranks first.
             self.assertNotIn("results", result)
             self.assertEqual(
-                [item["reaction_id"] for item in result["structural_results"]], ["demo:R002", "demo:R001"]
+                [item["reaction_id"] for item in result["structural_results"]],
+                ["demo:R002", "demo:R001"],
             )
             self.assertEqual(result["structural_count"], len(result["structural_results"]))
             self.assertEqual(result["text_results"][0]["reaction_id"], "demo:R002")
@@ -1361,7 +1384,9 @@ class ReactionTemplateTests(unittest.TestCase):
                 records.append(
                     {
                         "reaction_id": f"demo:R{index:03d}",
-                        "name": "Special carbonyl identity" if index == 120 else "Carbonyl identity",
+                        "name": "Special carbonyl identity"
+                        if index == 120
+                        else "Carbonyl identity",
                         "description": "Structurally matches carbonyl product.",
                         "smarts": "[C:1]=[O:2]>>[C:1]=[O:2]",
                     }
@@ -1672,7 +1697,10 @@ class ReactionTemplateTests(unittest.TestCase):
             self.assertFalse(result["accepted"])
             self.assertEqual(result["final_smiles"], "C=O")
             self.assertTrue(
-                any("building_block is only valid for zero-step" in issue for issue in result["issues"])
+                any(
+                    "building_block is only valid for zero-step" in issue
+                    for issue in result["issues"]
+                )
             )
 
     def test_submit_pathway_accepts_product_generated_by_permuted_reactant_order(self):

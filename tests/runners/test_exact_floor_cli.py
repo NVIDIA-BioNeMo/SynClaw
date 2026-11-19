@@ -12,12 +12,24 @@ from synclaw.cli import build_parser
 def test_run_and_eval_cli_accept_the_same_floor(floor):
     parser = build_parser()
     floor_args = [] if floor is None else ["--stop-condition", floor]
-    run = parser.parse_args([
-        "run-model", "--model", "example", "--taskset", "tasks.jsonl",
-        *floor_args,
-    ])
-    evaluate = parser.parse_args([
-        "eval-trace", "trace.jsonl", *floor_args,
-    ])
+    run = parser.parse_args(
+        [
+            "run-model",
+            "--model",
+            "example",
+            "--taskset",
+            "tasks.jsonl",
+            *floor_args,
+        ]
+    )
+    evaluate = parser.parse_args(
+        [
+            "eval-trace",
+            "trace.jsonl",
+            *floor_args,
+        ]
+    )
     assert run.stop_condition == evaluate.stop_condition
-    assert run.stop_condition == ("exact" if floor is None else floor if floor in ("exact", "model") else float(floor))
+    assert run.stop_condition == (
+        "exact" if floor is None else floor if floor in ("exact", "model") else float(floor)
+    )

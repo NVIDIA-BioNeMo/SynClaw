@@ -62,10 +62,14 @@ class FingerprintIndex:
             return []
         intersections = np.empty(len(self.ids), dtype=np.int32)
         for start in range(0, len(self.ids), SCAN_CHUNK_ROWS):
-            block = self.fingerprints[start:start + SCAN_CHUNK_ROWS]
-            intersections[start:start + len(block)] = np.bitwise_count(block & query).sum(axis=1, dtype=np.int32)
+            block = self.fingerprints[start : start + SCAN_CHUNK_ROWS]
+            intersections[start : start + len(block)] = np.bitwise_count(block & query).sum(
+                axis=1, dtype=np.int32
+            )
         unions = query_count + self.popcounts - intersections
-        similarities = np.divide(intersections, unions, out=np.ones(len(self.ids)), where=unions != 0)
+        similarities = np.divide(
+            intersections, unions, out=np.ones(len(self.ids)), where=unions != 0
+        )
         if exclude_ids:
             excluded = np.fromiter(exclude_ids, dtype=np.int64)
             positions = np.searchsorted(self.ids, excluded)
@@ -100,7 +104,12 @@ def write_fingerprint_chunks(conn: sqlite3.Connection, rows: Iterable[tuple[int,
         nonlocal chunk
         conn.execute(
             f"INSERT INTO {FINGERPRINT_CHUNK_TABLE}(chunk, row_count, ids, fingerprints) VALUES (?, ?, ?, ?)",
-            (chunk, len(ids), np.asarray(ids, dtype="<i8").tobytes(), bytes.fromhex("".join(hex_fingerprints))),
+            (
+                chunk,
+                len(ids),
+                np.asarray(ids, dtype="<i8").tobytes(),
+                bytes.fromhex("".join(hex_fingerprints)),
+            ),
         )
         chunk += 1
         ids.clear()
@@ -109,7 +118,9 @@ def write_fingerprint_chunks(conn: sqlite3.Connection, rows: Iterable[tuple[int,
     for building_block_id, canonical_smiles in rows:
         ids.append(int(building_block_id))
         hex_fingerprints.append(
-            DataStructs.BitVectToFPSText(chem.constitutional_morgan_fingerprint(str(canonical_smiles)))
+            DataStructs.BitVectToFPSText(
+                chem.constitutional_morgan_fingerprint(str(canonical_smiles))
+            )
         )
         if len(ids) == STORED_CHUNK_ROWS:
             flush()
@@ -118,7 +129,9 @@ def write_fingerprint_chunks(conn: sqlite3.Connection, rows: Iterable[tuple[int,
 
 
 def stored_fingerprint_count(conn: sqlite3.Connection) -> int:
-    (count,) = conn.execute(f"SELECT COALESCE(SUM(row_count), 0) FROM {FINGERPRINT_CHUNK_TABLE}").fetchone()
+    (count,) = conn.execute(
+        f"SELECT COALESCE(SUM(row_count), 0) FROM {FINGERPRINT_CHUNK_TABLE}"
+    ).fetchone()
     return int(count)
 
 
@@ -156,15 +169,15 @@ def _read_index(conn: sqlite3.Connection) -> FingerprintIndex:
     for row_count, id_bytes, fingerprint_bytes in conn.execute(
         f"SELECT row_count, ids, fingerprints FROM {FINGERPRINT_CHUNK_TABLE} ORDER BY chunk"
     ):
-        ids[position:position + row_count] = np.frombuffer(id_bytes, dtype="<i8")
-        fingerprints[position:position + row_count] = np.frombuffer(fingerprint_bytes, dtype=np.uint64).reshape(
-            row_count, WORDS
-        )
+        ids[position : position + row_count] = np.frombuffer(id_bytes, dtype="<i8")
+        fingerprints[position : position + row_count] = np.frombuffer(
+            fingerprint_bytes, dtype=np.uint64
+        ).reshape(row_count, WORDS)
         position += row_count
     popcounts = np.empty(count, dtype=np.int32)
     for start in range(0, count, SCAN_CHUNK_ROWS):
-        block = fingerprints[start:start + SCAN_CHUNK_ROWS]
-        popcounts[start:start + len(block)] = np.bitwise_count(block).sum(axis=1, dtype=np.int32)
+        block = fingerprints[start : start + SCAN_CHUNK_ROWS]
+        popcounts[start : start + len(block)] = np.bitwise_count(block).sum(axis=1, dtype=np.int32)
     # Read-only, so forked workers that inherit the arrays keep sharing their pages.
     for array in (ids, fingerprints, popcounts):
         array.flags.writeable = False

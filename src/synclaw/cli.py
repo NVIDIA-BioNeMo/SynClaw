@@ -90,7 +90,9 @@ def build_parser() -> argparse.ArgumentParser:
     ingest.set_defaults(func=_cmd_ingest_bbs)
 
     ingest_reactions = sub.add_parser("ingest-reactions", help="Import reaction templates")
-    ingest_reactions.add_argument("source", nargs="?", help="Custom template file; omit to import bundled source libraries")
+    ingest_reactions.add_argument(
+        "source", nargs="?", help="Custom template file; omit to import bundled source libraries"
+    )
     ingest_reactions.add_argument("--db", default=str(db.DEFAULT_DB_PATH))
     ingest_reactions.add_argument("--library", help="Library name for a custom template file")
     ingest_reactions.add_argument(
@@ -99,7 +101,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ingest_reactions.set_defaults(func=_cmd_ingest_reactions)
 
-    taskset = sub.add_parser("make-taskset", help="Convert a SMILES test set into LLM-friendly JSONL tasks")
+    taskset = sub.add_parser(
+        "make-taskset", help="Convert a SMILES test set into LLM-friendly JSONL tasks"
+    )
     taskset.add_argument("source")
     taskset.add_argument("--output", required=True)
     taskset.add_argument("--dataset", required=True)
@@ -166,7 +170,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--allow-unscoreable",
         action="store_true",
         help="Keep targets whose standard InChI cannot be computed, which make-taskset rejects "
-             "as impossible to match exactly (dative-bonded organometallics such as ferrocenes)",
+        "as impossible to match exactly (dative-bonded organometallics such as ferrocenes)",
     )
     targets.add_argument("--mw-min", type=float)
     targets.add_argument("--mw-max", type=float)
@@ -181,12 +185,24 @@ def build_parser() -> argparse.ArgumentParser:
         "build-matrix",
         help="Build the reactant-template matrix directory that generate-targets reads",
     )
-    build_matrix.add_argument("--building-blocks", required=True, help="SMILES-headed building-block file, optionally gzipped")
+    build_matrix.add_argument(
+        "--building-blocks",
+        required=True,
+        help="SMILES-headed building-block file, optionally gzipped",
+    )
     build_matrix.add_argument("--output", required=True, help="Matrix directory to write")
-    build_matrix.add_argument("--libraries", default=",".join(DEFAULT_REACTION_LIBRARIES), help="Template libraries to union")
+    build_matrix.add_argument(
+        "--libraries",
+        default=",".join(DEFAULT_REACTION_LIBRARIES),
+        help="Template libraries to union",
+    )
     build_matrix.add_argument("--workers", type=int, default=os.cpu_count() or 8)
-    build_matrix.add_argument("--chunk-size", type=int, default=DEFAULT_CHUNK_SIZE, help="Building blocks per task")
-    build_matrix.add_argument("--limit", type=int, help="Use only the first LIMIT blocks, for a quick pilot")
+    build_matrix.add_argument(
+        "--chunk-size", type=int, default=DEFAULT_CHUNK_SIZE, help="Building blocks per task"
+    )
+    build_matrix.add_argument(
+        "--limit", type=int, help="Use only the first LIMIT blocks, for a quick pilot"
+    )
     build_matrix.add_argument(
         "--multicomponent",
         choices=list(MULTICOMPONENT_POLICIES),
@@ -198,12 +214,16 @@ def build_parser() -> argparse.ArgumentParser:
         choices=list(ATOM_MAP_POLICIES),
         default="drop",
         help="Building blocks whose SMILES carry atom map numbers: drop them, clear the maps, or keep them. "
-             "Maps survive into the product, so a route using one yields an atom-mapped target",
+        "Maps survive into the product, so a route using one yields an atom-mapped target",
     )
-    build_matrix.add_argument("--no-common-reagents", action="store_true", help="Skip the common-reagent block file")
+    build_matrix.add_argument(
+        "--no-common-reagents", action="store_true", help="Skip the common-reagent block file"
+    )
     build_matrix.set_defaults(func=_cmd_build_matrix)
 
-    run_model = sub.add_parser("run-model", help="Run a hosted model against one local synthesis task")
+    run_model = sub.add_parser(
+        "run-model", help="Run a hosted model against one local synthesis task"
+    )
     model_runner.add_arguments(run_model)
     run_model.set_defaults(func=_cmd_run_model)
 
@@ -212,17 +232,23 @@ def build_parser() -> argparse.ArgumentParser:
     combine_results.add_argument("--output", required=True)
     combine_results.set_defaults(func=_cmd_combine_results)
 
-    public_data = sub.add_parser("download-public-data", help="Download public reaction/template/example data")
+    public_data = sub.add_parser(
+        "download-public-data", help="Download public reaction/template/example data"
+    )
     public_data.add_argument(
         "--name",
         action="append",
         choices=[item.name for item in PUBLIC_DATA_FILES],
         help="Specific public asset to download; repeat to select multiple",
     )
-    public_data.add_argument("--dest-root", default=".", help="Repository root or alternate destination root")
+    public_data.add_argument(
+        "--dest-root", default=".", help="Repository root or alternate destination root"
+    )
     public_data.add_argument("--force", action="store_true", help="Overwrite existing files")
     public_data.add_argument("--timeout", type=float, default=60.0)
-    public_data.add_argument("--list", action="store_true", help="List downloadable assets without downloading")
+    public_data.add_argument(
+        "--list", action="store_true", help="List downloadable assets without downloading"
+    )
     public_data.set_defaults(func=_cmd_download_public_data)
 
     emolecules = sub.add_parser(
@@ -261,8 +287,12 @@ def build_parser() -> argparse.ArgumentParser:
     search.add_argument(
         "--limit", type=int, default=TOOL_ARGUMENT_DEFAULTS["search_building_blocks"]["limit"]
     )
-    search.add_argument("--no-near", action="store_true", help="Disable similarity-ranked near matches")
-    search.add_argument("--min-similarity", type=float, default=0.15, help="Minimum near-match similarity to return")
+    search.add_argument(
+        "--no-near", action="store_true", help="Disable similarity-ranked near matches"
+    )
+    search.add_argument(
+        "--min-similarity", type=float, default=0.15, help="Minimum near-match similarity to return"
+    )
     search.add_argument("--db", default=str(db.DEFAULT_DB_PATH))
     search.set_defaults(func=_cmd_tool_search)
     get = tools_sub.add_parser("get-bb", help="Fetch one building block")
@@ -308,10 +338,16 @@ def build_parser() -> argparse.ArgumentParser:
     rxn_get.add_argument("reaction_id")
     rxn_get.add_argument("--db", default=str(db.DEFAULT_DB_PATH))
     rxn_get.set_defaults(func=_cmd_tool_get_reaction)
-    rxn_sim = tools_sub.add_parser("simulate-reaction", help="Run one reaction template and optionally check a claimed product")
+    rxn_sim = tools_sub.add_parser(
+        "simulate-reaction", help="Run one reaction template and optionally check a claimed product"
+    )
     rxn_sim.add_argument("--reaction-id", required=True)
-    rxn_sim.add_argument("--reactants-json", required=True, help="JSON list of BB refs, INT refs, or SMILES")
-    rxn_sim.add_argument("--product-smiles", help="Optional claimed product to check against generated products")
+    rxn_sim.add_argument(
+        "--reactants-json", required=True, help="JSON list of BB refs, INT refs, or SMILES"
+    )
+    rxn_sim.add_argument(
+        "--product-smiles", help="Optional claimed product to check against generated products"
+    )
     rxn_sim.add_argument("--max-products", type=int, default=100)
     rxn_sim.add_argument("--db", default=str(db.DEFAULT_DB_PATH))
     rxn_sim.set_defaults(func=_cmd_tool_simulate_reaction)
@@ -327,15 +363,25 @@ def build_parser() -> argparse.ArgumentParser:
         help="Product SMILES; repeat for multi-product templates",
     )
     rxn_reverse.add_argument("--max-outcomes", type=int, default=50)
-    rxn_reverse.add_argument("--no-near", action="store_true", help="Disable similarity-ranked near BB matches")
+    rxn_reverse.add_argument(
+        "--no-near", action="store_true", help="Disable similarity-ranked near BB matches"
+    )
     rxn_reverse.add_argument("--min-similarity", type=float, default=0.15)
-    rxn_reverse.add_argument("--top-near-matches", type=int, default=3, help="Near BB matches returned per precursor")
+    rxn_reverse.add_argument(
+        "--top-near-matches", type=int, default=3, help="Near BB matches returned per precursor"
+    )
     rxn_reverse.add_argument("--db", default=str(db.DEFAULT_DB_PATH))
     rxn_reverse.set_defaults(func=_cmd_tool_simulate_reverse_reaction)
     submit = tools_sub.add_parser("submit-pathway", help="Validate a template-grounded pathway")
-    submit.add_argument("--target-smiles", help="Optional target used only for local similarity scoring")
-    submit.add_argument("--steps-json", required=True, help="JSON list of structured reaction steps or @path")
-    submit.add_argument("--building-block", help="BB:<id> or exact BB SMILES for zero-step direct purchase")
+    submit.add_argument(
+        "--target-smiles", help="Optional target used only for local similarity scoring"
+    )
+    submit.add_argument(
+        "--steps-json", required=True, help="JSON list of structured reaction steps or @path"
+    )
+    submit.add_argument(
+        "--building-block", help="BB:<id> or exact BB SMILES for zero-step direct purchase"
+    )
     submit.add_argument("--pathway-text")
     submit.add_argument("--db", default=str(db.DEFAULT_DB_PATH))
     toxicity.add_toxicity_argument(submit)
@@ -365,14 +411,17 @@ def build_parser() -> argparse.ArgumentParser:
     toxicity.add_toxicity_argument(serve)
     serve.set_defaults(func=_cmd_mcp_serve)
 
-    eval_parser = sub.add_parser("eval-trace", help="Import and score one or more trace JSONL files")
+    eval_parser = sub.add_parser(
+        "eval-trace", help="Import and score one or more trace JSONL files"
+    )
     eval_parser.add_argument("traces", nargs="+")
     eval_parser.add_argument("--db", default=str(db.DEFAULT_DB_PATH))
     eval_parser.add_argument("--model", default="unknown")
     eval_parser.add_argument("--prompt-version")
     eval_parser.add_argument("--target-smiles")
     eval_parser.add_argument(
-        "--stop-condition", type=policy.parse_stop_condition,
+        "--stop-condition",
+        type=policy.parse_stop_condition,
         default=policy.DEFAULT_STOP_CONDITION,
         help="The run's stop condition: 'exact' (default), 'model' or a similarity from 0 to 1",
     )
@@ -418,7 +467,9 @@ def _cmd_ingest_bbs(args: argparse.Namespace) -> dict[str, Any]:
 def _cmd_ingest_reactions(args: argparse.Namespace) -> dict[str, Any]:
     if args.source is None:
         if args.library or args.annotations:
-            raise RuntimeError("--library and --annotations require a custom template file; omit them to import bundled sources")
+            raise RuntimeError(
+                "--library and --annotations require a custom template file; omit them to import bundled sources"
+            )
         return ingest_reaction_libraries(args.db)
     return ingest_reaction_templates(
         args.source,
@@ -435,7 +486,8 @@ def _cmd_make_taskset(args: argparse.Namespace) -> dict[str, Any]:
         dataset=args.dataset,
         limit=args.limit,
         tool_exclusion_sets=[
-            [] if value.strip() == "none" else [value] for value in args.tool_exclusion_set or ["none"]
+            [] if value.strip() == "none" else [value]
+            for value in args.tool_exclusion_set or ["none"]
         ],
         tool_exclusion_seed=args.tool_exclusion_seed,
         budget_sets=args.budget_set or [{}],
@@ -500,7 +552,9 @@ def _cmd_combine_results(args: argparse.Namespace) -> dict[str, Any]:
 def _cmd_download_public_data(args: argparse.Namespace) -> dict[str, Any]:
     if args.list:
         return {"files": list_public_data_files()}
-    return download_public_data(dest_root=args.dest_root, names=args.name, force=args.force, timeout=args.timeout)
+    return download_public_data(
+        dest_root=args.dest_root, names=args.name, force=args.force, timeout=args.timeout
+    )
 
 
 def _cmd_prepare_emolecules_bbs(args: argparse.Namespace) -> dict[str, Any]:
@@ -575,7 +629,9 @@ def _cmd_tool_simulate_reaction(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def _cmd_tool_simulate_reverse_reaction(args: argparse.Namespace) -> dict[str, Any]:
-    product_smiles = args.product_smiles[0] if len(args.product_smiles) == 1 else args.product_smiles
+    product_smiles = (
+        args.product_smiles[0] if len(args.product_smiles) == 1 else args.product_smiles
+    )
     return SynthesisTools(args.db).simulate_reverse_reaction(
         reaction_id=args.reaction_id,
         product_smiles=product_smiles,
@@ -602,9 +658,7 @@ def _cmd_mcp_serve(args: argparse.Namespace) -> None:
     from synclaw.runners.mcp_server import serve
 
     database_path = (
-        db.stage_prepared_search_database(args.db)
-        if args.stage_db_to_node_local
-        else args.db
+        db.stage_prepared_search_database(args.db) if args.stage_db_to_node_local else args.db
     )
     serve(
         database_path,

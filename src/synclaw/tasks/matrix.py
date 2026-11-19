@@ -140,7 +140,10 @@ def write_templates(records: Sequence[dict[str, Any]], out_dir: Path) -> dict[st
             dropped.append((record["reaction_id"], "no reactant templates"))
         elif num_reactants > MAX_REACTANTS:
             dropped.append(
-                (record["reaction_id"], f"{num_reactants} reactants; the engine supports <= {MAX_REACTANTS}")
+                (
+                    record["reaction_id"],
+                    f"{num_reactants} reactants; the engine supports <= {MAX_REACTANTS}",
+                )
             )
         else:
             kept.append(record)
@@ -319,7 +322,9 @@ def reactant_queries(smarts: str) -> list[Any]:
     Chem, AllChem, rdChemReactions = _rdkit_reaction_modules()
     reaction = AllChem.ReactionFromSmarts(smarts)
     rdChemReactions.ChemicalReaction.Initialize(reaction)
-    return [Chem.Mol(reaction.GetReactantTemplate(i)) for i in range(reaction.GetNumReactantTemplates())]
+    return [
+        Chem.Mol(reaction.GetReactantTemplate(i)) for i in range(reaction.GetNumReactantTemplates())
+    ]
 
 
 def _init_worker(reaction_smarts: list[str], matrix_path: str) -> None:
@@ -354,7 +359,9 @@ def _fill_block(task: tuple[int, list[str]]) -> tuple[int, int]:
     return start, len(smiles_block)
 
 
-def compute_columns(matrix: np.ndarray, num_reactants: Sequence[int], chunk: int = 1 << 19) -> dict[str, np.ndarray]:
+def compute_columns(
+    matrix: np.ndarray, num_reactants: Sequence[int], chunk: int = 1 << 19
+) -> dict[str, np.ndarray]:
     """Per-column reactant counts and the seed-reaction indices, computed in row chunks.
 
     A seed reaction is one whose every reactant position is fillable from the catalog, so a route
@@ -402,10 +409,14 @@ def fill_matrix(
     )
 
     # Create the .npy up front so workers can map it read/write; Fortran order for column reads.
-    handle = np.lib.format.open_memmap(matrix_path, mode="w+", dtype=np.uint8, shape=shape, fortran_order=True)
+    handle = np.lib.format.open_memmap(
+        matrix_path, mode="w+", dtype=np.uint8, shape=shape, fortran_order=True
+    )
     del handle
 
-    tasks = [(start, smiles[start : start + chunk_size]) for start in range(0, len(smiles), chunk_size)]
+    tasks = [
+        (start, smiles[start : start + chunk_size]) for start in range(0, len(smiles), chunk_size)
+    ]
     started = time.time()
     rows_done = 0
     with _pool_context().Pool(
@@ -420,7 +431,9 @@ def fill_matrix(
     fill_seconds = time.time() - started
 
     matrix = np.load(matrix_path, mmap_mode="r")
-    columns = compute_columns(matrix, [len(queries) for queries in map(reactant_queries, reaction_smarts)])
+    columns = compute_columns(
+        matrix, [len(queries) for queries in map(reactant_queries, reaction_smarts)]
+    )
     np.savez(directory / COLUMN_FILE, **columns)
     del matrix
 
@@ -477,8 +490,13 @@ def build_matrix_directory(
 
     _progress(f"canonicalizing building blocks from {building_blocks} with {workers} workers")
     block_stats = write_building_blocks(
-        building_blocks, reagents, directory, workers,
-        multicomponent=multicomponent, atom_maps=atom_maps, chunk_size=chunk_size,
+        building_blocks,
+        reagents,
+        directory,
+        workers,
+        multicomponent=multicomponent,
+        atom_maps=atom_maps,
+        chunk_size=chunk_size,
     )
     _progress(
         f"  {block_stats['written']:,} unique blocks ({block_stats['duplicates']:,} duplicates, "

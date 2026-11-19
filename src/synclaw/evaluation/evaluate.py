@@ -97,7 +97,9 @@ def evaluate_trace_file(
     token_usage = trace_token_usage(events, run_summary=run_summary)
     similarity_floor = _similarity_floor(tool_config)
     meets_similarity_floor = accepted is True and meets_submission_floor(
-        similarity_to_target, similarity_floor, identical_to_target=identical_to_target,
+        similarity_to_target,
+        similarity_floor,
+        identical_to_target=identical_to_target,
     )
     run_success = accepted is True
 
@@ -132,7 +134,8 @@ def evaluate_trace_file(
         **hidden_target,
         **toxicity_summary_fields(
             events,
-            (run_summary or {}).get("toxicity_screen") or (tool_config or {}).get("toxicity_screen"),
+            (run_summary or {}).get("toxicity_screen")
+            or (tool_config or {}).get("toxicity_screen"),
         ),
     }
     return summary
@@ -162,7 +165,8 @@ def replay_selected_submission(
     """
 
     submit_calls = [
-        event for event in events
+        event
+        for event in events
         if event["event_type"] == "tool_call" and event["tool_name"] == "submit_pathway"
     ]
     if not submit_calls:
@@ -192,7 +196,9 @@ def replay_selected_submission(
             continue
         similarity = submission_similarity_to_target(last, target_smiles)
         identical = submission_identical_to_target(last, target_smiles) is True
-        if best is None or is_better_accepted_submission(identical, similarity, best_identical, best_similarity):
+        if best is None or is_better_accepted_submission(
+            identical, similarity, best_identical, best_similarity
+        ):
             best, best_identical, best_similarity = last, identical, similarity
     return best or last
 
@@ -240,12 +246,18 @@ def _resolve_reaction_ids(
         for index, step in enumerate(steps):
             reaction_id = step.get("reaction_id") if isinstance(step, dict) else None
             # submit_pathway grounds a reaction SMARTS to a library template itself.
-            if not reaction_id or not isinstance(reaction_id, str) or reactions.is_reaction_smarts(reaction_id):
+            if (
+                not reaction_id
+                or not isinstance(reaction_id, str)
+                or reactions.is_reaction_smarts(reaction_id)
+            ):
                 resolved.append(step)
                 continue
             template = db.get_reaction_template(conn, reaction_id, library=library)
             if template is None and index in recorded_smarts:
-                template = db.get_reaction_template_by_smarts(conn, recorded_smarts[index], library=library)
+                template = db.get_reaction_template_by_smarts(
+                    conn, recorded_smarts[index], library=library
+                )
                 if template is not None:
                     step = {**step, "reaction_id": template["reaction_id"]}
             if template is None:
@@ -265,7 +277,8 @@ def _recorded_submit_results(events: list[dict[str, Any]]) -> list[dict[str, Any
     """The recorded result of each submit_pathway call, in call order, as results are appended."""
 
     return [
-        event["payload"]["result"] for event in events
+        event["payload"]["result"]
+        for event in events
         if event["event_type"] == "tool_result" and event["tool_name"] == "submit_pathway"
     ]
 
@@ -292,14 +305,17 @@ def _without_unexecuted_calls(events: list[dict[str, Any]]) -> list[dict[str, An
 
     results = tool_ordinals("tool_result")
     unexecuted = {
-        key for index, key in results.items()
+        key
+        for index, key in results.items()
         if events[index]["payload"]["outcome"] == "over_budget"
     }
     if not unexecuted:
         return events
     dropped = {
-        index for keys in (results, tool_ordinals("tool_call"))
-        for index, key in keys.items() if key in unexecuted
+        index
+        for keys in (results, tool_ordinals("tool_call"))
+        for index, key in keys.items()
+        if key in unexecuted
     }
     return [event for index, event in enumerate(events) if index not in dropped]
 
@@ -313,7 +329,9 @@ def _recorded_step_smarts(result: dict[str, Any]) -> dict[int, str]:
         template = step.get("template") if isinstance(step, dict) else None
         if isinstance(template, dict) and template.get("smarts"):
             index = step.get("step_index")
-            recorded[int(index) - 1 if isinstance(index, int) and index > 0 else position] = str(template["smarts"])
+            recorded[int(index) - 1 if isinstance(index, int) and index > 0 else position] = str(
+                template["smarts"]
+            )
     return recorded
 
 

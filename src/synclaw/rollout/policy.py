@@ -47,7 +47,11 @@ DEFAULT_CONTEXT_CRITICAL_REMAINING_FRACTION = 0.25
 # RolloutPolicyConfig itself still defaults to no context limit.
 DEFAULT_MAX_MODEL_LEN = 262_144
 # What an "inf" task budget becomes; an unlimited max_model_len is handled separately.
-_UNLIMITED_BUDGET_VALUES: dict[str, int | None] = {"max_turns": None, "max_tool_calls": 0, "max_tokens": None}
+_UNLIMITED_BUDGET_VALUES: dict[str, int | None] = {
+    "max_turns": None,
+    "max_tool_calls": 0,
+    "max_tokens": None,
+}
 
 # What ends a rollout: an exact match, an accepted route at or above a similarity, or the model.
 StopCondition = float | Literal["exact", "model"]
@@ -67,8 +71,11 @@ def parse_stop_condition(value: str | float) -> StopCondition:
     except (TypeError, ValueError):
         condition = math.nan
     if not math.isfinite(condition) or not 0 <= condition <= 1:
-        raise ValueError(f"Stop condition must be 'exact', 'model' or a similarity between 0 and 1, not {value!r}")
+        raise ValueError(
+            f"Stop condition must be 'exact', 'model' or a similarity between 0 and 1, not {value!r}"
+        )
     return condition
+
 
 def meets_submission_floor(
     similarity: float | None,
@@ -90,7 +97,8 @@ def meets_submission_floor(
     return (
         identical_to_target is True
         or stop_condition <= 0
-        or similarity is not None and float(similarity) >= stop_condition
+        or similarity is not None
+        and float(similarity) >= stop_condition
     )
 
 
@@ -128,12 +136,20 @@ class RolloutPolicyConfig:
             raise ValueError("Unlimited turns need a known context limit to end the rollout")
         if not 0 <= self.context_safety_margin_fraction < 1:
             raise ValueError("context_safety_margin_fraction must be at least 0 and below 1")
-        if self.max_model_len is not None and self.max_model_len <= self.context_safety_margin_tokens:
+        if (
+            self.max_model_len is not None
+            and self.max_model_len <= self.context_safety_margin_tokens
+        ):
             raise ValueError(
                 f"A context limit of {self.max_model_len} tokens leaves no room for output after "
                 f"the {self.context_safety_margin_tokens}-token safety margin"
             )
-        if not (0 <= self.context_critical_remaining_fraction <= self.context_warning_remaining_fraction <= 1):
+        if not (
+            0
+            <= self.context_critical_remaining_fraction
+            <= self.context_warning_remaining_fraction
+            <= 1
+        ):
             raise ValueError(
                 "context_critical_remaining_fraction and context_warning_remaining_fraction must "
                 "satisfy 0 <= critical <= warning <= 1"
@@ -143,7 +159,12 @@ class RolloutPolicyConfig:
     def budget_fields(self) -> dict[str, Any]:
         """The effective budgets and their enforcement settings, as checkpoints record them."""
 
-        names = (*TASK_OVERRIDE_FIELDS, "context_limit_stated", "context_safety_margin_fraction", "stop_condition")
+        names = (
+            *TASK_OVERRIDE_FIELDS,
+            "context_limit_stated",
+            "context_safety_margin_fraction",
+            "stop_condition",
+        )
         return {name: getattr(self, name) for name in names}
 
     @property
@@ -159,7 +180,8 @@ class RolloutPolicyConfig:
         if self.max_model_len is None or self.context_safety_margin_fraction == 0:
             return 0
         return max(
-            MIN_CONTEXT_SAFETY_MARGIN_TOKENS, round(self.max_model_len * self.context_safety_margin_fraction)
+            MIN_CONTEXT_SAFETY_MARGIN_TOKENS,
+            round(self.max_model_len * self.context_safety_margin_fraction),
         )
 
     @property
@@ -232,17 +254,13 @@ class RolloutPolicyState:
             turn_warning_sent=bool(checkpoint.get("turn_warning_sent")),
             output_limit_recovery_used=bool(checkpoint.get("output_limit_recovery_used")),
             invalid_submissions=int(checkpoint.get("invalid_submissions") or 0),
-            low_similarity_submissions=int(
-                checkpoint.get("low_similarity_submissions") or 0
-            ),
+            low_similarity_submissions=int(checkpoint.get("low_similarity_submissions") or 0),
             repeated_submission_signature=checkpoint.get("repeated_submission_signature"),
             repeated_submission_count=int(checkpoint.get("repeated_submission_count") or 0),
             last_submission=checkpoint.get("last_submission"),
             last_submission_arguments=checkpoint.get("last_submission_arguments"),
             best_accepted_submission=checkpoint.get("best_accepted_submission"),
-            best_accepted_submission_arguments=checkpoint.get(
-                "best_accepted_submission_arguments"
-            ),
+            best_accepted_submission_arguments=checkpoint.get("best_accepted_submission_arguments"),
             best_accepted_similarity=checkpoint.get("best_accepted_similarity"),
             best_accepted_identical=checkpoint.get("best_accepted_identical"),
         )
@@ -250,9 +268,7 @@ class RolloutPolicyState:
     def checkpoint_fields(self) -> dict[str, Any]:
         return {
             "total_tool_calls": self.total_tool_calls,
-            "consecutive_non_tool_turns_after_tools": (
-                self.consecutive_non_tool_turns_after_tools
-            ),
+            "consecutive_non_tool_turns_after_tools": (self.consecutive_non_tool_turns_after_tools),
             "forced_submit_requested": self.forced_submit_requested,
             "model_stop_submit_requested": self.model_stop_submit_requested,
             "tool_limit_finalization_requested": self.tool_limit_finalization_requested,
@@ -312,7 +328,8 @@ def add_rollout_flag_arguments(parser: argparse.ArgumentParser) -> None:
     """Add the context margin, progress feedback and stop condition flags shared by every rollout host."""
 
     parser.add_argument(
-        "--context-safety-margin-fraction", type=float,
+        "--context-safety-margin-fraction",
+        type=float,
         default=DEFAULT_CONTEXT_SAFETY_MARGIN_FRACTION,
         help=(
             "Share of the context limit kept free of output when clipping it to the context left, "
@@ -320,14 +337,18 @@ def add_rollout_flag_arguments(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
-        "--no-budget-feedback", dest="budget_feedback", action="store_false",
+        "--no-budget-feedback",
+        dest="budget_feedback",
+        action="store_false",
         help=(
             "Disable progress messages: remaining budgets, context warnings and the turn warning. "
             "The system prompt still states the limits. A task's budget_feedback overrides it"
         ),
     )
     parser.add_argument(
-        "--stop-condition", type=parse_stop_condition, default=DEFAULT_STOP_CONDITION,
+        "--stop-condition",
+        type=parse_stop_condition,
+        default=DEFAULT_STOP_CONDITION,
         help=(
             "What ends a rollout. 'exact' (default): an accepted exact match, with coaching after "
             "weaker submissions. A similarity such as 0.8: an accepted route at or above it; 0 "
@@ -427,13 +448,10 @@ def handle_no_tool_response(
         persistence_suffix = f" {NON_TOOL_PERSISTENCE_GUARANTEE_SENTENCE}"
     if (
         config.force_submit_after_non_tool_turns > 0
-        and state.consecutive_non_tool_turns_after_tools
-        >= config.force_submit_after_non_tool_turns
+        and state.consecutive_non_tool_turns_after_tools >= config.force_submit_after_non_tool_turns
     ):
         state.forced_submit_requested = True
-        reminder = (
-            f"Call submit_pathway now with your best route.{persistence_suffix}"
-        )
+        reminder = f"Call submit_pathway now with your best route.{persistence_suffix}"
     else:
         reminder = (
             "Continue. Use additional tools if they are useful, and finish by calling "
@@ -462,11 +480,9 @@ def prepare_tool_call(
     if name == "submit_pathway":
         ignored_target_smiles = dispatch_arguments.pop("target_smiles", None)
         ignored_final_smiles = dispatch_arguments.pop("final_smiles", None)
-    dispatch_arguments, argument_coercions = coerce_tool_arguments(
+    dispatch_arguments, argument_coercions = coerce_tool_arguments(name, dispatch_arguments)
+    dispatch_arguments, defaults_applied, ignored_arguments = normalize_dispatch_arguments(
         name, dispatch_arguments
-    )
-    dispatch_arguments, defaults_applied, ignored_arguments = (
-        normalize_dispatch_arguments(name, dispatch_arguments)
     )
     call_id = str(raw_tool_call.get("id") or f"tool-call-{event_index}")
     return PreparedToolCall(
@@ -545,7 +561,10 @@ def handle_tool_result(
             {**step, "reaction_id": checked.get("reaction_id", step.get("reaction_id"))}
             for step, checked in zip(arguments.get("steps") or [], result.get("steps") or [])
         ]
-        state.best_accepted_submission_arguments = {**arguments, **({"steps": steps} if steps else {})}
+        state.best_accepted_submission_arguments = {
+            **arguments,
+            **({"steps": steps} if steps else {}),
+        }
         state.best_accepted_similarity = similarity
         state.best_accepted_identical = identical
     meets_floor = meets_submission_floor(
@@ -568,8 +587,7 @@ def handle_tool_result(
             )
         if (
             config.max_low_similarity_submissions is not None
-            and state.low_similarity_submissions
-            >= max(1, config.max_low_similarity_submissions)
+            and state.low_similarity_submissions >= max(1, config.max_low_similarity_submissions)
         ):
             return ToolResultDecision(
                 terminal_submission=state.best_accepted_submission,
@@ -622,11 +640,15 @@ def handle_tool_result(
         )
         # When the model ends the rollout, the rejected result's error_message is the whole response.
         repair = (
-            f"Invalid submission #{state.invalid_submissions}: {error_message} "
-            "Repair it using the tools. Empty steps are valid only with a grounded building_block. "
-            "Verify each step's claimed product, then submit a verified pathway or direct-purchase "
-            "building block."
-        ) if not config.model_stops else None
+            (
+                f"Invalid submission #{state.invalid_submissions}: {error_message} "
+                "Repair it using the tools. Empty steps are valid only with a grounded building_block. "
+                "Verify each step's claimed product, then submit a verified pathway or direct-purchase "
+                "building block."
+            )
+            if not config.model_stops
+            else None
+        )
     state.forced_submit_requested = False
     state.consecutive_non_tool_turns_after_tools = 0
     return ToolResultDecision(repair=repair)
@@ -721,16 +743,10 @@ def coerce_tool_arguments(
     if name == "simulate_reaction":
         _coerce_json_string_array_field(coerced, "reactants", "reactants", coercions)
     elif name == "simulate_reverse_reaction":
-        _coerce_json_string_array_field(
-            coerced, "product_smiles", "product_smiles", coercions
-        )
+        _coerce_json_string_array_field(coerced, "product_smiles", "product_smiles", coercions)
     elif name == "search_reaction_templates":
-        _coerce_json_string_array_field(
-            coerced, "reactant_smiles", "reactant_smiles", coercions
-        )
-        _coerce_json_string_array_field(
-            coerced, "product_smiles", "product_smiles", coercions
-        )
+        _coerce_json_string_array_field(coerced, "reactant_smiles", "reactant_smiles", coercions)
+        _coerce_json_string_array_field(coerced, "product_smiles", "product_smiles", coercions)
     elif name == "submit_pathway":
         _coerce_json_string_object_array_field(coerced, "steps", "steps", coercions)
         steps = coerced.get("steps")
@@ -814,9 +830,7 @@ def _coerce_json_string_array_field(
     )
 
 
-def tool_argument_error(
-    name: str, message: str, arguments: dict[str, Any]
-) -> dict[str, Any]:
+def tool_argument_error(name: str, message: str, arguments: dict[str, Any]) -> dict[str, Any]:
     result: dict[str, Any] = {
         "valid": False,
         "error": "invalid_tool_call",
@@ -837,9 +851,7 @@ def is_retryable_tool_error(result: dict[str, Any]) -> bool:
     return bool(result.get("retryable") and result.get("error"))
 
 
-def is_better_submission_similarity(
-    candidate: float | None, incumbent: float | None
-) -> bool:
+def is_better_submission_similarity(candidate: float | None, incumbent: float | None) -> bool:
     if incumbent is None:
         return True
     if candidate is None:
@@ -951,9 +963,7 @@ def submission_summary_fields(
             if submission and submission.get("accepted") is True
             else None
         ),
-        "reaction_validation": (
-            submission.get("reaction_validation") if submission else None
-        ),
+        "reaction_validation": (submission.get("reaction_validation") if submission else None),
         "building_block_grounded": (
             submission.get("building_block_grounded") if submission else None
         ),
@@ -979,12 +989,8 @@ def selected_submission_event(
             "reason": reason,
             "similarity_to_target": summary["similarity_to_target"],
             "identical_to_target": summary["identical_to_target"],
-            "constitutional_similarity_to_target": summary[
-                "constitutional_similarity_to_target"
-            ],
-            "stereo_aware_similarity_to_target": summary[
-                "stereo_aware_similarity_to_target"
-            ],
+            "constitutional_similarity_to_target": summary["constitutional_similarity_to_target"],
+            "stereo_aware_similarity_to_target": summary["stereo_aware_similarity_to_target"],
             "submission_arguments": submission_arguments,
             "result": submission,
             "model_result": model_result,

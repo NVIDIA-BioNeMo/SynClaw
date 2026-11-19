@@ -118,7 +118,9 @@ class EmoleculesTests(unittest.TestCase):
                 self.assertEqual(stats["multicomponent_dropped"], 3 if policy == "drop" else 0)
                 self.assertEqual(
                     stats["valid_rows"],
-                    stats["output_rows_excluding_header"] + stats["duplicate_rows"] + stats["multicomponent_dropped"],
+                    stats["output_rows_excluding_header"]
+                    + stats["duplicate_rows"]
+                    + stats["multicomponent_dropped"],
                 )
             with self.assertRaises(RuntimeError):
                 convert_emolecules_parent_archive(
@@ -147,7 +149,11 @@ class EmoleculesTests(unittest.TestCase):
             fixture = root / "fixture.smi.gz"
             with gzip.open(fixture, "wt", encoding="utf-8", newline="\n") as handle:
                 handle.write("isosmiles parent_id\nCCN.Cl 1\n")
-            options = {"dest_root": root / "destination", "release": "2026-07-01", "source_url": fixture.as_uri()}
+            options = {
+                "dest_root": root / "destination",
+                "release": "2026-07-01",
+                "source_url": fixture.as_uri(),
+            }
             with patch(
                 "synclaw.tasks.emolecules.urllib.request.urlopen",
                 side_effect=lambda *_args, **_kwargs: fixture.open("rb"),
@@ -155,7 +161,10 @@ class EmoleculesTests(unittest.TestCase):
                 kept = prepare_emolecules_building_blocks(**options, multicomponent="keep")
             self.assertEqual(kept["conversion_status"], "converted")
             self.assertEqual(
-                prepare_emolecules_building_blocks(**options, multicomponent="keep")["conversion_status"], "reused"
+                prepare_emolecules_building_blocks(**options, multicomponent="keep")[
+                    "conversion_status"
+                ],
+                "reused",
             )
             major = prepare_emolecules_building_blocks(**options)
             self.assertEqual(major["conversion_status"], "converted")

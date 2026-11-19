@@ -59,14 +59,18 @@ def ingest_reaction_libraries(
     catalog = bundled_reaction_catalog()
     template_dir = bundled_reaction_template_dir()
     if not template_dir.is_dir():
-        raise RuntimeError("Importing the bundled reaction sources requires a source checkout of BioNeMo-SynClaw")
+        raise RuntimeError(
+            "Importing the bundled reaction sources requires a source checkout of BioNeMo-SynClaw"
+        )
     libraries = list(catalog["sources"])
     families = json.loads(_verified_bundled_file(template_dir, catalog["families"]).read_text())
     records = []
     for library, source in catalog["sources"].items():
         for row in db.iter_jsonl(_verified_bundled_file(template_dir, source)):
             if row["family"] not in families:
-                raise ValueError(f"{row['reaction_id']}: family {row['family']!r} is missing from families.json")
+                raise ValueError(
+                    f"{row['reaction_id']}: family {row['family']!r} is missing from families.json"
+                )
             records.append((library, {**row, "family_metadata": families[row["family"]]}))
     if len({row["smarts"] for _, row in records}) != len(records):
         raise ValueError("Bundled reaction sources contain duplicated SMARTS")
@@ -184,7 +188,9 @@ def load_template_annotations(
         normalized_id = _normalize_reaction_id(reaction_id, index=0, library=annotation_library)
         key = (annotation_library, normalized_id)
         if key in annotations:
-            raise ValueError(f"{annotations_path}:{line_number}: duplicate annotation for {normalized_id}")
+            raise ValueError(
+                f"{annotations_path}:{line_number}: duplicate annotation for {normalized_id}"
+            )
         _validate_template_annotation(record, source=f"{annotations_path}:{line_number}")
         family = str(record.get("family") or record.get("reaction_family") or "")
         metadata = record.get("family_metadata")
@@ -269,7 +275,9 @@ def _validate_template_annotation(annotation: dict[str, Any], *, source: str) ->
 
 
 def _validate_text_list(value: Any, *, source: str, field: str) -> None:
-    if not isinstance(value, list) or any(not isinstance(item, str) or not item.strip() for item in value):
+    if not isinstance(value, list) or any(
+        not isinstance(item, str) or not item.strip() for item in value
+    ):
         raise ValueError(f"{source}: {field} must be a list of non-empty strings")
 
 
@@ -301,9 +309,7 @@ def apply_template_annotation(
 
     explicit_replace_tags = annotation.get("replace_tags")
     replace_tags = (
-        explicit_replace_tags
-        if isinstance(explicit_replace_tags, bool)
-        else replace_existing_tags
+        explicit_replace_tags if isinstance(explicit_replace_tags, bool) else replace_existing_tags
     )
     tags = [] if replace_tags else _normalize_tags(_json_list(value.get("tags_json")))
     family = annotation.get("family") or annotation.get("reaction_family")
@@ -392,7 +398,9 @@ def _decode_inline_annotation_value(key: str, value: Any, *, source: str) -> Any
 
 def normalize_template_record(record: dict[str, Any], index: int, library: str) -> dict[str, Any]:
     smarts = _first_value(record, TEMPLATE_KEYS)
-    reaction_id = _normalize_reaction_id(_first_value(record, ID_KEYS), index=index, library=library)
+    reaction_id = _normalize_reaction_id(
+        _first_value(record, ID_KEYS), index=index, library=library
+    )
     name = _first_value(record, NAME_KEYS)
     description = _first_value(record, DESCRIPTION_KEYS)
     tags = _normalize_tags(_first_value(record, TAG_KEYS))
@@ -403,13 +411,20 @@ def normalize_template_record(record: dict[str, Any], index: int, library: str) 
     # Keep the record's own metadata (e.g. provenance) and nest any other unused fields,
     # so neither can be mistaken for the curated annotation stored below.
     consumed = {
-        *TEMPLATE_KEYS, *ID_KEYS, *NAME_KEYS, *DESCRIPTION_KEYS, *TAG_KEYS, *ANNOTATION_METADATA_KEYS, "library"
+        *TEMPLATE_KEYS,
+        *ID_KEYS,
+        *NAME_KEYS,
+        *DESCRIPTION_KEYS,
+        *TAG_KEYS,
+        *ANNOTATION_METADATA_KEYS,
+        "library",
     }
     source_metadata = record.get("metadata")
     nest_metadata = not isinstance(source_metadata, dict) or "annotation" in source_metadata
     metadata: dict[str, Any] = {} if nest_metadata else dict(source_metadata)
     source_fields = {
-        key: value for key, value in record.items()
+        key: value
+        for key, value in record.items()
         if key not in consumed and (key != "metadata" or nest_metadata)
     }
     if source_fields:
@@ -517,11 +532,14 @@ def search_reaction_templates_structural_matches(
             reaction = AllChem.ReactionFromSmarts(template["smarts"])
             rdChemReactions.ChemicalReaction.Initialize(reaction)
         except Exception as exc:
-            execution_issues.append(f"{template.get('reaction_id')}: RDKit could not parse template: {exc}")
+            execution_issues.append(
+                f"{template.get('reaction_id')}: RDKit could not parse template: {exc}"
+            )
             continue
 
         reactant_templates = [
-            reaction.GetReactantTemplate(index) for index in range(reaction.GetNumReactantTemplates())
+            reaction.GetReactantTemplate(index)
+            for index in range(reaction.GetNumReactantTemplates())
         ]
         product_templates = [
             reaction.GetProductTemplate(index) for index in range(reaction.GetNumProductTemplates())
@@ -533,7 +551,11 @@ def search_reaction_templates_structural_matches(
 
         forward_result = None
         forward_summary = None
-        if run_forward and reactant_inputs and len(reactant_inputs) == reaction.GetNumReactantTemplates():
+        if (
+            run_forward
+            and reactant_inputs
+            and len(reactant_inputs) == reaction.GetNumReactantTemplates()
+        ):
             forward_result = simulate_reaction(
                 conn,
                 reaction_id=str(template["reaction_id"]),
@@ -707,7 +729,9 @@ def _simulate_reaction_smarts(
     product = proposed.get("product")
     if not proposed:
         issues = [f"A reaction SMARTS may take at most {MAX_SMARTS_REACTANTS} reactants."]
-    elif not proposed.get("reactants_valid", True) or (product is not None and not product["valid"]):
+    elif not proposed.get("reactants_valid", True) or (
+        product is not None and not product["valid"]
+    ):
         # Bad input SMILES, not the SMARTS, is the problem to report.
         issues = [issue for issue in proposed.get("issues") or [] if " invalid: " in issue]
     elif not proposed.get("reaction_executed"):
@@ -777,7 +801,10 @@ def _smarts_grounding_candidates(
         template_scan_limit=50000,
     )
     for match in matches.get("results") or []:
-        if exact is None or (match["reaction_id"], match["library"]) != (exact["reaction_id"], exact["library"]):
+        if exact is None or (match["reaction_id"], match["library"]) != (
+            exact["reaction_id"],
+            exact["library"],
+        ):
             yield {key: value for key, value in match.items() if key != "structure_match"}
 
 
@@ -834,7 +861,7 @@ def _simulate_template(
                     *product_issues,
                     "Reactant count mismatch: "
                     f"template expects {expected_reactants} reactant(s), "
-                    f"but {provided_reactants} were provided."
+                    f"but {provided_reactants} were provided.",
                 ],
                 "reactants": reactant_validations,
                 "product": product_validation,
@@ -889,7 +916,9 @@ def _simulate_template(
             "No products generated for the provided order or alternate reactant orders. "
             "Inspect reactant roles and try a different template or reactants."
         )
-    used_order = productive_orders[0] if productive_orders else list(range(1, len(reactant_smiles) + 1))
+    used_order = (
+        productive_orders[0] if productive_orders else list(range(1, len(reactant_smiles) + 1))
+    )
     product_matched = None
     if product_validation is not None and product_validation["valid"]:
         claimed = product_validation["canonical_smiles"]
@@ -994,11 +1023,13 @@ def simulate_reverse_reaction(
         reaction = AllChem.ReactionFromSmarts(reverse_smarts)
         rdChemReactions.ChemicalReaction.Initialize(reaction)
         product_mols = [Chem.MolFromSmiles(v["canonical_smiles"]) for v in product_validations]
-        candidate_sets, productive_orders, attempted_orders, skipped_invalid_sets = _run_reverse_reaction(
-            reaction,
-            product_mols,
-            Chem,
-            max_outcomes=max_outcomes,
+        candidate_sets, productive_orders, attempted_orders, skipped_invalid_sets = (
+            _run_reverse_reaction(
+                reaction,
+                product_mols,
+                Chem,
+                max_outcomes=max_outcomes,
+            )
         )
     except Exception as exc:
         return {
@@ -1044,11 +1075,15 @@ def simulate_reverse_reaction(
         "provided_product_count": len(product_inputs),
         "generated_reactant_count": expected_reactants,
         "attempted_product_orders": attempted_orders,
-        "used_product_order": productive_orders[0] if productive_orders else list(range(1, len(product_inputs) + 1)),
+        "used_product_order": productive_orders[0]
+        if productive_orders
+        else list(range(1, len(product_inputs) + 1)),
         "product_order_permuted": bool(productive_orders)
         and productive_orders[0] != list(range(1, len(product_inputs) + 1)),
         "productive_product_orders": productive_orders,
-        "template_introduces_unmapped_product_atoms": bool(template.get("introduces_unmapped_product_atoms")),
+        "template_introduces_unmapped_product_atoms": bool(
+            template.get("introduces_unmapped_product_atoms")
+        ),
     }
 
 
@@ -1090,7 +1125,13 @@ def _run_reaction_with_permutations(
         if order_generated:
             productive_orders.append([index + 1 for index in order])
             break
-    return sorted(generated), generated_product_sets, productive_orders, attempted, skipped_invalid_product_sets
+    return (
+        sorted(generated),
+        generated_product_sets,
+        productive_orders,
+        attempted,
+        skipped_invalid_product_sets,
+    )
 
 
 def _run_reverse_reaction(

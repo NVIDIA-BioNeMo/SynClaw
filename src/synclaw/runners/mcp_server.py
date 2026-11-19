@@ -161,10 +161,7 @@ class AsyncToolExecutor:
         """Start every process worker before the host creates additional threads."""
 
         assert isinstance(self._worker_pool, ProcessPoolExecutor)
-        probes = [
-            self._worker_pool.submit(_tool_worker_pid)
-            for _ in range(expected_workers)
-        ]
+        probes = [self._worker_pool.submit(_tool_worker_pid) for _ in range(expected_workers)]
         deadline = time.monotonic() + PROCESS_POOL_STARTUP_TIMEOUT_SECONDS
         worker_pids: set[int] = set()
         try:
@@ -214,7 +211,9 @@ class AsyncToolExecutor:
             pool = self._worker_pool
         pool.shutdown(wait=True, cancel_futures=True)
 
-    def _replace_broken_pool(self, broken: ProcessPoolExecutor, exc: BrokenProcessPool) -> ToolWorkerPoolBroken:
+    def _replace_broken_pool(
+        self, broken: ProcessPoolExecutor, exc: BrokenProcessPool
+    ) -> ToolWorkerPoolBroken:
         """Swap in a fresh pool once, however many in-flight calls saw the same breakage."""
 
         with self._pool_lock:
@@ -246,9 +245,7 @@ class AsyncToolExecutor:
         async with self._inflight_lock:
             task = self._inflight.get(call_key)
             if task is None:
-                task = asyncio.create_task(
-                    self._execute_new(tool_name, function, kwargs)
-                )
+                task = asyncio.create_task(self._execute_new(tool_name, function, kwargs))
                 self._inflight[call_key] = task
                 task.add_done_callback(
                     lambda completed, key=call_key: self._schedule_expiry(key, completed)
@@ -299,9 +296,7 @@ class AsyncToolExecutor:
             pool = self._worker_pool
             try:
                 if self._uses_process_pool:
-                    return await loop.run_in_executor(
-                        pool, _invoke_tool_process, tool_name, kwargs
-                    )
+                    return await loop.run_in_executor(pool, _invoke_tool_process, tool_name, kwargs)
                 if function is None:
                     raise ValueError("function is required when process workers are disabled")
                 return await loop.run_in_executor(pool, lambda: function(**kwargs))
@@ -346,6 +341,7 @@ def create_server(
             toxicity=toxicity,
         ),
     )
+
     class SynClawMCP(MCPServer):
         async def list_tools(self):
             # MCPServer derives schemas from the signatures; advertise the canonical ones instead.
@@ -355,7 +351,9 @@ def create_server(
             ]
 
     server = SynClawMCP("bionemo-synclaw-server")
-    descriptions = {tool["function"]["name"]: tool["function"]["description"] for tool in TOOL_SCHEMAS}
+    descriptions = {
+        tool["function"]["name"]: tool["function"]["description"] for tool in TOOL_SCHEMAS
+    }
     parameters = {tool["function"]["name"]: tool["function"]["parameters"] for tool in TOOL_SCHEMAS}
 
     @server.tool(description=descriptions["search_building_blocks"])
@@ -382,9 +380,7 @@ def create_server(
 
     @server.tool(description=descriptions["mces"])
     async def mces(smiles_a: str, smiles_b: str) -> dict:
-        return await executor.execute(
-            "mces", tools.mces, smiles_a=smiles_a, smiles_b=smiles_b
-        )
+        return await executor.execute("mces", tools.mces, smiles_a=smiles_a, smiles_b=smiles_b)
 
     @server.tool(description=descriptions["search_reaction_templates"])
     async def search_reaction_templates(
@@ -454,6 +450,7 @@ def create_server(
             building_block=building_block,
             pathway_text=pathway_text,
         )
+
     return server
 
 

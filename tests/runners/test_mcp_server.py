@@ -58,9 +58,7 @@ def test_async_tool_executor_caps_concurrency_and_releases_waiters() -> None:
     async def run() -> list[dict]:
         executor = AsyncToolExecutor(16, use_process_pool=False)
         tasks = [
-            asyncio.create_task(
-                executor.execute("blocking_tool", blocking_tool, value=index)
-            )
+            asyncio.create_task(executor.execute("blocking_tool", blocking_tool, value=index))
             for index in range(20)
         ]
         assert await asyncio.to_thread(sixteen_started.wait, 5)
@@ -82,14 +80,19 @@ def test_mcp_tool_schemas_remain_public_and_wrappers_are_async(
 ) -> None:
     args = build_parser().parse_args(["mcp", "serve"])
     assert args.reaction_library == ("synformer", "paroutes", "ord", "nvidia")
-    assert inspect.signature(create_server).parameters[
-        "reaction_library"
-    ].default == ("synformer", "paroutes", "ord", "nvidia")
+    assert inspect.signature(create_server).parameters["reaction_library"].default == (
+        "synformer",
+        "paroutes",
+        "ord",
+        "nvidia",
+    )
 
     db.init_db(tmp_path / "synclaw.sqlite")
     db.prepare_building_block_search(tmp_path / "synclaw.sqlite")
     server = create_server(
-        tmp_path / "synclaw.sqlite", reaction_library="", use_process_pool=False,
+        tmp_path / "synclaw.sqlite",
+        reaction_library="",
+        use_process_pool=False,
     )
 
     tools = server._tool_manager._tools
@@ -104,7 +107,9 @@ def test_mcp_tool_schemas_remain_public_and_wrappers_are_async(
     }
     assert all(inspect.iscoroutinefunction(tool.fn) for tool in tools.values())
     advertised = {tool.name: tool.input_schema for tool in asyncio.run(server.list_tools())}
-    assert advertised == {tool["function"]["name"]: tool["function"]["parameters"] for tool in TOOL_SCHEMAS}
+    assert advertised == {
+        tool["function"]["name"]: tool["function"]["parameters"] for tool in TOOL_SCHEMAS
+    }
     for tool in tools.values():
         properties = tool.parameters["properties"]
         assert "max_concurrent_executions" not in properties
@@ -165,13 +170,9 @@ def test_identical_inflight_calls_reattach_without_duplicate_execution() -> None
 
     async def run() -> tuple[dict, dict]:
         executor = AsyncToolExecutor(4, use_process_pool=False)
-        first = asyncio.create_task(
-            executor.execute("blocking_tool", blocking_tool, value=7)
-        )
+        first = asyncio.create_task(executor.execute("blocking_tool", blocking_tool, value=7))
         assert await asyncio.to_thread(started.wait, 5)
-        second = asyncio.create_task(
-            executor.execute("blocking_tool", blocking_tool, value=7)
-        )
+        second = asyncio.create_task(executor.execute("blocking_tool", blocking_tool, value=7))
         await asyncio.sleep(0)
         release.set()
         return await first, await second
@@ -208,9 +209,7 @@ def test_process_workers_prestart_and_rebuild_a_broken_pool(
         assert result["similarity"] == 1.0
 
         marker_path = tmp_path / "active-worker-pid"
-        blocking_future = executor._worker_pool.submit(
-            _block_process_worker, str(marker_path)
-        )
+        blocking_future = executor._worker_pool.submit(_block_process_worker, str(marker_path))
         for _ in range(100):
             if marker_path.exists():
                 break

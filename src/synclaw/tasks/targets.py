@@ -121,13 +121,14 @@ def load_matrix_dir(directory: str | Path) -> MatrixDir:
     missing = [name for name in REQUIRED_FILES if not (directory / name).is_file()]
     if missing:
         raise FileNotFoundError(
-            f"{directory} is not a reactant-template matrix directory; "
-            f"missing {', '.join(missing)}"
+            f"{directory} is not a reactant-template matrix directory; missing {', '.join(missing)}"
         )
 
     matrix = np.load(directory / MATRIX_FILE, mmap_mode="r")
     if matrix.ndim != 2 or matrix.dtype != np.uint8:
-        raise ValueError(f"{MATRIX_FILE} must be a 2-D uint8 array, got {matrix.ndim}-D {matrix.dtype}")
+        raise ValueError(
+            f"{MATRIX_FILE} must be a 2-D uint8 array, got {matrix.ndim}-D {matrix.dtype}"
+        )
 
     with open(directory / REACTION_FILE) as handle:
         reaction_smarts = [line.strip() for line in handle if line.strip()]
@@ -135,15 +136,21 @@ def load_matrix_dir(directory: str | Path) -> MatrixDir:
         reaction_ids = [line.strip() for line in handle if line.strip()]
 
     offset_path = directory / OFFSET_FILE
-    offsets = np.load(offset_path, mmap_mode="r") if offset_path.is_file() else line_offsets(
-        directory / BUILDING_BLOCK_FILE
+    offsets = (
+        np.load(offset_path, mmap_mode="r")
+        if offset_path.is_file()
+        else line_offsets(directory / BUILDING_BLOCK_FILE)
     )
 
     problems = []
     if matrix.shape[1] != len(reaction_smarts):
-        problems.append(f"{matrix.shape[1]} matrix columns vs {len(reaction_smarts)} reaction SMARTS")
+        problems.append(
+            f"{matrix.shape[1]} matrix columns vs {len(reaction_smarts)} reaction SMARTS"
+        )
     if len(reaction_ids) != len(reaction_smarts):
-        problems.append(f"{len(reaction_ids)} reaction ids vs {len(reaction_smarts)} reaction SMARTS")
+        problems.append(
+            f"{len(reaction_ids)} reaction ids vs {len(reaction_smarts)} reaction SMARTS"
+        )
     if matrix.shape[0] != len(offsets) - 1:
         problems.append(f"{matrix.shape[0]} matrix rows vs {len(offsets) - 1} building blocks")
     if problems:
@@ -294,7 +301,9 @@ class RouteBuilder:
         mols = [self.Chem.MolFromSmiles(smiles) for smiles in reactants]
         if any(mol is None for mol in mols):
             return None, None
-        generated, _, productive_orders, _, _ = _run_reaction_with_permutations(self.reaction(template), mols, self.Chem)
+        generated, _, productive_orders, _, _ = _run_reaction_with_permutations(
+            self.reaction(template), mols, self.Chem
+        )
         if not generated:
             return None, None
         order = productive_orders[0] if productive_orders else list(range(1, len(mols) + 1))
@@ -318,7 +327,9 @@ class RouteBuilder:
             for position in positions:
                 if not product_mol.HasSubstructMatch(reaction.GetReactantTemplate(position)):
                     continue
-                if all(self.pools.count(template, other) for other in range(count) if other != position):
+                if all(
+                    self.pools.count(template, other) for other in range(count) if other != position
+                ):
                     return template, position
         return None, None
 
@@ -399,7 +410,9 @@ class RouteBuilder:
         return product, tokens
 
 
-def _new_reactant_tokens(ordered: Sequence[str], product: str, partners: Sequence[str]) -> list[str]:
+def _new_reactant_tokens(
+    ordered: Sequence[str], product: str, partners: Sequence[str]
+) -> list[str]:
     """The reactants of an extension step that are not already on the stack.
 
     The running product occupies one reactant position and is on the stack, so exactly one
@@ -462,7 +475,13 @@ def replay_route(
 
     tokens = pathway.split(";")
     if not route_records_products(pathway, smarts_by_id):
-        return {"ok": False, "steps": 0, "steps_reproduced": 0, "reasons": [NO_PRODUCTS_REASON], "failures": []}
+        return {
+            "ok": False,
+            "steps": 0,
+            "steps_reproduced": 0,
+            "reasons": [NO_PRODUCTS_REASON],
+            "failures": [],
+        }
 
     steps = steps_ok = 0
     reasons: list[str] = []
@@ -492,7 +511,9 @@ def replay_route(
                 steps_ok += 1
             else:
                 reasons.append("not reproduced")
-                failures.append({"reaction_id": reaction_id, "reactants": list(reactants), "expected": token})
+                failures.append(
+                    {"reaction_id": reaction_id, "reactants": list(reactants), "expected": token}
+                )
                 ok = False
             stack[-1] = token
         else:
@@ -555,7 +576,9 @@ def _worker(task: tuple[int, str, GenerationOptions, int, str]) -> dict[str, Any
     matrix_dir = load_matrix_dir(directory)
     builder = RouteBuilder(matrix_dir, options, seed=worker_seed(options.seed, worker_id))
     Chem = builder.Chem
-    sascorer = _load_sascorer() if (options.sa_min is not None or options.sa_max is not None) else None
+    sascorer = (
+        _load_sascorer() if (options.sa_min is not None or options.sa_max is not None) else None
+    )
 
     mw_low = options.mw_min if options.mw_min is not None else float("-inf")
     mw_high = options.mw_max if options.mw_max is not None else float("inf")
@@ -605,7 +628,10 @@ def _worker(task: tuple[int, str, GenerationOptions, int, str]) -> dict[str, Any
             # `tasks.datasets` refuses it. Dative-bonded organometallics such as ferrocenes are
             # the usual source. Rejecting it here keeps a target file and a task set the same
             # length instead of letting the mismatch surface downstream.
-            if options.require_scoreable and not compare_molecular_identity(product, product)["valid"]:
+            if (
+                options.require_scoreable
+                and not compare_molecular_identity(product, product)["valid"]
+            ):
                 unscoreable_filtered += 1
                 continue
             seen.add(product)
@@ -720,8 +746,12 @@ def generate_targets(
         "first_build_error": first_build_error,
         "stats_path": str(stats_path),
     }
-    stats_path.write_text(json.dumps({**summary, "template_usage": template_usage}, indent=2) + "\n")
+    stats_path.write_text(
+        json.dumps({**summary, "template_usage": template_usage}, indent=2) + "\n"
+    )
     if build_errors:
-        _progress(f"{sum(build_errors.values())} draws raised {build_errors}; first: {first_build_error}")
+        _progress(
+            f"{sum(build_errors.values())} draws raised {build_errors}; first: {first_build_error}"
+        )
     _progress(f"wrote {written} targets to {output}")
     return summary

@@ -33,10 +33,38 @@ DEFAULT_DB_PATH = Path("var/synclaw.sqlite")
 REACTION_TEXT_SEARCH_CURATED_BONUS = 0.2
 # English function words that appear in most template descriptions and would otherwise
 # let any conversational query match nearly the whole catalog.
-REACTION_TEXT_SEARCH_STOPWORDS = frozenset({
-    "an", "and", "are", "as", "at", "be", "by", "can", "for", "from", "in", "into", "is", "it", "its",
-    "not", "of", "on", "or", "than", "that", "the", "then", "this", "to", "via", "with", "without",
-})
+REACTION_TEXT_SEARCH_STOPWORDS = frozenset(
+    {
+        "an",
+        "and",
+        "are",
+        "as",
+        "at",
+        "be",
+        "by",
+        "can",
+        "for",
+        "from",
+        "in",
+        "into",
+        "is",
+        "it",
+        "its",
+        "not",
+        "of",
+        "on",
+        "or",
+        "than",
+        "that",
+        "the",
+        "then",
+        "this",
+        "to",
+        "via",
+        "with",
+        "without",
+    }
+)
 BUILDING_BLOCK_SEARCH_INDEX_VERSION = 3
 BUILDING_BLOCK_FINGERPRINT_TABLE = fingerprint_index.FINGERPRINT_CHUNK_TABLE
 BUILDING_BLOCK_SEARCH_METADATA_TABLE = "building_block_search_metadata"
@@ -198,7 +226,12 @@ def prepare_building_block_search(
             init_db(temporary)
             with session(temporary) as conn:
                 conn.execute("ATTACH DATABASE ? AS source", (str(source),))
-                for table in ("building_blocks", "reaction_templates", "reaction_library_catalog", "import_errors"):
+                for table in (
+                    "building_blocks",
+                    "reaction_templates",
+                    "reaction_library_catalog",
+                    "import_errors",
+                ):
                     columns = [
                         str(row["name"])
                         for row in conn.execute(f"PRAGMA source.table_info({table})")
@@ -206,7 +239,9 @@ def prepare_building_block_search(
                     if not columns:
                         continue
                     names = ", ".join(columns)
-                    conn.execute(f"INSERT INTO main.{table} ({names}) SELECT {names} FROM source.{table}")
+                    conn.execute(
+                        f"INSERT INTO main.{table} ({names}) SELECT {names} FROM source.{table}"
+                    )
             _prepare_building_block_search_in_place(temporary)
             os.replace(temporary, destination)
         finally:
@@ -312,11 +347,14 @@ def require_reaction_library(conn: sqlite3.Connection, library: LibrarySelection
 
 def _available_reaction_libraries(conn: sqlite3.Connection) -> tuple[str, ...]:
     return tuple(
-        str(row[0]) for row in conn.execute("SELECT DISTINCT library FROM reaction_templates ORDER BY 1")
+        str(row[0])
+        for row in conn.execute("SELECT DISTINCT library FROM reaction_templates ORDER BY 1")
     )
 
 
-def _require_current_reaction_libraries(conn: sqlite3.Connection, libraries: tuple[str, ...]) -> None:
+def _require_current_reaction_libraries(
+    conn: sqlite3.Connection, libraries: tuple[str, ...]
+) -> None:
     catalog = reaction_library_catalog(conn)
     untracked = [name for name in libraries if name not in catalog]
     if untracked:
@@ -383,9 +421,13 @@ def remove_reaction_libraries(conn: sqlite3.Connection, libraries: LibrarySelect
     if not names:
         return 0
     placeholders = ",".join("?" for _ in names)
-    removed = conn.execute(f"DELETE FROM reaction_templates WHERE library IN ({placeholders})", names).rowcount
+    removed = conn.execute(
+        f"DELETE FROM reaction_templates WHERE library IN ({placeholders})", names
+    ).rowcount
     try:
-        conn.execute(f"DELETE FROM reaction_library_catalog WHERE library IN ({placeholders})", names)
+        conn.execute(
+            f"DELETE FROM reaction_library_catalog WHERE library IN ({placeholders})", names
+        )
     except sqlite3.OperationalError:
         pass
     return removed
@@ -430,12 +472,10 @@ def _require_prepared_building_block_search(
         or (
             verify_catalog
             and (
-                metadata["building_block_count"]
-                != metadata["current_building_block_count"]
+                metadata["building_block_count"] != metadata["current_building_block_count"]
                 or metadata["maximum_building_block_id"]
                 != metadata["current_maximum_building_block_id"]
-                or metadata["fingerprint_count"]
-                != metadata["current_building_block_count"]
+                or metadata["fingerprint_count"] != metadata["current_building_block_count"]
             )
         )
     ):
@@ -462,9 +502,7 @@ def stage_prepared_search_database(
     source = Path(db_path).resolve()
     require_prepared_building_block_search(source)
     directory = Path(
-        destination_directory
-        or os.environ.get("SLURM_TMPDIR")
-        or tempfile.gettempdir()
+        destination_directory or os.environ.get("SLURM_TMPDIR") or tempfile.gettempdir()
     )
     directory.mkdir(parents=True, exist_ok=True)
     job_id = os.environ.get("SLURM_JOB_ID", "local")
@@ -851,7 +889,17 @@ def upsert_reaction_template(
             )
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (reaction_id, library, name, description, smarts, tags_json, metadata_json, timestamp, timestamp),
+            (
+                reaction_id,
+                library,
+                name,
+                description,
+                smarts,
+                tags_json,
+                metadata_json,
+                timestamp,
+                timestamp,
+            ),
         )
         return True
     conn.execute(
@@ -927,17 +975,25 @@ def search_reaction_templates(
         }
         curated = (
             bool(alias_terms)
-            + any(_search_phrase_is_contained(normalized_query, hint) for hint in row.get("query_hints") or [])
-            - any(_search_phrase_is_contained(normalized_query, term) for term in row.get("search_exclusions") or [])
+            + any(
+                _search_phrase_is_contained(normalized_query, hint)
+                for hint in row.get("query_hints") or []
+            )
+            - any(
+                _search_phrase_is_contained(normalized_query, term)
+                for term in row.get("search_exclusions") or []
+            )
         )
-        scored.append((
-            row,
-            index.text.cosine(query_terms | alias_terms, position)
-            + index.smarts.cosine(query_smarts_terms, position),
-            curated,
-            row["reaction_id"].lower() == text.lower() or row["smarts"] == text,
-            len(query_terms & index.text.documents[position].keys()) / max(1, len(query_terms)),
-        ))
+        scored.append(
+            (
+                row,
+                index.text.cosine(query_terms | alias_terms, position)
+                + index.smarts.cosine(query_smarts_terms, position),
+                curated,
+                row["reaction_id"].lower() == text.lower() or row["smarts"] == text,
+                len(query_terms & index.text.documents[position].keys()) / max(1, len(query_terms)),
+            )
+        )
     # Cosine scores are scaled to the best match so curated aliases, hints and exclusions
     # shift a template by a fixed fraction of it.
     top = max((cosine for _, cosine, _, _, _ in scored), default=0.0) or 1.0
@@ -946,9 +1002,15 @@ def search_reaction_templates(
         score = cosine / top + REACTION_TEXT_SEARCH_CURATED_BONUS * curated
         if exact_id or score > 0:
             matches.append((row, score, exact_id, coverage))
-    matches.sort(key=lambda match: (
-        -match[2], -match[1], -match[3], match[0]["library"], match[0]["reaction_id"],
-    ))
+    matches.sort(
+        key=lambda match: (
+            -match[2],
+            -match[1],
+            -match[3],
+            match[0]["library"],
+            match[0]["reaction_id"],
+        )
+    )
     return [copy.deepcopy(row) for row, *_ in matches[:limit]]
 
 
@@ -983,15 +1045,23 @@ def _smarts_terms(text: str) -> list[str]:
 
 
 def _template_search_document(template: dict[str, Any]) -> Counter[str]:
-    return Counter(_text_terms(" ".join([
-        str(template.get("reaction_id", "")),
-        str(template.get("name", "")),
-        str(template.get("description", "")),
-        " ".join(template.get("tags") or []),
-        str(template.get("reaction_family", "")),
-        " ".join(template.get("query_hints") or []),
-        " ".join(str(role.get("role", "")) for role in template.get("reactant_roles") or []),
-    ])))
+    return Counter(
+        _text_terms(
+            " ".join(
+                [
+                    str(template.get("reaction_id", "")),
+                    str(template.get("name", "")),
+                    str(template.get("description", "")),
+                    " ".join(template.get("tags") or []),
+                    str(template.get("reaction_family", "")),
+                    " ".join(template.get("query_hints") or []),
+                    " ".join(
+                        str(role.get("role", "")) for role in template.get("reactant_roles") or []
+                    ),
+                ]
+            )
+        )
+    )
 
 
 class _TfIdfVectors:
@@ -1001,17 +1071,25 @@ class _TfIdfVectors:
         self.documents = documents
         document_frequency = Counter(term for document in documents for term in document)
         self.idf = {
-            term: math.log((1 + len(documents)) / (1 + count)) + 1 for term, count in document_frequency.items()
+            term: math.log((1 + len(documents)) / (1 + count)) + 1
+            for term, count in document_frequency.items()
         }
         self.norms = [
-            math.sqrt(sum(((1 + math.log(count)) * self.idf[term]) ** 2 for term, count in document.items()))
+            math.sqrt(
+                sum(
+                    ((1 + math.log(count)) * self.idf[term]) ** 2
+                    for term, count in document.items()
+                )
+            )
             for document in documents
         ]
 
     def cosine(self, terms: set[str], position: int) -> float:
         document, norm = self.documents[position], self.norms[position]
         query_norm = math.sqrt(sum(self.idf.get(term, 0.0) ** 2 for term in terms))
-        dot = sum((1 + math.log(document[term])) * self.idf[term] ** 2 for term in terms & document.keys())
+        dot = sum(
+            (1 + math.log(document[term])) * self.idf[term] ** 2 for term in terms & document.keys()
+        )
         return dot / (norm * query_norm) if norm and query_norm else 0.0
 
 
@@ -1024,11 +1102,15 @@ class _ReactionTextIndex:
         self.smarts = _TfIdfVectors([Counter(_smarts_terms(row.get("smarts", ""))) for row in rows])
 
 
-def _reaction_text_index(conn: sqlite3.Connection, libraries: tuple[str, ...]) -> _ReactionTextIndex:
+def _reaction_text_index(
+    conn: sqlite3.Connection, libraries: tuple[str, ...]
+) -> _ReactionTextIndex:
     database_path = _main_database_path(conn)
     if not database_path or conn.in_transaction:
         return _ReactionTextIndex(list_reaction_templates(conn, limit=50000, library=libraries))
-    return _cached_reaction_text_index(database_path, libraries, *_reaction_template_revision(conn, libraries))
+    return _cached_reaction_text_index(
+        database_path, libraries, *_reaction_template_revision(conn, libraries)
+    )
 
 
 @lru_cache(maxsize=16)
@@ -1082,7 +1164,10 @@ def table_counts(db_path: str | Path = DEFAULT_DB_PATH) -> dict[str, int]:
         "reaction_library_catalog",
     ]
     with session(db_path) as conn:
-        return {table: int(conn.execute(f"SELECT COUNT(*) AS count FROM {table}").fetchone()["count"]) for table in tables}
+        return {
+            table: int(conn.execute(f"SELECT COUNT(*) AS count FROM {table}").fetchone()["count"])
+            for table in tables
+        }
 
 
 def iter_jsonl(path: str | Path) -> Iterator[dict[str, Any]]:
@@ -1160,14 +1245,11 @@ def _reaction_template_row(row: sqlite3.Row) -> dict[str, Any]:
             else {}
         )
         value["overview"] = (
-            dict(annotation["overview"])
-            if isinstance(annotation.get("overview"), dict)
-            else {}
+            dict(annotation["overview"]) if isinstance(annotation.get("overview"), dict) else {}
         )
-        value["execution_hints"] = (
-            _metadata_text_list(annotation.get("retro_planning_notes"))
-            + _metadata_text_list(annotation.get("execution_caveats"))
-        )
+        value["execution_hints"] = _metadata_text_list(
+            annotation.get("retro_planning_notes")
+        ) + _metadata_text_list(annotation.get("execution_caveats"))
         return value
 
     value["reaction_family"] = ""
@@ -1434,7 +1516,9 @@ def _search_phrase_is_contained(normalized_query: str, candidate: Any) -> bool:
     return f" {normalized_candidate} " in f" {normalized_query} "
 
 
-def _with_match_metadata(row: dict[str, Any], match_type: str, similarity: float | None) -> dict[str, Any]:
+def _with_match_metadata(
+    row: dict[str, Any], match_type: str, similarity: float | None
+) -> dict[str, Any]:
     row = dict(row)
     row["match_type"] = match_type
     row["similarity"] = similarity

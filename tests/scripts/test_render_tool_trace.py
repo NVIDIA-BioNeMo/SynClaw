@@ -54,19 +54,32 @@ def test_report_shows_budget_snapshots_separately_from_billing_and_feedback():
     ]
     markdown = renderer.render_trace(events, trace_path=Path("trace.jsonl"))
     assert "## Token Budget" in markdown
-    assert "| 1 | 1,050,000 | 10,000 | 1,040,000 | 32,768 | estimated: `utf8_estimate` | `emitted` |" in markdown
+    assert (
+        "| 1 | 1,050,000 | 10,000 | 1,040,000 | 32,768 | estimated: `utf8_estimate` | `emitted` |"
+        in markdown
+    )
     assert "| 2 | 1,050,000 | — | — | 32,768 |" in markdown
     assert "- Token usage:" not in markdown
     assert "## Harness Interventions" in markdown
     assert f"- {reminder}" in markdown
-    assert renderer.render_harness_interventions([
-        {"event_type": "message", "role": "user", "payload": {
-            "content": "Remaining: 79 turns, 145 tool calls, ~1040k context tokens."
-        }},
-        {"event_type": "message", "role": "user", "payload": {
-            "content": "Your previous response hit its output-token limit and was truncated."
-        }},
-    ]) == [
+    assert renderer.render_harness_interventions(
+        [
+            {
+                "event_type": "message",
+                "role": "user",
+                "payload": {
+                    "content": "Remaining: 79 turns, 145 tool calls, ~1040k context tokens."
+                },
+            },
+            {
+                "event_type": "message",
+                "role": "user",
+                "payload": {
+                    "content": "Your previous response hit its output-token limit and was truncated."
+                },
+            },
+        ]
+    ) == [
         "- Remaining: 79 turns, 145 tool calls, ~1040k context tokens.",
         "- Your previous response hit its output-token limit and was truncated.",
     ]
@@ -75,13 +88,25 @@ def test_report_shows_budget_snapshots_separately_from_billing_and_feedback():
 
 def test_report_shows_attached_feedback_and_effective_output_cap():
     renderer = _load_renderer()
-    events = [{"event_type": "token_budget", "payload": {
-        "turn_index": 1, "context_window_tokens": 262144, "input_tokens": 231935,
-        "remaining_tokens": 30209, "max_output_tokens": 32768, "request_output_tokens": 7015,
-        "estimated": True, "source": "provider_calibrated_utf8", "status": "emitted",
-        "content": "Remaining: 5 turns. This response is limited to 7015 output tokens.",
-        "message_role": "tool",
-    }}, {"event_type": "harness_feedback", "payload": {"content": "Repair the pathway."}}]
+    events = [
+        {
+            "event_type": "token_budget",
+            "payload": {
+                "turn_index": 1,
+                "context_window_tokens": 262144,
+                "input_tokens": 231935,
+                "remaining_tokens": 30209,
+                "max_output_tokens": 32768,
+                "request_output_tokens": 7015,
+                "estimated": True,
+                "source": "provider_calibrated_utf8",
+                "status": "emitted",
+                "content": "Remaining: 5 turns. This response is limited to 7015 output tokens.",
+                "message_role": "tool",
+            },
+        },
+        {"event_type": "harness_feedback", "payload": {"content": "Repair the pathway."}},
+    ]
     text = renderer.render_trace(events, trace_path=Path("fixture.jsonl"))
     assert "| 2 | 262,144 | 231,935 | 30,209 | 7,015 |" in text
     assert "- Remaining: 5 turns. This response is limited to 7015 output tokens." in text
@@ -221,8 +246,14 @@ def test_summary_and_turns_render_token_usage():
 
     markdown = renderer.render_trace(events, trace_path=Path("trace.jsonl"))
 
-    assert "- Token usage: input `30`, output `13`, total `43`, cached input `1`, reasoning `2`, cost `0.004`" in markdown
-    assert "**Token usage:** input `10`, output `5`, total `15`, cached input `1`, reasoning `2`, cost `0.001`" in markdown
+    assert (
+        "- Token usage: input `30`, output `13`, total `43`, cached input `1`, reasoning `2`, cost `0.004`"
+        in markdown
+    )
+    assert (
+        "**Token usage:** input `10`, output `5`, total `15`, cached input `1`, reasoning `2`, cost `0.001`"
+        in markdown
+    )
     assert "**Token usage:** input `20`, output `8`, total `28`, cost `0.003`" in markdown
 
 
@@ -251,8 +282,14 @@ def test_report_never_estimates_cost_when_provider_omits_it():
         model="example-model",
     )
 
-    assert "- Token usage: input `1000`, output `100`, total `1100`, cached input `200`, cache read `200`" in markdown
-    assert "**Token usage:** input `1000`, output `100`, total `1100`, cached input `200`, cache read `200`" in markdown
+    assert (
+        "- Token usage: input `1000`, output `100`, total `1100`, cached input `200`, cache read `200`"
+        in markdown
+    )
+    assert (
+        "**Token usage:** input `1000`, output `100`, total `1100`, cached input `200`, cache read `200`"
+        in markdown
+    )
     assert "cost" not in markdown
 
 
@@ -264,7 +301,9 @@ def test_validator_outcome_has_single_blank_lines_around_validated_steps():
             "tool_name": "submit_pathway",
             "payload": {
                 "dispatch_arguments": {
-                    "steps": [{"reaction_id": "demo:R000", "reactants": ["BB:1"], "product_smiles": "CCO"}],
+                    "steps": [
+                        {"reaction_id": "demo:R000", "reactants": ["BB:1"], "product_smiles": "CCO"}
+                    ],
                     "pathway_text": "Make ethanol.",
                 },
                 "raw_tool_call": {"id": "call_1"},
@@ -317,7 +356,9 @@ def test_submitted_pathway_uses_selected_submission_result_not_last_call():
             "tool_name": "submit_pathway",
             "payload": {
                 "dispatch_arguments": {
-                    "steps": [{"reaction_id": "demo:R001", "reactants": ["BB:1"], "product_smiles": "CCO"}],
+                    "steps": [
+                        {"reaction_id": "demo:R001", "reactants": ["BB:1"], "product_smiles": "CCO"}
+                    ],
                     "pathway_text": "Selected route.",
                 }
             },
@@ -350,7 +391,9 @@ def test_submitted_pathway_uses_selected_submission_result_not_last_call():
             "tool_name": "submit_pathway",
             "payload": {
                 "dispatch_arguments": {
-                    "steps": [{"reaction_id": "demo:R002", "reactants": ["BB:2"], "product_smiles": "CCN"}],
+                    "steps": [
+                        {"reaction_id": "demo:R002", "reactants": ["BB:2"], "product_smiles": "CCN"}
+                    ],
                     "pathway_text": "Later route.",
                 }
             },
@@ -406,7 +449,9 @@ def test_submitted_pathway_uses_selected_submission_result_not_last_call():
 
     markdown = renderer.render_trace(events, trace_path=Path("trace.jsonl"))
 
-    submitted_section = markdown.split("## Submitted Pathway", 1)[1].split("## Validator Outcome", 1)[0]
+    submitted_section = markdown.split("## Submitted Pathway", 1)[1].split(
+        "## Validator Outcome", 1
+    )[0]
     assert "Selected route." in submitted_section
     assert "`demo:R001`" in submitted_section
     assert "`demo:R002`" not in submitted_section
@@ -479,7 +524,7 @@ def test_simulate_reverse_reaction_renders_readable_result():
     assert "- Candidate precursor sets:" in markdown
     assert "Set 1: `CO` (fully grounded `true`)" in markdown
     assert "`CO`; exact `BB:1` sim `1.0`; near `BB:2` sim `0.66`" in markdown
-    assert "**Result:** `{\"candidate_reactant_sets\"" not in markdown
+    assert '**Result:** `{"candidate_reactant_sets"' not in markdown
 
 
 def test_similarity_call_renders_ordered_markdown_arguments():
@@ -540,7 +585,7 @@ def test_similarity_call_renders_ordered_markdown_arguments():
         '"smiles_b":"Cc1nc(-c2ccncc2)sc1CC#N"}`'
     ) in markdown
     assert "**Result:** valid `true`, similarity `0.75`" in markdown
-    assert "**Call:** `{\"smiles_a\"" not in markdown
+    assert '**Call:** `{"smiles_a"' not in markdown
 
 
 def test_tool_interaction_reports_model_visible_compaction():
