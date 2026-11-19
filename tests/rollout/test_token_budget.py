@@ -441,7 +441,7 @@ def _run(
             task=RolloutTask("fixture", "CCO", ({"role": "user", "content": "plan"},)),
             # No safety margin, so near-full contexts still send requests and reach the warnings.
             config=RolloutPolicyConfig(
-                max_turns=max_turns, turn_warning_remaining=3, token_budget_feedback=enabled,
+                max_turns=max_turns, turn_warning_remaining=3, budget_feedback=enabled,
                 max_tool_calls=max_tool_calls, context_safety_margin_fraction=0,
             ),
             transport=transport,

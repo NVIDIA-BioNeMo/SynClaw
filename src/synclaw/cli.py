@@ -121,7 +121,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Comma-separated budget overrides such as 'max_turns=40,max_tool_calls=75', or 'none' "
             "for the runner's budgets. Fields: max_turns, max_tool_calls, max_model_len, max_tokens "
             "(each a positive integer, or inf to leave it unstated and, except the context, unlimited) "
-            "and true|false for token_budget_feedback. "
+            "and true|false for budget_feedback. "
             "Repeat to give each task one set drawn uniformly "
             "at random; default: every task uses the runner's budgets."
         ),
@@ -301,11 +301,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Product SMILES to match; repeat for multi-product templates",
     )
     rxn_search.add_argument("--run-forward", action="store_true")
-    rxn_search.add_argument(
-        "--no-try-permutations",
-        action="store_true",
-        help="Do not try alternate reactant orders during optional forward simulation",
-    )
     rxn_search.add_argument("--template-scan-limit", type=int, default=5000)
     rxn_search.add_argument("--db", default=str(db.DEFAULT_DB_PATH))
     rxn_search.set_defaults(func=_cmd_tool_search_reaction_templates)
@@ -318,11 +313,6 @@ def build_parser() -> argparse.ArgumentParser:
     rxn_sim.add_argument("--reactants-json", required=True, help="JSON list of BB refs, INT refs, or SMILES")
     rxn_sim.add_argument("--product-smiles", help="Optional claimed product to check against generated products")
     rxn_sim.add_argument("--max-products", type=int, default=100)
-    rxn_sim.add_argument(
-        "--no-try-permutations",
-        action="store_true",
-        help="Do not try alternate reactant orders when the supplied order generates no products",
-    )
     rxn_sim.add_argument("--db", default=str(db.DEFAULT_DB_PATH))
     rxn_sim.set_defaults(func=_cmd_tool_simulate_reaction)
     rxn_reverse = tools_sub.add_parser(
@@ -564,7 +554,6 @@ def _cmd_tool_search_reaction_templates(args: argparse.Namespace) -> dict[str, A
         limit=args.limit,
         library=args.library,
         run_forward=args.run_forward,
-        try_permutations=not args.no_try_permutations,
         template_scan_limit=args.template_scan_limit,
     )
 
@@ -582,7 +571,6 @@ def _cmd_tool_simulate_reaction(args: argparse.Namespace) -> dict[str, Any]:
         reactants=[str(item) for item in reactants],
         product_smiles=args.product_smiles,
         max_products=args.max_products,
-        try_permutations=not args.no_try_permutations,
     )
 
 

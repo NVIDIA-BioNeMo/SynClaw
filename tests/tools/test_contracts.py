@@ -129,4 +129,3 @@ def test_prepare_tool_call_ignores_non_contract_arguments_consistently() -> None
         "provider_only": "ignored"
     }
     assert prepared.dispatch_arguments["max_products"] == 100
-    assert prepared.dispatch_arguments["try_permutations"] is True

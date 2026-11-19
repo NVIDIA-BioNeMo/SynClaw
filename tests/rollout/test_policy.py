@@ -344,12 +344,12 @@ def test_task_budgets_override_the_runner_and_keep_its_unset_values() -> None:
     assert task_budget_config({"max_turns": None}, runner) == runner
     resolved = task_budget_config(
         {"max_turns": 40, "max_tool_calls": 75, "max_model_len": 131072, "max_tokens": 16384,
-         "token_budget_feedback": False},
+         "budget_feedback": False},
         runner,
     )
     assert resolved.budget_fields == {
         "max_turns": 40, "max_tool_calls": 75, "max_model_len": 131072, "max_tokens": 16384,
-        "context_limit_stated": True, "context_safety_margin_fraction": 1 / 32, "token_budget_feedback": False,
+        "context_limit_stated": True, "context_safety_margin_fraction": 1 / 32, "budget_feedback": False,
         "stop_condition": "exact",
     }
     # Turn, tool-call and output budgets may exceed the runner's; nothing caps them at the server.
@@ -371,7 +371,7 @@ def test_task_context_may_lower_but_not_raise_the_runner_limit() -> None:
 @pytest.mark.parametrize(("task", "runner_context", "match"), [
     ({"max_model_len": 262144}, 131072, "exceeds the runner's context limit 131072"),
     ({"max_model_len": 512}, 131072, "leaves no room for output"),  # Nothing left after the margin.
-    ({"token_budget_feedback": "false"}, 131072, "must be true or false"),
+    ({"budget_feedback": "false"}, 131072, "must be true or false"),
     # Unlimited turns or output need a context limit to end or clip the rollout.
     ({"max_tokens": "inf"}, None, "needs a known context limit"),
     ({"max_turns": "inf"}, None, "Unlimited turns need a known context limit"),
@@ -382,7 +382,7 @@ def test_invalid_task_budgets_are_refused(task: dict, runner_context: int | None
 
 
 def test_turn_warning_is_progress_feedback_but_final_turn_notices_are_not() -> None:
-    config = _config(token_budget_feedback=False)
+    config = _config(budget_feedback=False)
     state = RolloutPolicyState()
 
     assert turn_reminders(config, state, turn_index=7) == []

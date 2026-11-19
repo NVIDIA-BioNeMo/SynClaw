@@ -63,7 +63,7 @@ CASES = [
 
 @pytest.mark.parametrize(("reaction_id", "reactants", "expected"), CASES)
 def test_repaired_rule_products(tools, reaction_id, reactants, expected):
-    result = tools.simulate_reaction(reaction_id, reactants, try_permutations=False)
+    result = tools.simulate_reaction(reaction_id, reactants)
     assert set(result["generated_products"]) == {_canonical(s) for s in expected}
 
 
@@ -75,7 +75,7 @@ def test_repaired_rule_products(tools, reaction_id, reactants, expected):
     ("synformer:R077", ["CC(=O)NN", "CC(=N)OC"], "Cc1nnc(C)[nH]1"),
 ])
 def test_hydrogen_queries_recover_precursors(tools, reaction_id, reactants, product):
-    forward = tools.simulate_reaction(reaction_id, reactants, try_permutations=False)
+    forward = tools.simulate_reaction(reaction_id, reactants)
     assert set(forward["generated_products"]) == {_canonical(product)}
     reverse = tools.simulate_reverse_reaction(reaction_id, product, include_near=False)
     assert {tuple(c["reactants"]) for c in reverse["candidate_reactant_sets"]} == {

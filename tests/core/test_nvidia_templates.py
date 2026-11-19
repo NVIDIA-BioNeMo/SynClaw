@@ -58,7 +58,7 @@ CASES = [
 
 @pytest.mark.parametrize(("reaction_id", "reactants", "expected"), CASES)
 def test_nvidia_rule_products(tools, reaction_id, reactants, expected):
-    result = tools.simulate_reaction(reaction_id, reactants, try_permutations=False)
+    result = tools.simulate_reaction(reaction_id, reactants)
     assert set(result["generated_products"]) == {_canonical(s) for s in expected}
 
 

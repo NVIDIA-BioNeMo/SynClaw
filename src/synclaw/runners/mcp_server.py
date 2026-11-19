@@ -393,7 +393,6 @@ def create_server(
         product_smiles: str | list[str] | None = None,
         limit: int = 10,
         run_forward: bool = False,
-        try_permutations: bool = True,
     ) -> dict:
         return await executor.execute(
             "search_reaction_templates",
@@ -404,7 +403,6 @@ def create_server(
             limit=limit,
             library=reaction_library or None,
             run_forward=run_forward,
-            try_permutations=try_permutations,
         )
 
     @server.tool(description=descriptions["simulate_reaction"])
@@ -413,7 +411,6 @@ def create_server(
         reactants: list[str],
         product_smiles: str | None = None,
         max_products: int = 100,
-        try_permutations: bool = True,
     ) -> dict:
         return await executor.execute(
             "simulate_reaction",
@@ -422,7 +419,6 @@ def create_server(
             reactants=reactants,
             product_smiles=product_smiles,
             max_products=max_products,
-            try_permutations=try_permutations,
         )
 
     @server.tool(description=descriptions["simulate_reverse_reaction"])

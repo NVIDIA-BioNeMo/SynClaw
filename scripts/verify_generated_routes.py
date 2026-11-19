@@ -5,7 +5,7 @@
 
 Reads a TSV written by `synclaw generate-targets --with-intermediates`, where each reaction token
 is followed by the product recorded for that step, and re-runs every step through
-`_run_reaction_with_optional_permutations` -- the function behind `simulate_reaction`. A step
+`_run_reaction_with_permutations` -- the function behind `simulate_reaction`. A step
 passes when the recorded product is among the ones the engine generates.
 
 Routes produced by `tasks.targets` are executed by that same engine, so they reproduce by

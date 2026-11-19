@@ -522,7 +522,7 @@ def test_without_progress_feedback_an_output_limit_ends_the_rollout():
     truncated = AssistantTurn({"content": "Partial answer"}, finish_reason="length")
     transport = FakeTransport([truncated, tool_turn("submit_pathway", {"steps": []})])
     result = _run_shared_rollout(
-        transport, FakeTools([]), rollout_config=config(max_turns=4, token_budget_feedback=False),
+        transport, FakeTools([]), rollout_config=config(max_turns=4, budget_feedback=False),
     )
 
     assert result.reason == "max_tokens" and result.partial

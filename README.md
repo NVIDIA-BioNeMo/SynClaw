@@ -255,7 +255,7 @@ uv run synclaw make-taskset data/synformer_test_sets/chembl_filtered_1k.txt \
 ```
 
 **Per-task budgets.** A task may set its own `max_turns`, `max_tool_calls`, `max_model_len`,
-`max_tokens` and `token_budget_feedback`, overriding the runner's. Budgets are positive integers
+`max_tokens` and `budget_feedback`, overriding the runner's. Budgets are positive integers
 or `"inf"` (unlimited, and left out of the prompt); a task may lower `max_model_len` but not raise
 it. Repeat `--budget-set` to give each task one set of overrides, drawn uniformly (seed with
 `--budget-seed`); `none` keeps the runner's budgets:
@@ -266,7 +266,7 @@ uv run synclaw make-taskset data/synformer_test_sets/chembl_filtered_1k.txt \
   --output artifacts/tasksets/chembl_mixed_budgets.jsonl \
   --budget-set none \
   --budget-set max_turns=40,max_tool_calls=75,max_tokens=16384 \
-  --budget-set max_model_len=131072,token_budget_feedback=false \
+  --budget-set max_model_len=131072,budget_feedback=false \
   --budget-set max_turns=inf,max_tool_calls=inf,max_model_len=inf,max_tokens=inf
 ```
 
@@ -419,7 +419,7 @@ context warnings. A task's own budgets override the matching options below.
 | `--max-tool-calls` | Soft tool-call budget, default 150. When reached, the next turn is prompted to call `submit_pathway`, then the harness falls back to the best accepted route. |
 | `--max-tokens`, `--max-model-len` | Per-response output cap (default 32768) and context limit. Both are stated in the system prompt, and each response's output is clipped to the context left. Without `--max-model-len`, no clipping happens. |
 | `--stop-condition` | What ends a rollout. `exact` (default): an accepted submission whose product is the target under Standard InChI identity. A number from `0.0` to `1.0`: an accepted submission at or above that similarity, or an identity match (`0.0` ends on any accepted route). Below the condition the harness coaches the model to improve. `model`: the model's reply without a tool call ends the run with its best accepted route, with no coaching. |
-| `--no-token-budget-feedback` | Disables progress messages (see [Budget feedback](#budget-feedback)). The system prompt still states the limits and enforcement is unchanged. |
+| `--no-budget-feedback` | Disables progress messages (see [Budget feedback](#budget-feedback)). The system prompt still states the limits and enforcement is unchanged. |
 | `--reasoning-effort` | Optional `low`, `medium`, `high`, `xhigh` or `max` hint, sent only when set. Leave unset unless the model supports it. |
 | `--hide-target-building-block` | Treats the target as out of stock, to benchmark exact-match synthesis without the shortcut of buying it. Every building block that Standard InChI identity counts as the target is hidden from search, reverse-step grounding and submission. The model is not told. Analogues, including stereoisomers, can still be bought and are scored by similarity. |
 | `--hide-building-block-id ID` | Hides a catalog BB ID the same way. Repeatable, combines with target hiding, and IDs must exist in the database. |
@@ -434,7 +434,7 @@ The trace records hidden building-block IDs, and summaries report `target_hidden
 
 Before each response the model gets an advisory reminder of its remaining turns, tool calls and
 estimated context (a leading `~` marks an estimate), attached to the current user input or last
-tool result rather than as an extra turn. Pass `--no-token-budget-feedback` to disable these
+tool result rather than as an extra turn. Pass `--no-budget-feedback` to disable these
 reminders; the limits and their enforcement are unchanged.
 
 - At 50% of context remaining the model is asked to submit its best verified route, even an

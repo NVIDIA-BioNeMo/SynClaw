@@ -201,7 +201,6 @@ def call_local_tool(
                 limit=arguments["limit"],
                 library=reaction_library or None,
                 run_forward=arguments["run_forward"],
-                try_permutations=arguments["try_permutations"],
             )
         if name == "simulate_reaction":
             return tools.simulate_reaction(
@@ -209,7 +208,6 @@ def call_local_tool(
                 _required_str_list(arguments, "reactants", name),
                 product_smiles=_optional_str(arguments, "product_smiles"),
                 max_products=arguments["max_products"],
-                try_permutations=arguments["try_permutations"],
             )
         if name == "simulate_reverse_reaction":
             return tools.simulate_reverse_reaction(
@@ -415,7 +413,7 @@ async def run_rollout(
     for turn_index in turn_indices:
         for reminder in turn_reminders(config, state.policy, turn_index=turn_index):
             await _append_harness_feedback(state, transport, task, reminder, record)
-        if config.token_budget_feedback and budget_provider is not None:
+        if config.budget_feedback and budget_provider is not None:
             await _emit_budget_feedback(
                 state, transport, task, config, tool_schemas, budget_provider, turn_index, record,
             )
@@ -456,7 +454,7 @@ async def run_rollout(
         if finish_reason in _TOKEN_LIMITS:
             # Recovery is a harness message about the output limit, so it is progress feedback too.
             if (
-                config.token_budget_feedback
+                config.budget_feedback
                 and not state.policy.output_limit_recovery_used
                 and not state.policy.tool_limit_finalization_requested
                 and (config.max_turns is None or turn_index + 1 < config.max_turns)

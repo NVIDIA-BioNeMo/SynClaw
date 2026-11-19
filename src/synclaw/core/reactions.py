@@ -466,7 +466,6 @@ def search_reaction_templates_structural_matches(
     limit: int = 20,
     library: LibrarySelection = None,
     run_forward: bool = False,
-    try_permutations: bool = True,
     template_scan_limit: int = 5000,
 ) -> dict[str, Any]:
     """Search reaction templates by structural reactant/product role matching."""
@@ -540,7 +539,6 @@ def search_reaction_templates_structural_matches(
                 reaction_id=str(template["reaction_id"]),
                 reactant_smiles=[str(v["canonical_smiles"]) for v in reactant_validations],
                 max_products=50,
-                try_permutations=try_permutations,
             )
             generated_products = forward_result.get("generated_products") or []
             generated_sets = forward_result.get("generated_product_sets") or []
@@ -601,7 +599,6 @@ def search_reaction_templates_structural_matches(
         "library": library,
         "limit": result_limit,
         "run_forward": run_forward,
-        "try_permutations": try_permutations,
         "template_scan_limit": scan_limit,
         "scanned_template_count": len(templates),
         "matched_template_count": len(matches),
@@ -646,7 +643,6 @@ def simulate_reaction(
     reactant_smiles: list[str],
     product_smiles: str | None = None,
     max_products: int = 100,
-    try_permutations: bool = True,
     library: LibrarySelection = None,
 ) -> dict[str, Any]:
     """Run a reaction template and optionally check a claimed product.
@@ -662,7 +658,6 @@ def simulate_reaction(
             reactant_smiles,
             product_smiles,
             max_products=max_products,
-            try_permutations=try_permutations,
             library=library,
         )
     template, issue = lookup_reaction_template(conn, reaction_id, library=library)
@@ -674,7 +669,6 @@ def simulate_reaction(
         reactant_smiles,
         product_smiles,
         max_products=max_products,
-        try_permutations=try_permutations,
     )
 
 
@@ -689,7 +683,6 @@ def _simulate_reaction_smarts(
     product_smiles: str | None,
     *,
     max_products: int,
-    try_permutations: bool,
     library: LibrarySelection,
 ) -> dict[str, Any]:
     """Run the library template that reproduces a reaction SMARTS on these reactants.
@@ -707,7 +700,6 @@ def _simulate_reaction_smarts(
             reactant_smiles,
             product_smiles,
             max_products=None,
-            try_permutations=try_permutations,
         )
         if len(reactant_smiles) <= MAX_SMARTS_REACTANTS
         else {}
@@ -729,7 +721,7 @@ def _simulate_reaction_smarts(
         wanted = {claimed} if claimed else set(proposed["generated_products"])
         reactants = [item["canonical_smiles"] for item in proposed["reactants"]]
         for template in _smarts_grounding_candidates(
-            conn, smarts, reactants, claimed, library=library, try_permutations=try_permutations
+            conn, smarts, reactants, claimed, library=library
         ):
             result = _simulate_template(
                 template,
@@ -737,7 +729,6 @@ def _simulate_reaction_smarts(
                 reactant_smiles,
                 product_smiles,
                 max_products=None,
-                try_permutations=try_permutations,
             )
             if wanted <= set(result["generated_products"]):
                 result["generated_products"] = result["generated_products"][:max_products]
@@ -772,7 +763,6 @@ def _smarts_grounding_candidates(
     product_smiles: str | None,
     *,
     library: LibrarySelection,
-    try_permutations: bool,
 ) -> Iterator[dict[str, Any]]:
     exact = db.get_reaction_template_by_smarts(conn, smarts, library=library)
     if exact is not None:
@@ -784,7 +774,6 @@ def _smarts_grounding_candidates(
         product_smiles=product_smiles,
         limit=50000,
         library=library,
-        try_permutations=try_permutations,
         template_scan_limit=50000,
     )
     for match in matches.get("results") or []:
@@ -799,7 +788,6 @@ def _simulate_template(
     product_smiles: str | None,
     *,
     max_products: int | None,
-    try_permutations: bool,
 ) -> dict[str, Any]:
     product_issues = []
     product_validation = None
@@ -861,7 +849,6 @@ def _simulate_template(
                 "reactants_valid": True,
                 "expected_reactant_count": expected_reactants,
                 "provided_reactant_count": provided_reactants,
-                "try_permutations": try_permutations,
             }
         reactant_mols = [Chem.MolFromSmiles(v["canonical_smiles"]) for v in reactant_validations]
         (
@@ -870,11 +857,10 @@ def _simulate_template(
             productive_orders,
             attempted_orders,
             skipped_invalid_product_sets,
-        ) = _run_reaction_with_optional_permutations(
+        ) = _run_reaction_with_permutations(
             reaction,
             reactant_mols,
             Chem,
-            try_permutations=try_permutations,
         )
     except Exception as exc:
         return {
@@ -895,11 +881,10 @@ def _simulate_template(
             "reactants_valid": True,
             "expected_reactant_count": template.get("reactant_count"),
             "provided_reactant_count": len(reactant_smiles),
-            "try_permutations": try_permutations,
         }
 
     issues = list(product_issues)
-    if not generated and try_permutations and len(reactant_smiles) > 1:
+    if not generated and len(reactant_smiles) > 1:
         issues.append(
             "No products generated for the provided order or alternate reactant orders. "
             "Inspect reactant roles and try a different template or reactants."
@@ -932,7 +917,6 @@ def _simulate_template(
         "reactants_valid": True,
         "expected_reactant_count": reaction.GetNumReactantTemplates(),
         "provided_reactant_count": len(reactant_smiles),
-        "try_permutations": try_permutations,
         "attempted_reactant_orders": attempted_orders,
         "used_reactant_order": used_order,
         "reactant_order_permuted": used_order != list(range(1, len(reactant_smiles) + 1)),
@@ -1068,16 +1052,14 @@ def simulate_reverse_reaction(
     }
 
 
-def _run_reaction_with_optional_permutations(
+def _run_reaction_with_permutations(
     reaction: Any,
     reactant_mols: list[Any],
     Chem: Any,
-    *,
-    try_permutations: bool,
 ) -> tuple[list[str], list[list[str]], list[list[int]], int, int]:
     identity = tuple(range(len(reactant_mols)))
     orders = [identity]
-    if try_permutations and len(reactant_mols) > 1:
+    if len(reactant_mols) > 1:
         orders.extend(order for order in itertools.permutations(identity) if order != identity)
 
     attempted = 0
