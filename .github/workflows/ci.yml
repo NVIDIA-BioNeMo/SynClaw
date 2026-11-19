@@ -28,6 +28,7 @@ jobs:
           enable-cache: true
       - run: uv sync --locked --extra dev
       - run: uv run --locked --extra dev ruff check .
+      - run: uv run --locked --extra dev ruff format --check .
 
   pytest:
     runs-on: ubuntu-latest

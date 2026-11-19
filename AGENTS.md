@@ -53,6 +53,7 @@ Public SynFormer templates and target sets are fetched with
 ```bash
 uv sync --extra dev            # add --extra mcp for the MCP server
 uv run ruff check .
+uv run ruff format --check .   # run `ruff format .` to fix
 uv run pytest
 ```
 

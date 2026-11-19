@@ -7,6 +7,7 @@ Before opening a pull request, run the lint and test suite:
 
 ```bash
 uv run --extra dev ruff check .
+uv run --extra dev ruff format --check .   # run `ruff format .` to fix
 uv run --extra mcp --extra dev pytest
 ```
 
