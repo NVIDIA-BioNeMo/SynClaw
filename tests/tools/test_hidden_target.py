@@ -13,6 +13,7 @@ import pytest
 from synclaw.core import db, fingerprint_index
 from synclaw.core.reactions import ingest_reaction_templates
 from synclaw.evaluation.evaluate import replay_selected_submission
+from synclaw.rollout.policy import prepare_tool_call
 from synclaw.runners import model_runner
 from synclaw.tasks.datasets import PROMPT_FINGERPRINT
 from synclaw.tools.synthesis import (
@@ -48,6 +49,18 @@ def db_path(tmp_path: Path) -> Path:
 
 def _tools(db_path: Path, hidden: str | None = TARGET) -> SynthesisTools:
     return SynthesisTools(db_path, hidden_target_smiles=hidden)
+
+
+def _submit_call(arguments: dict) -> dict:
+    """A submit_pathway call event as the rollout loop records it."""
+
+    call = prepare_tool_call(
+        raw_name="submit_pathway", raw_arguments=arguments, raw_tool_call={}, event_index=0,
+    )
+    return {
+        "event_type": "tool_call", "tool_name": "submit_pathway", "target_smiles": TARGET,
+        "payload": call.event_payload,
+    }
 
 
 def test_hidden_ids_cover_every_entry_scored_as_the_target(db_path: Path) -> None:
@@ -108,10 +121,7 @@ def test_reverse_grounding_does_not_offer_the_target(db_path: Path) -> None:
 
 
 def test_replay_keeps_the_target_hidden_when_the_run_did(db_path: Path) -> None:
-    call = {
-        "event_type": "tool_call",
-        "payload": {"tool_name": "submit_pathway", "arguments": {"building_block": "BB:1"}},
-    }
+    call = _submit_call({"building_block": "BB:1"})
     hidden_event = hidden_target_event(TARGET, frozenset({1}))
 
     assert replay_selected_submission([call], db_path, TARGET)["accepted"] is True
@@ -235,9 +245,7 @@ def test_fixed_ids_block_reactants_and_reverse_grounding(db_path: Path) -> None:
 
 def test_fixed_ids_replay_without_target_hiding(db_path: Path) -> None:
     event = hidden_target_event(TARGET, frozenset({2}), hide_target=False)
-    call = {"event_type": "tool_call", "payload": {
-        "tool_name": "submit_pathway", "arguments": {"building_block": "BB:2"},
-    }}
+    call = _submit_call({"building_block": "BB:2"})
     assert replay_selected_submission([call], db_path, TARGET)["accepted"]
     assert not replay_selected_submission([event, call], db_path, TARGET)["accepted"]
     assert hidden_target_summary_fields([event]) == {

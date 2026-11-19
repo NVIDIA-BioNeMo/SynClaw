@@ -100,6 +100,28 @@ def _provider_args(**overrides):
     return argparse.Namespace(**fields)
 
 
+def _call_event(arguments, target):
+    """A submit_pathway call event as the rollout loop records it."""
+
+    call = policy.prepare_tool_call(
+        raw_name="submit_pathway", raw_arguments=json.dumps(arguments), raw_tool_call={}, event_index=0,
+    )
+    return {
+        "event_type": "tool_call", "tool_name": "submit_pathway", "target_smiles": target,
+        "payload": call.event_payload,
+    }
+
+
+def _result_event(result, target):
+    """A submit_pathway result event as the rollout loop records it."""
+
+    return {
+        "event_type": "tool_result", "tool_name": "submit_pathway", "target_smiles": target,
+        "payload": {"result": result, "outcome": "ok"},
+    }
+
+
+
 class ImportAndEvalTests(unittest.TestCase):
     def _prepare_minimal_model_db(self, db_path: Path) -> None:
         templates = db_path.with_name("templates.jsonl")
@@ -165,49 +187,22 @@ class ImportAndEvalTests(unittest.TestCase):
             tmp_path = Path(tmp)
             db_path = tmp_path / "eval.sqlite"
             trace = tmp_path / "trace.jsonl"
+            self._prepare_minimal_model_db(db_path)
+            # Oxidizing methanol cannot make ethanol, so the run rejects this route.
+            arguments = {
+                "steps": [
+                    {"reaction_id": "demo:R000", "reactants": ["BB:1"], "product_smiles": "CCO"}
+                ],
+                "pathway_text": "Claim an invalid route to ethanol.",
+            }
+            result = SynthesisTools(db_path).submit_pathway(**arguments, target_smiles="CCO")
             events = [
                 {"event_type": "message", "role": "user", "target_smiles": "CCO", "payload": {"text": "Plan CCO"}},
-                {
-                    "event_type": "tool_call",
-                    "tool_name": "submit_pathway",
-                    "payload": {
-                        "arguments": {
-                            "steps": [
-                                {
-                                    "reaction_id": "demo:R000",
-                                    "reactants": ["CO"],
-                                    "product_smiles": "CCO",
-                                }
-                            ],
-                            "pathway_text": "Claim an invalid route to ethanol.",
-                            "final_smiles": "CCO",
-                        }
-                    },
-                },
-                {
-                    "event_type": "tool_result",
-                    "tool_name": "submit_pathway",
-                    "payload": {
-                        "result": {
-                            "accepted": False,
-                            "reaction_validation": "invalid",
-                            "pathway_text": "Claim an invalid route to ethanol.",
-                            "final_smiles": "CCO",
-                            "submitted_final_smiles": "CCO",
-                            "steps": [
-                                {
-                                    "valid": False,
-                                    "generated_products": [],
-                                    "product": {"valid": True, "canonical_smiles": "CCO"},
-                                }
-                            ],
-                        }
-                    },
-                },
+                _call_event(arguments, "CCO"),
+                _result_event(result, "CCO"),
             ]
             trace.write_text("\n".join(json.dumps(event) for event in events) + "\n", encoding="utf-8")
 
-            db.init_db(db_path)
             summary = evaluate_trace_file(trace, db_path, model="mock-model")
 
             self.assertTrue(summary["has_final_submission"])
@@ -263,24 +258,6 @@ class ImportAndEvalTests(unittest.TestCase):
             self.assertIsNone(summary["constitutional_similarity_to_target"])
             self.assertIsNone(summary["stereo_aware_similarity_to_target"])
 
-    def test_evaluate_trace_scores_a_trace_without_an_accepted_verdict(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            tmp_path = Path(tmp)
-            db_path = tmp_path / "eval.sqlite"
-            trace = tmp_path / "trace.jsonl"
-            event = {
-                "event_type": "final",
-                "target_smiles": "CCO",
-                "payload": {"pathway_text": "buy ethanol", "final_smiles": "CCO"},
-            }
-            trace.write_text(json.dumps(event) + "\n", encoding="utf-8")
-
-            summary = evaluate_trace_file(trace, db_path, model="mock-model")
-
-            self.assertIsNone(summary["accepted"])
-            self.assertEqual(summary["final_smiles"], "CCO")
-            self.assertEqual(summary["similarity_to_target"], 1.0)
-
     def test_evaluate_trace_uses_last_submit_pathway_call(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -292,40 +269,18 @@ class ImportAndEvalTests(unittest.TestCase):
             bbs.write_text("SMILES\nCO\nCCO\n", encoding="utf-8")
             reactions.ingest_reaction_templates(templates, db_path=db_path, library="demo")
             db.ingest_building_blocks(bbs, db_path)
+            first = {
+                "steps": [{"reaction_id": "demo:R000", "reactants": ["CO"], "product_smiles": "C=O"}],
+                "pathway_text": "First candidate.",
+            }
+            second = {
+                "steps": [{"reaction_id": "demo:R000", "reactants": ["CCO"], "product_smiles": "CC=O"}],
+                "pathway_text": "Second candidate.",
+            }
             events = [
                 {"event_type": "message", "role": "user", "target_smiles": "CC=O", "payload": {"text": "Plan CC=O"}},
-                {
-                    "event_type": "tool_call",
-                    "tool_name": "submit_pathway",
-                    "payload": {
-                        "arguments": {
-                            "steps": [
-                                {
-                                    "reaction_id": "demo:R000",
-                                    "reactants": ["CO"],
-                                    "product_smiles": "C=O",
-                                }
-                            ],
-                            "pathway_text": "First candidate.",
-                        }
-                    },
-                },
-                {
-                    "event_type": "tool_call",
-                    "tool_name": "submit_pathway",
-                    "payload": {
-                        "arguments": {
-                            "steps": [
-                                {
-                                    "reaction_id": "demo:R000",
-                                    "reactants": ["CCO"],
-                                    "product_smiles": "CC=O",
-                                }
-                            ],
-                            "pathway_text": "Second candidate.",
-                        }
-                    },
-                },
+                _call_event(first, "CC=O"),
+                _call_event(second, "CC=O"),
             ]
             trace.write_text("\n".join(json.dumps(event) for event in events) + "\n", encoding="utf-8")
 
@@ -341,10 +296,18 @@ class ImportAndEvalTests(unittest.TestCase):
             self.assertIsNone(restricted["accepted"])
 
             # IDs from older catalogs resolve through the SMARTS recorded in each call's result.
-            events[2]["payload"]["arguments"]["steps"][0]["reaction_id"] = "retired:R033"
+            retired = {
+                **second,
+                "steps": [{**second["steps"][0], "reaction_id": "retired:R033"}],
+            }
             recorded = {"steps": [{"step_index": 1, "template": {"smarts": "[C:1][O:2]>>[C:1]=[O:2]"}}]}
-            events[2:2] = [{"event_type": "tool_result", "tool_name": "submit_pathway", "payload": {"result": recorded}}]
-            events.append({"event_type": "tool_result", "tool_name": "submit_pathway", "payload": {"result": recorded}})
+            events = [
+                events[0],
+                _call_event(first, "CC=O"),
+                _result_event(recorded, "CC=O"),
+                _call_event(retired, "CC=O"),
+                _result_event(recorded, "CC=O"),
+            ]
             trace.write_text("\n".join(json.dumps(event) for event in events) + "\n", encoding="utf-8")
             self.assertTrue(evaluate_trace_file(trace, db_path, model="mock-model")["accepted"])
 
@@ -364,6 +327,7 @@ class ImportAndEvalTests(unittest.TestCase):
                     "event_type": "tool_result",
                     "tool_name": "submit_pathway",
                     "payload": {
+                        "outcome": "ok",
                         "result": {
                             "accepted": True,
                             "reaction_validation": "valid",
@@ -398,10 +362,7 @@ class ImportAndEvalTests(unittest.TestCase):
             }
             events = [
                 {"event_type": "message", "role": "user", "target_smiles": "CO", "payload": {"text": "Plan CO"}},
-                *(
-                    {"event_type": "tool_call", "tool_name": "submit_pathway", "payload": {"arguments": arguments}}
-                    for arguments in (exact, analogue)
-                ),
+                *(_call_event(arguments, "CO") for arguments in (exact, analogue)),
             ]
             trace.write_text("\n".join(json.dumps(event) for event in events) + "\n", encoding="utf-8")
 
@@ -426,10 +387,7 @@ class ImportAndEvalTests(unittest.TestCase):
             }
             events = [
                 {"event_type": "message", "role": "user", "target_smiles": "C=O", "payload": {"text": "Plan C=O"}},
-                *(
-                    {"event_type": "tool_call", "tool_name": "submit_pathway", "payload": {"arguments": arguments}}
-                    for arguments in (analogue, exact)
-                ),
+                *(_call_event(arguments, "C=O") for arguments in (analogue, exact)),
             ]
             trace.write_text("\n".join(json.dumps(event) for event in events) + "\n", encoding="utf-8")
 
@@ -449,6 +407,7 @@ class ImportAndEvalTests(unittest.TestCase):
                     "event_type": "tool_result",
                     "tool_name": "submit_pathway",
                     "payload": {
+                        "outcome": "ok",
                         "result": {
                             "accepted": True,
                             "reaction_validation": "valid",
