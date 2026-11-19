@@ -65,3 +65,13 @@ def test_a_step_must_name_its_template_as_reaction_id(tools):
     assert catalog_named["accepted"] is False
     assert "step 1: reaction_id is required" in catalog_named["steps"][0]["issues"]
 
+
+def test_a_step_must_name_its_reactants_as_reactants(tools):
+    step = {"reaction_id": "demo:R000", "product_smiles": ALDEHYDE}
+
+    named = tools.submit_pathway(steps=[{"reactants": ["BB:1"], **step}])
+    other_named = tools.submit_pathway(steps=[{"reactant_refs": ["BB:1"], **step}])
+
+    assert named["accepted"] is True
+    assert other_named["accepted"] is False
+    assert "step 1: reactants must be a non-empty list" in other_named["steps"][0]["issues"]

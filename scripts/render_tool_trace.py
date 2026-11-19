@@ -423,7 +423,7 @@ def summarize_tool_call_arguments(name: str, arguments: dict[str, Any]) -> list[
 
 
 def render_submitted_step(index: int, step: dict[str, Any]) -> list[str]:
-    reactants = step.get("reactants") or step.get("reactant_refs") or []
+    reactants = step.get("reactants") or []
     return [
         f"### Step {index}",
         "",

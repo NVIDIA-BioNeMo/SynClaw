@@ -552,7 +552,7 @@ class SynthesisTools:
             for index, step in enumerate(steps, start=1):
                 reaction_id = str(step.get("reaction_id") or "")
                 product = str(step.get("product_smiles") or "")
-                refs = step.get("reactants") or step.get("reactant_refs") or []
+                refs = step.get("reactants") or []
                 if not reaction_id:
                     result = {"valid": False, "issues": [f"step {index}: reaction_id is required"]}
                 elif not isinstance(refs, list) or not refs:
@@ -604,7 +604,7 @@ class SynthesisTools:
         used_intermediates = {
             str(ref)
             for position, step in enumerate(steps, start=1)
-            if isinstance(refs := step.get("reactants") or step.get("reactant_refs"), list)
+            if isinstance(refs := step.get("reactants"), list)
             for ref in refs
             if str(ref) in {f"INT:{earlier}" for earlier in range(1, position)}
         }
