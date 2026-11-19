@@ -550,7 +550,7 @@ class SynthesisTools:
         step_results = []
         with db.session(self.db_path) as conn:
             for index, step in enumerate(steps, start=1):
-                reaction_id = str(step.get("reaction_id") or step.get("template_id") or "")
+                reaction_id = str(step.get("reaction_id") or "")
                 product = str(step.get("product_smiles") or "")
                 refs = step.get("reactants") or step.get("reactant_refs") or []
                 if not reaction_id:

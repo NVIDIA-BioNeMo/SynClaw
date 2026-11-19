@@ -243,7 +243,7 @@ def _compact_generic_result(result: dict[str, Any]) -> dict[str, Any]:
 def _compact_template(template: Any) -> Any:
     if not isinstance(template, dict):
         return template
-    output = _copy_keys(
+    output = _copy_template_keys(
         template,
         [
             "template_id",
@@ -271,7 +271,7 @@ def _summarize_template(template: Any) -> Any:
 
     if not isinstance(template, dict):
         return template
-    output = _copy_keys(template, ["template_id", "name", "reaction_family", "smarts"])
+    output = _copy_template_keys(template, ["template_id", "name", "reaction_family", "smarts"])
     roles = template.get("reactant_roles")
     if isinstance(roles, list):
         # Role SMARTS are the reactant side of smarts, in this order.
@@ -376,7 +376,7 @@ def _compact_validated_step(step: Any) -> Any:
     if isinstance(submitted, dict):
         output["submitted_step_summary"] = _copy_keys(
             submitted,
-            ["reaction_id", "template_id", "reactants", "product_smiles"],
+            ["reaction_id", "reactants", "product_smiles"],
         )
     return _drop_none(output)
 
@@ -456,6 +456,19 @@ def _generated_products(result: dict[str, Any]) -> dict[str, Any]:
 
 def _copy_keys(source: dict[str, Any], keys: list[str]) -> dict[str, Any]:
     return {key: source.get(key) for key in keys if key in source}
+
+
+def _copy_template_keys(template: dict[str, Any], keys: list[str]) -> dict[str, Any]:
+    """Copy template keys, naming the catalog's ``template_id`` as the ``reaction_id`` a step takes.
+
+    The catalog calls a template's identifier ``template_id``. The model only ever submits
+    and simulates by ``reaction_id``, so that is the one name it is shown.
+    """
+
+    output = _copy_keys(template, keys)
+    if "template_id" in output:
+        output = {"reaction_id": output.pop("template_id"), **output}
+    return output
 
 
 def _drop_none(value: dict[str, Any]) -> dict[str, Any]:

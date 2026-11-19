@@ -427,7 +427,7 @@ def render_submitted_step(index: int, step: dict[str, Any]) -> list[str]:
     return [
         f"### Step {index}",
         "",
-        f"- Template: `{step.get('reaction_id') or step.get('template_id')}`",
+        f"- Template: `{step.get('reaction_id')}`",
         f"- Reactants: {format_smiles_list(reactants)}",
         f"- Claimed product: `{step.get('product_smiles')}`",
         "",
