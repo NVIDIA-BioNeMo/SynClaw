@@ -10,7 +10,6 @@ plans look valid.
 
 from __future__ import annotations
 
-import re
 from collections import Counter
 from functools import lru_cache
 from typing import Any, Literal
@@ -603,15 +602,3 @@ def _morgan_tanimoto(
     fp_a = generator.GetFingerprint(mol_a)
     fp_b = generator.GetFingerprint(mol_b)
     return float(DataStructs.TanimotoSimilarity(fp_a, fp_b))
-
-
-def extract_smiles_candidates(text: str) -> list[str]:
-    """Extract RDKit-parseable molecule-like tokens from free text."""
-
-    candidates: list[str] = []
-    for raw in re.findall(r"[A-Za-z0-9@+\-\[\]\(\)=#$\\/%.:~*]{2,}", text):
-        token = raw.strip(".,;:")
-        result = validate_smiles(token)
-        if result["valid"]:
-            candidates.append(result["canonical_smiles"])
-    return candidates
