@@ -13,6 +13,7 @@ from typing import Any
 from synclaw.core import chem, db, reactions
 from synclaw.core.libraries import LibrarySelection
 from synclaw.core.toxicity import MODE_OFF, ToxicityConfig, toxicity_summary_fields
+from synclaw.rollout.loop import call_local_tool
 from synclaw.rollout.policy import (
     DEFAULT_STOP_CONDITION,
     StopCondition,
@@ -22,16 +23,14 @@ from synclaw.rollout.policy import (
     submission_identical_to_target,
     submission_similarity_to_target,
 )
-from synclaw.token_usage import int_or_none, trace_token_usage
+from synclaw.token_usage import float_or_none, trace_token_usage
 from synclaw.tools.synthesis import (
+    SynthesisTools,
     hidden_target_summary_fields,
     score_pathway_against_target,
-    select_final_product,
 )
 
-FINAL_EVENT_TYPES = {"final", "final_pathway", "pathway", "selected_submission", "submission", "submit_pathway"}
-TOOL_CALL_TYPES = {"tool_call", "tool_use", "function_call"}
-TOOL_RESULT_TYPES = {"tool_result", "function_result"}
+SEARCH_TOOLS = {"search_building_blocks", "search_reaction_templates"}
 
 
 def evaluate_trace_file(
@@ -42,6 +41,17 @@ def evaluate_trace_file(
     target_smiles: str | None = None,
     tool_config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """Score one ``run-model`` trace file as a row for the results CSV.
+
+    The submission is the result in the trace's ``selected_submission`` event. A trace
+    without one, such as a partial run, has its ``submit_pathway`` calls replayed against
+    ``db_path`` and selected as the run selects; if the run's choice cannot be replayed,
+    the last recorded ``submit_pathway`` result is used. Only an accepted submission's
+    ``actual_final_smiles`` is scored. ``target_smiles`` overrides the target recorded in
+    the trace. ``tool_config`` supplies the run's reaction library, stop condition and
+    toxicity screen.
+    """
+
     path = Path(trace_path)
     events = list(db.iter_jsonl(path))
     if not events:
@@ -50,10 +60,12 @@ def evaluate_trace_file(
     inferred_target = target_smiles or _infer_target(events)
     run_summary = extract_run_summary(events)
     hidden_target = hidden_target_summary_fields(events)
-    final = extract_selected_submission(events, target_smiles=inferred_target)
+    final = extract_selected_submission(events)
+    # The run's selection never saw a call it did not execute, so neither path below may.
+    executed_events = _without_unexecuted_calls(events)
     if final is None:
         final = replay_selected_submission(
-            events,
+            executed_events,
             db_path=db_path,
             target_smiles=inferred_target,
             # Partial traces have no run_summary, so re-scoring them needs the selection passed in.
@@ -62,43 +74,32 @@ def evaluate_trace_file(
             hide_target=hidden_target["target_hidden_from_stock"],
         )
     if final is None:
-        final = extract_final_submission(events, target_smiles=inferred_target)
-    pathway_text = final.get("pathway_text") if final else None
-    final_smiles = final.get("final_smiles") if final else None
-    submitted_final_smiles = final.get("submitted_final_smiles") if final else None
-    accepted = final.get("accepted") if final else None
-    reaction_validation = final.get("reaction_validation") if final else None
+        recorded = _recorded_submit_results(executed_events)
+        final = recorded[-1] if recorded else None
+    final = final or {}
+    accepted = final.get("accepted")
+    final_smiles = final.get("actual_final_smiles") if accepted is True else None
+    reaction_validation = final.get("reaction_validation")
     reaction_valid = reaction_validation == "valid" if reaction_validation is not None else None
-    building_block_grounded = final.get("building_block_grounded") if final else None
-    referenced_building_block_ids = final.get("referenced_building_block_ids") if final else None
-    # Traces without an `accepted` field carry no verdict, so only drop the
-    # product when the validator explicitly rejected the submission.
-    if accepted is not None and not accepted:
-        final_smiles = None
-    elif pathway_text and not final_smiles and not final.get("structured_submission"):
-        candidates = chem.extract_smiles_candidates(str(pathway_text))
-        final_smiles = candidates[-1] if candidates else None
-
-    final_validation = chem.validate_smiles(final_smiles) if final_smiles else None
-    if final_validation and not final_validation["valid"]:
-        final_smiles = None
+    building_block_grounded = final.get("building_block_grounded")
+    referenced_building_block_ids = final.get("referenced_building_block_ids")
 
     scoring = score_pathway_against_target(
         [final_smiles] if final_smiles else [],
         target_smiles=inferred_target,
         target_validation=chem.validate_smiles(inferred_target) if inferred_target else None,
         preferred_smiles=None,
-        accepted=accepted is not False,
+        accepted=accepted is True,
     )
     similarity_to_target = scoring["similarity_to_target"]
     identical_to_target = scoring["identical_to_target"]
-    runtime_seconds = _float_or_none(run_summary.get("runtime_seconds") if run_summary else None)
+    runtime_seconds = float_or_none(run_summary.get("runtime_seconds") if run_summary else None)
     token_usage = trace_token_usage(events, run_summary=run_summary)
     similarity_floor = _similarity_floor(tool_config)
     meets_similarity_floor = accepted is True and meets_submission_floor(
         similarity_to_target, similarity_floor, identical_to_target=identical_to_target,
     )
-    run_success = bool(accepted)
+    run_success = accepted is True
 
     summary = {
         "trace_file": str(path),
@@ -106,7 +107,7 @@ def evaluate_trace_file(
         "prompt_version": prompt_version,
         "target_smiles": inferred_target,
         "final_smiles": final_smiles,
-        "submitted_final_smiles": submitted_final_smiles,
+        "submitted_final_smiles": final.get("submitted_final_smiles"),
         "accepted": accepted,
         "reaction_validation": reaction_validation,
         "reaction_valid": reaction_valid,
@@ -120,7 +121,7 @@ def evaluate_trace_file(
         "meets_similarity_floor": meets_similarity_floor,
         "run_success": run_success,
         "has_final_submission": bool(final),
-        "has_pathway_text": bool(pathway_text),
+        "has_pathway_text": bool(final.get("pathway_text")),
         "similarity_to_target": similarity_to_target,
         "identical_to_target": identical_to_target,
         "constitutional_similarity_to_target": scoring["constitutional_similarity_to_target"],
@@ -147,33 +148,44 @@ def replay_selected_submission(
 ) -> dict[str, Any] | None:
     """Replay every submit_pathway call and select one as the runners do.
 
-    The best accepted submission is kept, so a later, worse one cannot replace it. With none
-    accepted, the last submission stands. ``hide_target`` replays with the target out of
-    stock, as a run that hid it validated its submissions.
+    Each call is dispatched through ``call_local_tool`` with its recorded
+    ``dispatch_arguments``, so malformed arguments fail as they did in the run. A call
+    whose arguments did not parse was never dispatched and keeps its recorded result.
+    The best accepted submission is kept, so a later, worse one cannot replace it. With
+    none accepted, the last submission stands. ``hide_target`` replays with the target out
+    of stock, as a run that hid it validated its submissions.
+
+    Returns the selected ``submit_pathway`` result, or None when the submission the run
+    would select cannot be replayed: none was accepted and the last call cannot be. An
+    earlier replayed call is not substituted, since the run did not select it; the caller
+    reads the last call's recorded result instead.
     """
 
     submit_calls = [
         event for event in events
-        if _event_type(event) in TOOL_CALL_TYPES and _tool_name(event) == "submit_pathway"
+        if event["event_type"] == "tool_call" and event["tool_name"] == "submit_pathway"
     ]
+    if not submit_calls:
+        return None
+    recorded_results = _recorded_submit_results(events)
+    tools = SynthesisTools(
+        db_path,
+        reaction_libraries=library,
+        # Replay re-scores a recorded trace without the screen; recorded refusals are kept below.
+        toxicity=ToxicityConfig(mode=MODE_OFF),
+        hidden_target_smiles=target_smiles if hide_target else None,
+        hidden_building_block_ids=frozenset(
+            json.loads(hidden_target_summary_fields(events)["hidden_building_block_ids"] or "[]")
+        ),
+    )
     best: dict[str, Any] | None = None
     best_identical: bool | None = None
     best_similarity: float | None = None
     last: dict[str, Any] | None = None
     for ordinal, event in enumerate(submit_calls):
-        payload = _payload(event)
-        if not isinstance(payload, dict):
-            continue
-        last = _replay_submission(
-            events,
-            payload,
-            ordinal,
-            db_path,
-            target_smiles,
-            library=library,
-            hide_target=hide_target,
-        )
-        if last is not None and _recorded_refused(events, ordinal):
+        recorded = recorded_results[ordinal] if ordinal < len(recorded_results) else {}
+        last = _replay_submission(tools, event["payload"], recorded, target_smiles)
+        if last is not None and recorded.get("refused") is True:
             # Replay runs without the screen, so keep the refusal the run itself recorded.
             last = {**last, "accepted": False, "refused": True}
         if last is None or not last.get("accepted"):
@@ -182,128 +194,120 @@ def replay_selected_submission(
         identical = submission_identical_to_target(last, target_smiles) is True
         if best is None or is_better_accepted_submission(identical, similarity, best_identical, best_similarity):
             best, best_identical, best_similarity = last, identical, similarity
-    selected = best or last
-    if selected is None:
-        return None
-    return {
-        "pathway_text": selected.get("pathway_text"),
-        "final_smiles": selected.get("actual_final_smiles"),
-        "submitted_final_smiles": selected.get("submitted_final_smiles"),
-        "accepted": selected.get("accepted"),
-        "reaction_validation": selected.get("reaction_validation"),
-        "pathway_type": selected.get("pathway_type"),
-        "direct_building_block": selected.get("direct_building_block"),
-        "direct_building_block_ref": selected.get("direct_building_block_ref"),
-        "building_block_grounded": selected.get("building_block_grounded"),
-        "referenced_building_block_ids": selected.get("referenced_building_block_ids"),
-        "constitutional_similarity_to_target": selected.get("constitutional_similarity_to_target"),
-        "stereo_aware_similarity_to_target": selected.get("stereo_aware_similarity_to_target"),
-        "steps": selected.get("steps"),
-        "structured_submission": True,
-    }
+    return best or last
 
 
 def _replay_submission(
-    events: list[dict[str, Any]],
+    tools: SynthesisTools,
     payload: dict[str, Any],
-    ordinal: int,
-    db_path: str | Path,
+    recorded: dict[str, Any],
     target_smiles: str | None,
-    *,
-    library: LibrarySelection,
-    hide_target: bool,
 ) -> dict[str, Any] | None:
-    arguments = payload.get("dispatch_arguments") if isinstance(payload.get("dispatch_arguments"), dict) else None
-    if arguments is None and isinstance(payload.get("arguments"), dict):
-        arguments = dict(payload["arguments"])
-        arguments.pop("target_smiles", None)
-        arguments.pop("final_smiles", None)
-    if not isinstance(arguments, dict):
-        return None
+    if payload["argument_error"] is not None:
+        # The run never dispatched this call; its result came from the argument error.
+        return recorded or None
+    arguments = payload["dispatch_arguments"]
     steps = arguments.get("steps")
-    if steps in (None, "") and arguments.get("building_block"):
-        steps = []
-    if not isinstance(steps, list):
-        return None
-    # Template IDs change between catalog versions, but each step's result records the
-    # SMARTS it ran, so an unknown ID is resolved to the current template with that SMARTS.
-    recorded_smarts = _recorded_step_smarts(events, call_ordinal=ordinal)
-    resolved_steps = []
-    with db.session(db_path) as conn:
+    if isinstance(steps, list):
+        resolved_steps = _resolve_template_ids(tools, steps, _recorded_step_smarts(recorded))
+        if resolved_steps is None:
+            return None
+        arguments = {**arguments, "steps": resolved_steps}
+    return call_local_tool(
+        tools,
+        "submit_pathway",
+        arguments,
+        reaction_library=tools.reaction_libraries,
+        target_smiles=target_smiles,
+    )
+
+
+def _resolve_template_ids(
+    tools: SynthesisTools,
+    steps: list[Any],
+    recorded_smarts: dict[int, str],
+) -> list[Any] | None:
+    """Resolve each step's template ID, or return None when one cannot be resolved.
+
+    Template IDs change between catalog versions, but each step's result records the
+    SMARTS it ran, so an unknown ID is resolved to the current template with that SMARTS.
+    A step without a usable ``reaction_id`` is left for ``submit_pathway`` to reject.
+    """
+
+    resolved = []
+    library = tools.reaction_libraries
+    with db.session(tools.db_path) as conn:
         for index, step in enumerate(steps):
-            if not isinstance(step, dict):
-                return None
-            reaction_id = str(step.get("reaction_id") or step.get("template_id") or "")
-            if reactions.is_reaction_smarts(reaction_id):
-                # submit_pathway grounds a reaction SMARTS to a library template itself.
-                resolved_steps.append(step)
+            reaction_id = step.get("reaction_id") if isinstance(step, dict) else None
+            # submit_pathway grounds a reaction SMARTS to a library template itself.
+            if not reaction_id or not isinstance(reaction_id, str) or reactions.is_reaction_smarts(reaction_id):
+                resolved.append(step)
                 continue
-            template = db.get_reaction_template(conn, reaction_id, library=library) if reaction_id else None
+            template = db.get_reaction_template(conn, reaction_id, library=library)
             if template is None and index in recorded_smarts:
                 template = db.get_reaction_template_by_smarts(conn, recorded_smarts[index], library=library)
                 if template is not None:
                     step = {**step, "reaction_id": template["template_id"]}
             if template is None:
                 return None
-            resolved_steps.append(step)
-    from synclaw.tools.synthesis import SynthesisTools
-
-    # Replay re-scores a recorded trace without the screen; recorded refusals are kept by the caller.
-    return SynthesisTools(
-        db_path,
-        reaction_libraries=library,
-        toxicity=ToxicityConfig(mode=MODE_OFF),
-        hidden_target_smiles=target_smiles if hide_target else None,
-        hidden_building_block_ids=frozenset(
-            json.loads(hidden_target_summary_fields(events)["hidden_building_block_ids"] or "[]")
-        ),
-    ).submit_pathway(
-        steps=resolved_steps,
-        building_block=arguments.get("building_block"),
-        pathway_text=arguments.get("pathway_text"),
-        target_smiles=target_smiles,
-    )
+            resolved.append(step)
+    return resolved
 
 
-def extract_selected_submission(
-    events: list[dict[str, Any]],
-    target_smiles: str | None = None,
-) -> dict[str, Any] | None:
-    selected_events = [event for event in events if _event_type(event) == "selected_submission"]
-    if not selected_events:
-        return None
-    return extract_final_submission(selected_events, target_smiles=target_smiles)
+def extract_selected_submission(events: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """The result of the run's ``selected_submission`` event, or None if it recorded none."""
+
+    selected = [event for event in events if event["event_type"] == "selected_submission"]
+    return selected[-1]["payload"]["result"] if selected else None
 
 
-def _recorded_refused(events: list[dict[str, Any]], ordinal: int) -> bool:
-    """Whether the run's own screen refused the n-th submit_pathway call."""
+def _recorded_submit_results(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The recorded result of each submit_pathway call, in call order, as results are appended."""
 
-    results = [
-        event for event in events
-        if _event_type(event) in TOOL_RESULT_TYPES and _tool_name(event) == "submit_pathway"
+    return [
+        event["payload"]["result"] for event in events
+        if event["event_type"] == "tool_result" and event["tool_name"] == "submit_pathway"
     ]
-    if ordinal >= len(results):
-        return False
-    payload = _payload(results[ordinal])
-    result = payload.get("result") if isinstance(payload, dict) else None
-    return isinstance(result, dict) and result.get("refused") is True
 
 
-def _recorded_step_smarts(events: list[dict[str, Any]], *, call_ordinal: int) -> dict[int, str]:
-    """Map step positions to template SMARTS from the result of the given submit_pathway call.
+def _without_unexecuted_calls(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drop the call and result events of tool calls the run recorded but never executed.
 
-    Results are appended in call order, so the n-th submit_pathway result belongs to the n-th call.
+    Past the tool-call budget the loop records each call and a stub result without running
+    it. A tool's results are recorded in call order, so the n-th result of a tool pairs with
+    its n-th call.
     """
 
-    results = [
-        event for event in events
-        if _event_type(event) in TOOL_RESULT_TYPES and _tool_name(event) == "submit_pathway"
-    ]
-    if call_ordinal >= len(results):
-        return {}
-    payload = _payload(results[call_ordinal])
-    result = payload.get("result") if isinstance(payload, dict) else None
-    steps = result.get("steps") if isinstance(result, dict) else None
+    def tool_ordinals(event_type: str) -> dict[int, tuple[str, int]]:
+        """Key each event of this type by its index to its tool name and per-tool ordinal."""
+
+        counts: dict[str, int] = {}
+        keys = {}
+        for index, event in enumerate(events):
+            if event["event_type"] == event_type:
+                name = event["tool_name"]
+                counts[name] = counts.get(name, -1) + 1
+                keys[index] = (name, counts[name])
+        return keys
+
+    results = tool_ordinals("tool_result")
+    unexecuted = {
+        key for index, key in results.items()
+        if events[index]["payload"]["outcome"] == "over_budget"
+    }
+    if not unexecuted:
+        return events
+    dropped = {
+        index for keys in (results, tool_ordinals("tool_call"))
+        for index, key in keys.items() if key in unexecuted
+    }
+    return [event for index, event in enumerate(events) if index not in dropped]
+
+
+def _recorded_step_smarts(result: dict[str, Any]) -> dict[int, str]:
+    """Map step positions to the template SMARTS a recorded submit_pathway result ran."""
+
+    steps = result.get("steps")
     recorded: dict[int, str] = {}
     for position, step in enumerate(steps if isinstance(steps, list) else []):
         template = step.get("template") if isinstance(step, dict) else None
@@ -315,11 +319,8 @@ def _recorded_step_smarts(events: list[dict[str, Any]], *, call_ordinal: int) ->
 
 def extract_run_summary(events: list[dict[str, Any]]) -> dict[str, Any] | None:
     for event in reversed(events):
-        if _event_type(event) != "run_summary":
-            continue
-        payload = _payload(event)
-        if isinstance(payload, dict):
-            return payload
+        if event["event_type"] == "run_summary":
+            return event["payload"]
     return None
 
 
@@ -332,34 +333,22 @@ def summarize_events(events: list[dict[str, Any]]) -> dict[str, int]:
     submissions = 0
     invalid_submissions = 0
     for event in events:
-        event_type = _event_type(event)
-        tool_name = _tool_name(event)
-        payload = _payload(event)
-        if event_type == "message" and event.get("role") == "assistant":
+        event_type = event["event_type"]
+        if event_type == "message" and event["role"] == "assistant":
             assistant_turns += 1
-            if isinstance(payload, dict) and payload.get("tool_calls"):
+            if event["payload"].get("tool_calls"):
                 tool_call_turns += 1
-        is_call = event_type in TOOL_CALL_TYPES
-        is_result = event_type in TOOL_RESULT_TYPES or (not is_call and "result" in event)
-        if is_call:
+        elif event_type == "tool_call":
             tool_calls += 1
-            if tool_name in {
-                "search_building_blocks",
-                "search_reaction_templates",
-                "search_reaction_templates_by_molecule",
-            }:
+            if event["tool_name"] in SEARCH_TOOLS:
                 searches += 1
-            if tool_name == "submit_pathway":
+            if event["tool_name"] == "submit_pathway":
                 submissions += 1
-        if isinstance(payload, dict):
-            result = payload.get("result") if isinstance(payload.get("result"), dict) else payload
+        elif event_type == "tool_result":
+            result = event["payload"]["result"]
             if result.get("valid") is False or result.get("accepted") is False:
                 validation_failures += 1
-            if (
-                is_result
-                and tool_name == "submit_pathway"
-                and result.get("accepted") is False
-            ):
+            if event["tool_name"] == "submit_pathway" and result.get("accepted") is False:
                 invalid_submissions += 1
     return {
         "events": len(events),
@@ -372,106 +361,6 @@ def summarize_events(events: list[dict[str, Any]]) -> dict[str, int]:
         "invalid_submissions": invalid_submissions,
         "validation_failures": validation_failures,
     }
-
-
-def extract_final_submission(
-    events: list[dict[str, Any]],
-    target_smiles: str | None = None,
-) -> dict[str, Any] | None:
-    for event in reversed(events):
-        event_type = _event_type(event)
-        payload = _payload(event)
-        tool_name = _tool_name(event)
-        candidates = []
-        if isinstance(payload, dict):
-            candidates.append(payload)
-            if isinstance(payload.get("result"), dict):
-                candidates.append(payload["result"])
-            if isinstance(payload.get("arguments"), dict):
-                candidates.append(payload["arguments"])
-        if event_type in FINAL_EVENT_TYPES or tool_name == "submit_pathway":
-            for candidate in candidates:
-                pathway_text = _first_present(candidate, ("pathway_text", "pathway", "route", "content", "text"))
-                structured_submission = tool_name == "submit_pathway" or "accepted" in candidate or "reaction_validation" in candidate
-                submit_call_arguments = tool_name == "submit_pathway" and event_type in TOOL_CALL_TYPES
-                has_actual_final_field = "actual_final_smiles" in candidate
-                if has_actual_final_field:
-                    final_smiles = candidate.get("actual_final_smiles")
-                elif structured_submission:
-                    final_smiles = _final_smiles_from_structured_steps(
-                        candidate, target_smiles=target_smiles
-                    )
-                elif submit_call_arguments:
-                    final_smiles = None
-                else:
-                    final_smiles = _first_present(candidate, ("final_smiles", "product_smiles", "product"))
-                submitted_final_smiles = _first_present(candidate, ("submitted_final_smiles",))
-                accepted = candidate.get("accepted")
-                reaction_validation = candidate.get("reaction_validation")
-                pathway_type = candidate.get("pathway_type")
-                direct_building_block = candidate.get("direct_building_block")
-                direct_building_block_ref = candidate.get("direct_building_block_ref")
-                building_block_grounded = candidate.get("building_block_grounded")
-                referenced_building_block_ids = candidate.get("referenced_building_block_ids")
-                steps = candidate.get("steps")
-                if (
-                    not final_smiles
-                    and isinstance(steps, list)
-                    and steps
-                    and not has_actual_final_field
-                    and not submit_call_arguments
-                    and not structured_submission
-                ):
-                    last_step = steps[-1]
-                    if isinstance(last_step, dict):
-                        final_smiles = _first_present(last_step, ("product_smiles", "product"))
-                if not pathway_text and isinstance(steps, list):
-                    pathway_text = json.dumps({"steps": steps}, sort_keys=True)
-                if pathway_text:
-                    return {
-                        "pathway_text": pathway_text,
-                        "final_smiles": final_smiles,
-                        "submitted_final_smiles": submitted_final_smiles,
-                        "accepted": accepted,
-                        "reaction_validation": reaction_validation,
-                        "pathway_type": pathway_type,
-                        "direct_building_block": direct_building_block,
-                        "direct_building_block_ref": direct_building_block_ref,
-                        "building_block_grounded": building_block_grounded,
-                        "referenced_building_block_ids": referenced_building_block_ids,
-                        "constitutional_similarity_to_target": candidate.get(
-                            "constitutional_similarity_to_target"
-                        ),
-                        "stereo_aware_similarity_to_target": candidate.get(
-                            "stereo_aware_similarity_to_target"
-                        ),
-                        "steps": steps,
-                        "structured_submission": structured_submission,
-                    }
-    return None
-
-
-def _final_smiles_from_structured_steps(
-    candidate: dict[str, Any],
-    target_smiles: str | None,
-) -> str | None:
-    steps = candidate.get("steps")
-    if not isinstance(steps, list) or not steps:
-        return None
-    final_step = steps[-1]
-    if not isinstance(final_step, dict):
-        return None
-    if final_step.get("valid") is True:
-        actual_product = final_step.get("actual_product_smiles")
-        if actual_product:
-            validation = chem.validate_smiles(str(actual_product))
-            if validation["valid"]:
-                return str(validation["canonical_smiles"])
-        product = final_step.get("product")
-        if isinstance(product, dict) and product.get("valid") and product.get("canonical_smiles"):
-            return str(product["canonical_smiles"])
-    generated = _valid_smiles_list(final_step.get("generated_products"))
-    return select_final_product(generated, target_smiles=target_smiles, preferred_smiles=None)
 
 
 def write_summary_csv(summaries: list[dict[str, Any]], output_path: str | Path) -> None:
@@ -530,27 +419,6 @@ def write_summary_csv(summaries: list[dict[str, Any]], output_path: str | Path) 
             writer.writerow({key: summary.get(key) for key in fieldnames})
 
 
-def _float_or_none(value: Any) -> float | None:
-    if value in (None, ""):
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _sum_ints(*values: Any) -> int | None:
-    total = 0
-    saw_value = False
-    for value in values:
-        integer = int_or_none(value)
-        if integer is None:
-            continue
-        total += integer
-        saw_value = True
-    return total if saw_value else None
-
-
 def _similarity_floor(tool_config: dict[str, Any] | None) -> StopCondition:
     condition = (tool_config or {}).get("stop_condition")
     if condition is None:
@@ -562,65 +430,10 @@ def _similarity_floor(tool_config: dict[str, Any] | None) -> StopCondition:
         return DEFAULT_STOP_CONDITION
 
 
-def _valid_smiles_list(values: Any) -> list[str]:
-    if not isinstance(values, list):
-        return []
-    valid: list[str] = []
-    for value in values:
-        validation = chem.validate_smiles(str(value))
-        if validation["valid"]:
-            valid.append(str(validation["canonical_smiles"]))
-    return sorted(set(valid))
-
-
 def _infer_target(events: list[dict[str, Any]]) -> str | None:
+    """The target the run recorded on its first event that names one."""
+
     for event in events:
-        target = _event_target(event)
-        if target:
-            return target
-    return None
-
-
-def _event_target(event: dict[str, Any]) -> str | None:
-    payload = _payload(event)
-    for source in (event, payload if isinstance(payload, dict) else {}):
-        value = _first_present(source, ("target_smiles", "target", "input_smiles"))
-        if value:
-            return str(value)
-    return None
-
-
-def _event_type(event: dict[str, Any]) -> str | None:
-    value = event.get("event_type") or event.get("type")
-    return str(value) if value is not None else None
-
-
-def _payload(event: dict[str, Any]) -> dict[str, Any]:
-    payload = event.get("payload")
-    if isinstance(payload, str):
-        try:
-            decoded = json.loads(payload)
-            if isinstance(decoded, dict):
-                return decoded
-        except json.JSONDecodeError:
-            return {"text": payload}
-    if isinstance(payload, dict):
-        return payload
-    return event
-
-
-def _tool_name(event: dict[str, Any]) -> str | None:
-    payload = _payload(event)
-    for source in (event, payload):
-        value = _first_present(source, ("tool_name", "name", "function_name"))
-        if value:
-            return str(value)
-    return None
-
-
-def _first_present(source: dict[str, Any], keys: tuple[str, ...]) -> Any:
-    for key in keys:
-        value = source.get(key)
-        if value not in (None, ""):
-            return value
+        if event.get("target_smiles"):
+            return str(event["target_smiles"])
     return None

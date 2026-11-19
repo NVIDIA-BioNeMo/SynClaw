@@ -168,14 +168,20 @@ def test_hosted_target_screening_is_opt_in_and_preserves_trace_results(
 
 def test_replay_keeps_a_refusal_the_run_recorded(tmp_path: Path) -> None:
     from synclaw.evaluation.evaluate import replay_selected_submission
+    from synclaw.rollout.policy import prepare_tool_call
 
     tools = _tools(tmp_path)
     steps = [{"reaction_id": "demo:R000", "reactants": ["BB:1"], "product_smiles": FLAGGED}]
     live = tools.submit_pathway(steps=steps, target_smiles="CC")
     assert live["refused"] is True
+    call = prepare_tool_call(
+        raw_name="submit_pathway", raw_arguments={"steps": steps}, raw_tool_call={}, event_index=0,
+    )
     events = [
-        {"event_type": "tool_call", "payload": {"tool_name": "submit_pathway", "arguments": {"steps": steps}}},
-        {"event_type": "tool_result", "payload": {"tool_name": "submit_pathway", "result": live}},
+        {"event_type": "tool_call", "tool_name": "submit_pathway", "target_smiles": "CC",
+         "payload": call.event_payload},
+        {"event_type": "tool_result", "tool_name": "submit_pathway", "target_smiles": "CC",
+         "payload": {"result": live, "outcome": "ok"}},
     ]
 
     replayed = replay_selected_submission(events, tools.db_path, "CC")

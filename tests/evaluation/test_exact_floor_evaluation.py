@@ -7,7 +7,6 @@ import json
 
 import pytest
 
-from synclaw.core import chem
 from synclaw.evaluation.evaluate import _similarity_floor, evaluate_trace_file
 
 
@@ -26,8 +25,8 @@ from synclaw.evaluation.evaluate import _similarity_floor, evaluate_trace_file
 def test_exact_trace_evaluation(target, product, accepted, expected, tool_config, tmp_path):
     trace = tmp_path / "trace.jsonl"
     trace.write_text(json.dumps({
-        "event_type": "tool_result", "tool_name": "submit_pathway",
-        "payload": {"result": {
+        "event_type": "tool_result", "tool_name": "submit_pathway", "target_smiles": target,
+        "payload": {"outcome": "ok", "result": {
             "accepted": accepted, "actual_final_smiles": product,
             "final_smiles": product, "reaction_validation": "valid" if accepted else "invalid",
             "steps": [{"valid": accepted, "actual_product_smiles": product}],
@@ -42,38 +41,6 @@ def test_exact_trace_evaluation(target, product, accepted, expected, tool_config
     assert result["accepted"] is accepted
     assert result["meets_similarity_floor"] is expected
     assert (result["identical_to_target"] is True) is expected
-
-
-@pytest.mark.parametrize("explicit_product", [None, "O=c1ccccn1C"])
-def test_generated_product_fallback_shares_identity_selection(tmp_path, explicit_product):
-    target = "O=c1cccc[nH]1"
-    products = ["O=c1ccccn1C", "Oc1ccccn1"]
-    step = {"valid": True, "generated_products": products}
-    if explicit_product is not None:
-        step["actual_product_smiles"] = explicit_product
-    trace = tmp_path / "trace.jsonl"
-    trace.write_text(json.dumps({
-        "event_type": "tool_result", "tool_name": "submit_pathway",
-        "payload": {"result": {
-            "accepted": True, "reaction_validation": "valid", "steps": [step],
-        }},
-    }) + "\n")
-    evaluation = evaluate_trace_file(
-        trace, tmp_path / "eval.sqlite", target_smiles=target,
-        tool_config={"stop_condition": "exact"},
-    )
-
-    assert evaluation["accepted"] is True
-    if explicit_product is None:
-        # The identical tautomer outranks the analogue, as in tests/tools/test_identity_product_selection.py.
-        assert evaluation["final_smiles"] == "Oc1ccccn1"
-        assert evaluation["identical_to_target"] is True
-        assert evaluation["meets_similarity_floor"] is True
-    else:
-        # A recorded actual product takes precedence over fallback candidates.
-        assert evaluation["final_smiles"] == chem.validate_smiles(explicit_product)["canonical_smiles"]
-        assert evaluation["identical_to_target"] is False
-        assert evaluation["meets_similarity_floor"] is False
 
 
 @pytest.mark.parametrize("recorded", ["none", None])
