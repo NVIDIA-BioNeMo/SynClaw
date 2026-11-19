@@ -15,7 +15,7 @@ def test_reaction_template_search_returns_short_hits():
         "count": 1,
         "results": [
             {
-                "template_id": "synformer:R008",
+                "reaction_id": "synformer:R008",
                 "name": "Amide coupling",
                 "description": "Couples amines and carboxylic acids.",
                 "reaction_family": "amide formation",
@@ -62,7 +62,7 @@ def test_reaction_template_search_returns_short_hits():
     )
 
     assert hit == {
-        "template_id": "synformer:R008",
+        "reaction_id": "synformer:R008",
         "name": "Amide coupling",
         "reaction_family": "amide formation",
         "smarts": "[N:1].[C:2](=O)O>>[N:1][C:2]=O",
@@ -96,7 +96,7 @@ def test_submit_pathway_compaction_keeps_validation_summary_without_verbose_echo
                 "valid": False,
                 "reaction_id": "synformer:R001",
                 "issues": ["Claimed product was not generated"],
-                "template": {"metadata_json": "huge", "template_id": "synformer:R001"},
+                "template": {"metadata_json": "huge", "reaction_id": "synformer:R001"},
                 "submitted_step": {
                     "reaction_id": "synformer:R001",
                     "reactants": ["BB:1"],
@@ -135,7 +135,7 @@ def test_simulate_reaction_compaction_keeps_products_and_short_template():
         "valid": True,
         "reaction_id": "synformer:R008",
         "template": {
-            "template_id": "synformer:R008",
+            "reaction_id": "synformer:R008",
             "name": "Amide coupling",
             "metadata_json": "huge",
         },
@@ -154,7 +154,7 @@ def test_simulate_reaction_compaction_keeps_products_and_short_template():
 
     compact = compact_tool_result("simulate_reaction", result)
 
-    assert compact["template"] == {"template_id": "synformer:R008", "name": "Amide coupling"}
+    assert compact["template"] == {"reaction_id": "synformer:R008", "name": "Amide coupling"}
     assert compact["reactants"] == [{"valid": True, "canonical_smiles": "CN"}]
     assert compact["resolved_reactants"][0]["building_block"] == {"id": 1}
     assert compact["generated_products"] == ["CNC=O"]
@@ -234,7 +234,7 @@ def test_building_block_compaction_keeps_a_rejected_query_error(tmp_path):
 
 def test_template_compaction_omits_empty_annotation_fields():
     template = {
-        "template_id": "demo:R001",
+        "reaction_id": "demo:R001",
         "name": "R001",
         "description": "",
         "reaction_family": "",
@@ -248,7 +248,7 @@ def test_template_compaction_omits_empty_annotation_fields():
         "simulate_reaction", {"reaction_id": "demo:R001", "valid": True, "template": template}
     )
 
-    expected = {"template_id": "demo:R001", "name": "R001", "smarts": "[C:1]=[O:2]>>[C:1][O:2]"}
+    expected = {"reaction_id": "demo:R001", "name": "R001", "smarts": "[C:1]=[O:2]>>[C:1][O:2]"}
     assert search["results"] == [expected]
     assert simulate["template"] == expected
 
@@ -264,7 +264,7 @@ def test_reverse_planning_compaction_drops_fixed_next_step_text():
             },
             "results": [
                 {
-                    "template_id": "ord:R001",
+                    "reaction_id": "ord:R001",
                     "reverse_usefulness": {
                         "fully_grounded_candidate_sets": 0,
                         "recommended_next_step": next_step,
@@ -370,7 +370,7 @@ def test_simulate_reaction_compaction_returns_one_product_listing():
 
 def test_compaction_trims_template_detail_and_echoed_routes():
     template = {
-        "template_id": "ord:R011",
+        "reaction_id": "ord:R011",
         "reactant_count": 1,
         "product_count": 1,
         "reactant_roles": [
@@ -431,13 +431,13 @@ def test_compaction_trims_template_detail_and_echoed_routes():
     )
 
     assert search["results"][0] == {
-        "template_id": "ord:R011",
+        "reaction_id": "ord:R011",
         "reactant_roles": ["aryl bromide"],
         "structure_match": {"score": 10.0},
     }
     assert simulated["template"] == {"reactant_roles": [{"role": "aryl bromide", "smarts": "Br-c"}]}
     assert unmatched["template"] == {
-        "template_id": "ord:R011",
+        "reaction_id": "ord:R011",
         "reactant_roles": [{"role": "aryl bromide", "smarts": "Br-c"}],
     }
     assert accepted == {"accepted": True, "final_smiles": "CCO"}

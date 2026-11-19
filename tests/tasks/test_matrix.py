@@ -27,7 +27,7 @@ from synclaw.tasks.targets import (
     MATRIX_FILE,
     OFFSET_FILE,
     REACTION_FILE,
-    TEMPLATE_ID_FILE,
+    REACTION_ID_FILE,
     GenerationOptions,
     generate_targets,
     line_offsets,
@@ -177,14 +177,14 @@ def test_offsets_address_each_block_line(catalog: Path, tmp_path: Path) -> None:
 
 def test_templates_the_engine_cannot_run_are_dropped_with_a_reason(tmp_path: Path) -> None:
     records = [
-        {"template_id": "test:ok", "library": "test", "smarts": "[C:1][OH]>>[C:1]O"},
-        {"template_id": "test:four", "library": "test",
+        {"reaction_id": "test:ok", "library": "test", "smarts": "[C:1][OH]>>[C:1]O"},
+        {"reaction_id": "test:four", "library": "test",
          "smarts": "[C:1].[C:2].[C:3].[C:4]>>[C:1][C:2][C:3][C:4]"},
-        {"template_id": "test:broken", "library": "test", "smarts": "not a reaction"},
+        {"reaction_id": "test:broken", "library": "test", "smarts": "not a reaction"},
     ]
     stats = write_templates(records, tmp_path)
     assert stats["kept"] == 1 and stats["dropped"] == 2
-    assert [line.strip() for line in open(tmp_path / TEMPLATE_ID_FILE)] == ["test:ok"]
+    assert [line.strip() for line in open(tmp_path / REACTION_ID_FILE)] == ["test:ok"]
     reasons = dict(
         line.rstrip("\n").split("\t") for line in open(tmp_path / DROPPED_TEMPLATE_FILE).readlines()[1:]
     )
@@ -196,8 +196,8 @@ def test_templates_come_from_the_installed_package(catalog: Path, tmp_path: Path
     """A directory built here cannot cite a template the package does not have."""
     directory = tmp_path / "matrix"
     build(catalog, directory)
-    known = {record["template_id"] for record in load_template_records(["synformer", "paroutes", "ord"])}
-    built = {line.strip() for line in open(directory / TEMPLATE_ID_FILE) if line.strip()}
+    known = {record["reaction_id"] for record in load_template_records(["synformer", "paroutes", "ord"])}
+    built = {line.strip() for line in open(directory / REACTION_ID_FILE) if line.strip()}
     assert built and built <= known
     assert set(bundled_reaction_catalog()["sources"]) >= {"synformer"}
 
@@ -219,7 +219,7 @@ def test_a_built_directory_generates_targets(catalog: Path, tmp_path: Path) -> N
     )
     assert summary["targets"] > 0
     rows = [line.rstrip("\n").split("\t") for line in open(output) if line.strip()]
-    known = {line.strip() for line in open(directory / TEMPLATE_ID_FILE) if line.strip()}
+    known = {line.strip() for line in open(directory / REACTION_ID_FILE) if line.strip()}
     for _, pathway in rows:
         assert {token for token in pathway.split(";") if ":" in token and token in known}
 

@@ -56,19 +56,19 @@ CASES = [
 ]
 
 
-@pytest.mark.parametrize(("template_id", "reactants", "expected"), CASES)
-def test_nvidia_rule_products(tools, template_id, reactants, expected):
-    result = tools.simulate_reaction(template_id, reactants)
+@pytest.mark.parametrize(("reaction_id", "reactants", "expected"), CASES)
+def test_nvidia_rule_products(tools, reaction_id, reactants, expected):
+    result = tools.simulate_reaction(reaction_id, reactants)
     assert set(result["generated_products"]) == {_canonical(s) for s in expected}
 
 
 # Reverse simulation gives exact precursors: no radicals on the alcohol carbon or aniline nitrogen.
-@pytest.mark.parametrize(("template_id", "product", "precursors"), [
+@pytest.mark.parametrize(("reaction_id", "product", "precursors"), [
     ("nvidia:R003", "CC(=O)SCc1ccccc1", ("OCc1ccccc1", "CC(=O)S")),
     ("nvidia:R003", "O=C1c2ccccc2C(=O)N1Cc1ccccc1", ("OCc1ccccc1", "O=C1NC(=O)c2ccccc21")),
 ])
-def test_reverse_precursors_are_exact(tools, template_id, product, precursors):
-    reverse = tools.simulate_reverse_reaction(template_id, product, include_near=False)
+def test_reverse_precursors_are_exact(tools, reaction_id, product, precursors):
+    reverse = tools.simulate_reverse_reaction(reaction_id, product, include_near=False)
     assert {tuple(c["reactants"]) for c in reverse["candidate_reactant_sets"]} == {
         tuple(_canonical(s) for s in precursors)
     }

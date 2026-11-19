@@ -16,7 +16,7 @@ order) from "no order produces it".
 
 Replay alone cannot see a template that changed or disappeared from the installed package, because
 it executes the SMARTS stored in the matrix directory -- the old definition replays against itself
-perfectly. That is reported separately, under `catalog_drift`: template ids the matrix has and the
+perfectly. That is reported separately, under `catalog_drift`: reaction ids the matrix has and the
 package does not, ids whose SMARTS no longer agree, and how many checked routes cite one. A route
 citing a dropped template replays here and is still unusable, since `search_reaction_templates`
 will never return that id to an agent.
@@ -37,7 +37,7 @@ from synclaw.core.reactions import _rdkit_reaction_modules
 from synclaw.tasks.targets import (
     NO_PRODUCTS_REASON,
     REACTION_FILE,
-    TEMPLATE_ID_FILE,
+    REACTION_ID_FILE,
     replay_route,
     route_records_products,
 )
@@ -67,7 +67,7 @@ def installed_templates() -> dict[str, str]:
                 line = line.strip()
                 if line:
                     record = json.loads(line)
-                    out.setdefault(record["template_id"], record["smarts"].strip())
+                    out.setdefault(record["reaction_id"], record["smarts"].strip())
     return out
 
 
@@ -80,25 +80,25 @@ def main() -> int:
 
     with open(args.matrix_dir / REACTION_FILE) as handle:
         smarts = [line.strip() for line in handle if line.strip()]
-    with open(args.matrix_dir / TEMPLATE_ID_FILE) as handle:
-        template_ids = [line.strip() for line in handle if line.strip()]
-    smarts_by_id = dict(zip(template_ids, smarts))
+    with open(args.matrix_dir / REACTION_ID_FILE) as handle:
+        reaction_ids = [line.strip() for line in handle if line.strip()]
+    smarts_by_id = dict(zip(reaction_ids, smarts))
 
     installed = installed_templates()
-    missing_from_catalog = {tid for tid in template_ids if tid not in installed}
+    missing_from_catalog = {tid for tid in reaction_ids if tid not in installed}
     changed_in_catalog = {
-        tid for tid in template_ids if tid in installed and installed[tid] != smarts_by_id[tid]
+        tid for tid in reaction_ids if tid in installed and installed[tid] != smarts_by_id[tid]
     }
     drifted = missing_from_catalog | changed_in_catalog
 
     compiled: dict[str, Any] = {}
 
-    def reaction_for(template_id: str) -> Any:
-        if template_id not in compiled:
-            reaction = AllChem.ReactionFromSmarts(smarts_by_id[template_id])
+    def reaction_for(reaction_id: str) -> Any:
+        if reaction_id not in compiled:
+            reaction = AllChem.ReactionFromSmarts(smarts_by_id[reaction_id])
             rdChemReactions.ChemicalReaction.Initialize(reaction)
-            compiled[template_id] = reaction
-        return compiled[template_id]
+            compiled[reaction_id] = reaction
+        return compiled[reaction_id]
 
     def every_order(reaction: Any, mols: list[Any]) -> set[str]:
         found: set[str] = set()
@@ -141,7 +141,7 @@ def main() -> int:
             for failure in outcome["failures"]:
                 mols = [Chem.MolFromSmiles(s) for s in failure["reactants"]]
                 if all(m is not None for m in mols) and failure["expected"] in every_order(
-                    reaction_for(failure["template_id"]), mols
+                    reaction_for(failure["reaction_id"]), mols
                 ):
                     reasons["only from a later reactant order"] += 1
                     diagnosed += 1
@@ -163,7 +163,7 @@ def main() -> int:
                 "failures": dict(reasons),
                 "catalog_drift": {
                     "installed_templates": len(installed),
-                    "matrix_templates": len(template_ids),
+                    "matrix_templates": len(reaction_ids),
                     "missing_from_catalog": sorted(missing_from_catalog),
                     "changed_in_catalog": sorted(changed_in_catalog),
                     "routes_citing_drift": routes_citing_drift,

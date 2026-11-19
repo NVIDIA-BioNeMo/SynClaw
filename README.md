@@ -174,7 +174,7 @@ are excluded from search and from the family overview even if they are in the da
 selection is a hard boundary: lookup, forward and reverse simulation, and pathway submission
 reject template IDs outside it. All four sources are selected by default.
 
-Each template is an executable reaction SMARTS, stored by `(template_id, library)`, plus the
+Each template is an executable reaction SMARTS, stored by `(reaction_id, library)`, plus the
 natural-language fields the model searches: name, description, reaction family, search terms and
 reactant roles. Bundled sources carry these inline; family descriptions come from
 `data/reaction_templates/families.json`. Raw TXT imports get neutral names and are searchable
@@ -183,7 +183,7 @@ annotations, for example:
 
 ```json
 {
-  "template_id": "amide-001",
+  "reaction_id": "amide-001",
   "name": "Amide formation",
   "family": "amide formation",
   "family_metadata": {

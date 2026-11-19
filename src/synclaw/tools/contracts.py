@@ -102,9 +102,8 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                 "text_results. Product-side structural searches are ranked by shallow reverse "
                 "simulation and exact building-block grounding evidence. Search by "
                 "functional-group transformation and product motif rather than by the target's "
-                "name. Results list each template's template_id (its reaction_id), name, family, "
-                "SMARTS and reactant role names in reactant order; they omit the full description "
-                "and execution hints."
+                "name. Results list each template's reaction_id, name, family, SMARTS and reactant "
+                "role names in reactant order; they omit the full description and execution hints."
             ),
             "parameters": {
                 "type": "object",

@@ -234,7 +234,7 @@ def _compact_generic_result(result: dict[str, Any]) -> dict[str, Any]:
         output["template"] = _compact_template(output["template"])
     if isinstance(output.get("results"), list):
         output["results"] = [
-            _compact_template(item) if isinstance(item, dict) and item.get("template_id") else item
+            _compact_template(item) if isinstance(item, dict) and item.get("reaction_id") else item
             for item in output["results"]
         ]
     return _drop_none(output)
@@ -246,7 +246,7 @@ def _compact_template(template: Any) -> Any:
     output = _copy_keys(
         template,
         [
-            "template_id",
+            "reaction_id",
             "name",
             "description",
             "reaction_family",
@@ -271,7 +271,7 @@ def _summarize_template(template: Any) -> Any:
 
     if not isinstance(template, dict):
         return template
-    output = _copy_keys(template, ["template_id", "name", "reaction_family", "smarts"])
+    output = _copy_keys(template, ["reaction_id", "name", "reaction_family", "smarts"])
     roles = template.get("reactant_roles")
     if isinstance(roles, list):
         # Role SMARTS are the reactant side of smarts, in this order.
@@ -376,7 +376,7 @@ def _compact_validated_step(step: Any) -> Any:
     if isinstance(submitted, dict):
         output["submitted_step_summary"] = _copy_keys(
             submitted,
-            ["reaction_id", "template_id", "reactants", "product_smiles"],
+            ["reaction_id", "reactants", "product_smiles"],
         )
     return _drop_none(output)
 
