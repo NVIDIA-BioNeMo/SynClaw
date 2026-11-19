@@ -56,7 +56,7 @@ from typing import Any
 import numpy as np
 
 from synclaw.core.chem import compare_molecular_identity
-from synclaw.core.reactions import _rdkit_reaction_modules, _run_reaction_with_optional_permutations
+from synclaw.core.reactions import _rdkit_reaction_modules, _run_reaction_with_permutations
 
 MATRIX_FILE = "matrix.npy"
 BUILDING_BLOCK_FILE = "building_blocks.txt"
@@ -294,9 +294,7 @@ class RouteBuilder:
         mols = [self.Chem.MolFromSmiles(smiles) for smiles in reactants]
         if any(mol is None for mol in mols):
             return None, None
-        generated, _, productive_orders, _, _ = _run_reaction_with_optional_permutations(
-            self.reaction(template), mols, self.Chem, try_permutations=True
-        )
+        generated, _, productive_orders, _, _ = _run_reaction_with_permutations(self.reaction(template), mols, self.Chem)
         if not generated:
             return None, None
         order = productive_orders[0] if productive_orders else list(range(1, len(mols) + 1))
@@ -440,7 +438,7 @@ def replay_route(
     `tasks.targets` owns the token grammar -- reactant SMILES and template ids interleaved
     bottom-up, each reaction followed by the product recorded for that step -- so the interpreter
     for it lives here too, and both the verifier script and the tests read the same one. Steps run
-    through `_run_reaction_with_optional_permutations`, the function behind `simulate_reaction`; a
+    through `_run_reaction_with_permutations`, the function behind `simulate_reaction`; a
     step passes when the recorded product is among the ones the engine generates.
 
     Only `--with-intermediates` output carries those products. Default output ends on a template
@@ -489,9 +487,7 @@ def replay_route(
                 reasons.append("unparseable reactant")
                 ok = False
                 break
-            generated, *_ = _run_reaction_with_optional_permutations(
-                reaction_for(template_id), mols, Chem, try_permutations=True
-            )
+            generated, *_ = _run_reaction_with_permutations(reaction_for(template_id), mols, Chem)
             if token in generated:
                 steps_ok += 1
             else:

@@ -153,7 +153,6 @@ class SynthesisTools:
         reactant_smiles: list[str] | None = None,
         product_smiles: str | list[str] | None = None,
         run_forward: bool = False,
-        try_permutations: bool = True,
         template_scan_limit: int = 5000,
     ) -> dict[str, Any]:
         """Search templates by text, by reactant/product structure, or both.
@@ -231,7 +230,6 @@ class SynthesisTools:
                 limit=max(result_limit, min(max(1, int(template_scan_limit)), 50000)),
                 library=library,
                 run_forward=run_forward,
-                try_permutations=try_permutations,
                 template_scan_limit=template_scan_limit,
             )
             if product_smiles and molecule_results.get("valid"):
@@ -268,7 +266,6 @@ class SynthesisTools:
         reactants: list[str],
         product_smiles: str | None = None,
         max_products: int = 100,
-        try_permutations: bool = True,
     ) -> dict[str, Any]:
         """Run a template forward and check an optional claimed product.
 
@@ -301,7 +298,6 @@ class SynthesisTools:
                 reactant_smiles=[item["smiles"] for item in resolved],
                 product_smiles=product_smiles,
                 max_products=clamp_to_contract("simulate_reaction", "max_products", max_products),
-                try_permutations=try_permutations,
                 library=self.reaction_libraries,
             )
             result["resolved_reactants"] = resolved

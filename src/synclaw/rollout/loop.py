@@ -201,7 +201,6 @@ def call_local_tool(
                 limit=arguments["limit"],
                 library=reaction_library or None,
                 run_forward=arguments["run_forward"],
-                try_permutations=arguments["try_permutations"],
             )
         if name == "simulate_reaction":
             return tools.simulate_reaction(
@@ -209,7 +208,6 @@ def call_local_tool(
                 _required_str_list(arguments, "reactants", name),
                 product_smiles=_optional_str(arguments, "product_smiles"),
                 max_products=arguments["max_products"],
-                try_permutations=arguments["try_permutations"],
             )
         if name == "simulate_reverse_reaction":
             return tools.simulate_reverse_reaction(

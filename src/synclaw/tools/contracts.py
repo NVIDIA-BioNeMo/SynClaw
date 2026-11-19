@@ -145,13 +145,6 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                             "whether requested products are generated."
                         ),
                     },
-                    "try_permutations": {
-                        "type": "boolean",
-                        "default": True,
-                        "description": (
-                            "When run_forward is true, try alternate reactant orders if needed."
-                        ),
-                    },
                 },
                 "additionalProperties": False,
             },
@@ -167,7 +160,7 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                 "used only if a library template generates the same product from these reactants "
                 "(with no claimed product, every product the SMARTS generates), and that "
                 "template's ID is returned. Reactants follow the template's reactant-role order; if that order "
-                "generates nothing, alternate orders are tried by default. Pass product_smiles to "
+                "generates nothing, alternate orders are tried. Pass product_smiles to "
                 "check a claimed product. A pathway step is valid only if this tool generates its "
                 "product_smiles from the same reaction_id and reactants. Returns the template's "
                 "description and execution hints unless the claimed product was generated."
@@ -196,13 +189,6 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                         "minimum": 1,
                         "maximum": 100,
                         "default": 100,
-                    },
-                    "try_permutations": {
-                        "type": "boolean",
-                        "default": True,
-                        "description": (
-                            "Try alternate reactant orders if the supplied order generates no products."
-                        ),
                     },
                 },
                 "required": ["reaction_id", "reactants"],
