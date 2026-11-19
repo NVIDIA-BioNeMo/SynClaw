@@ -708,3 +708,8 @@ def test_benchmark_empty_replies_still_obey_turn_budget() -> None:
     assert result.state.policy.total_tool_calls == 0
     assert result.submission is None
     assert result.reason == "no_accepted_submission"
+
+
+def test_unlimited_turns_require_a_budget_provider():
+    with pytest.raises(ValueError, match="budget_provider"):
+        _run_shared_rollout(FakeTransport([]), rollout_config=config(max_turns=None, max_model_len=50000))

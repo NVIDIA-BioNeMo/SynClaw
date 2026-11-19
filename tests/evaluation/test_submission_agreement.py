@@ -19,9 +19,9 @@ from synclaw.rollout.loop import call_local_tool
 from synclaw.rollout.policy import (
     RolloutPolicyConfig,
     RolloutPolicyState,
-    append_selected_submission_event,
     handle_tool_result,
     prepare_tool_call,
+    selected_submission_event,
     tool_argument_error,
 )
 from synclaw.tools.synthesis import SynthesisTools
@@ -145,11 +145,10 @@ def test_replayed_trace_scores_the_submission_the_run_selected(
         # The run executed no submission, so there is nothing to score.
         assert replayed["has_final_submission"] is False
         return
-    with_selection = list(events)
-    append_selected_submission_event(
-        with_selection, task={"target_smiles": target}, submission=submission,
+    with_selection = [*events, selected_submission_event(
+        task={"target_smiles": target}, submission=submission,
         submission_arguments=arguments, reason="test",
-    )
+    )]
 
     selected = _evaluate(tmp_path / "selected.jsonl", with_selection, db_path, target)
 

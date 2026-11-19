@@ -960,43 +960,40 @@ def submission_summary_fields(
     }
 
 
-def append_selected_submission_event(
-    trace_events: list[dict[str, Any]],
+def selected_submission_event(
     *,
     task: dict[str, Any],
     submission: dict[str, Any] | None,
     submission_arguments: dict[str, Any] | None = None,
     reason: str,
-) -> None:
+) -> dict[str, Any] | None:
     if submission is None:
-        return
+        return None
     model_result = compact_tool_result("submit_pathway", submission)
     summary = submission_summary_fields(submission, task["target_smiles"])
-    trace_events.append(
-        {
-            "event_type": "selected_submission",
-            "tool_name": "submit_pathway",
-            "target_smiles": task["target_smiles"],
-            "payload": {
-                "reason": reason,
-                "similarity_to_target": summary["similarity_to_target"],
-                "identical_to_target": summary["identical_to_target"],
-                "constitutional_similarity_to_target": summary[
-                    "constitutional_similarity_to_target"
-                ],
-                "stereo_aware_similarity_to_target": summary[
-                    "stereo_aware_similarity_to_target"
-                ],
-                "submission_arguments": submission_arguments,
-                "result": submission,
-                "model_result": model_result,
-                "model_result_compaction": {
-                    "full_json_bytes": compact_json_size(submission),
-                    "model_json_bytes": compact_json_size(model_result),
-                },
+    return {
+        "event_type": "selected_submission",
+        "tool_name": "submit_pathway",
+        "target_smiles": task["target_smiles"],
+        "payload": {
+            "reason": reason,
+            "similarity_to_target": summary["similarity_to_target"],
+            "identical_to_target": summary["identical_to_target"],
+            "constitutional_similarity_to_target": summary[
+                "constitutional_similarity_to_target"
+            ],
+            "stereo_aware_similarity_to_target": summary[
+                "stereo_aware_similarity_to_target"
+            ],
+            "submission_arguments": submission_arguments,
+            "result": submission,
+            "model_result": model_result,
+            "model_result_compaction": {
+                "full_json_bytes": compact_json_size(submission),
+                "model_json_bytes": compact_json_size(model_result),
             },
-        }
-    )
+        },
+    }
 
 
 def request_summary_fields(args: Any, config: RolloutPolicyConfig) -> dict[str, Any]:
