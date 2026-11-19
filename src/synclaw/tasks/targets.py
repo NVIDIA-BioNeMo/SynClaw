@@ -28,7 +28,7 @@ this package's own templates plus a building-block catalog. Its layout is:
     building_blocks.txt     'SMILES' header, then one canonical isomeric SMILES per row
     building_blocks.off.npy int64 byte offsets of each SMILES line (header excluded)
     reactions.txt           one reaction SMARTS per line, aligned with the matrix columns
-    template_ids.txt        the template id for each line, aligned with the matrix columns
+    reaction_ids.txt        the reaction id for each line, aligned with the matrix columns
 
 Fortran order matters: a column is read whole for every template, and in C order that strides
 across every page of a multi-gigabyte file. `load_matrix_dir` validates the shapes against each
@@ -62,8 +62,8 @@ MATRIX_FILE = "matrix.npy"
 BUILDING_BLOCK_FILE = "building_blocks.txt"
 OFFSET_FILE = "building_blocks.off.npy"
 REACTION_FILE = "reactions.txt"
-TEMPLATE_ID_FILE = "template_ids.txt"
-REQUIRED_FILES = (MATRIX_FILE, BUILDING_BLOCK_FILE, REACTION_FILE, TEMPLATE_ID_FILE)
+REACTION_ID_FILE = "reaction_ids.txt"
+REQUIRED_FILES = (MATRIX_FILE, BUILDING_BLOCK_FILE, REACTION_FILE, REACTION_ID_FILE)
 
 MAX_REACTANTS = 3
 DEFAULT_POOL_CACHE_MAX = 200_000
@@ -104,7 +104,7 @@ class MatrixDir:
     matrix: Any
     offsets: Any
     reaction_smarts: list[str] = field(default_factory=list)
-    template_ids: list[str] = field(default_factory=list)
+    reaction_ids: list[str] = field(default_factory=list)
 
     @property
     def num_blocks(self) -> int:
@@ -131,8 +131,8 @@ def load_matrix_dir(directory: str | Path) -> MatrixDir:
 
     with open(directory / REACTION_FILE) as handle:
         reaction_smarts = [line.strip() for line in handle if line.strip()]
-    with open(directory / TEMPLATE_ID_FILE) as handle:
-        template_ids = [line.strip() for line in handle if line.strip()]
+    with open(directory / REACTION_ID_FILE) as handle:
+        reaction_ids = [line.strip() for line in handle if line.strip()]
 
     offset_path = directory / OFFSET_FILE
     offsets = np.load(offset_path, mmap_mode="r") if offset_path.is_file() else line_offsets(
@@ -142,8 +142,8 @@ def load_matrix_dir(directory: str | Path) -> MatrixDir:
     problems = []
     if matrix.shape[1] != len(reaction_smarts):
         problems.append(f"{matrix.shape[1]} matrix columns vs {len(reaction_smarts)} reaction SMARTS")
-    if len(template_ids) != len(reaction_smarts):
-        problems.append(f"{len(template_ids)} template ids vs {len(reaction_smarts)} reaction SMARTS")
+    if len(reaction_ids) != len(reaction_smarts):
+        problems.append(f"{len(reaction_ids)} reaction ids vs {len(reaction_smarts)} reaction SMARTS")
     if matrix.shape[0] != len(offsets) - 1:
         problems.append(f"{matrix.shape[0]} matrix rows vs {len(offsets) - 1} building blocks")
     if problems:
@@ -154,7 +154,7 @@ def load_matrix_dir(directory: str | Path) -> MatrixDir:
         matrix=matrix,
         offsets=offsets,
         reaction_smarts=reaction_smarts,
-        template_ids=template_ids,
+        reaction_ids=reaction_ids,
     )
 
 
@@ -273,7 +273,7 @@ class RouteBuilder:
         if self.options.libraries:
             wanted = set(self.options.libraries)
             indices = [
-                i for i in indices if self.matrix_dir.template_ids[i].split(":", 1)[0] in wanted
+                i for i in indices if self.matrix_dir.reaction_ids[i].split(":", 1)[0] in wanted
             ]
             if not indices:
                 raise ValueError(f"no templates belong to libraries {sorted(wanted)}")
@@ -357,7 +357,7 @@ class RouteBuilder:
         if product is None:
             return None
 
-        tokens = list(ordered) + [self.matrix_dir.template_ids[template]]
+        tokens = list(ordered) + [self.matrix_dir.reaction_ids[template]]
         if self.options.with_intermediates:
             tokens.append(product)
 
@@ -386,7 +386,7 @@ class RouteBuilder:
                 break
             # The product is already on the stack; only its partners are new tokens.
             tokens.extend(_new_reactant_tokens(ordered, product, partners))
-            tokens.append(self.matrix_dir.template_ids[template])
+            tokens.append(self.matrix_dir.reaction_ids[template])
             product = next_product
             completed += 1
             if self.options.with_intermediates:
@@ -419,13 +419,13 @@ def _new_reactant_tokens(ordered: Sequence[str], product: str, partners: Sequenc
 NO_PRODUCTS_REASON = "a reaction has no recorded product; regenerate with --with-intermediates"
 
 
-def route_records_products(pathway: str, template_ids: Container[str]) -> bool:
+def route_records_products(pathway: str, reaction_ids: Container[str]) -> bool:
     """Whether a route was written with `--with-intermediates`, judged by its last token.
 
     With intermediates every reaction is followed by its product, so a route ends on a SMILES;
-    without them it ends on the final template id.
+    without them it ends on the final reaction id.
     """
-    return pathway.rsplit(";", 1)[-1] not in template_ids
+    return pathway.rsplit(";", 1)[-1] not in reaction_ids
 
 
 def replay_route(
@@ -437,7 +437,7 @@ def replay_route(
 ) -> dict[str, Any]:
     """Re-execute one route's steps and report what the reaction engine reproduces.
 
-    `tasks.targets` owns the token grammar -- reactant SMILES and template ids interleaved
+    `tasks.targets` owns the token grammar -- reactant SMILES and reaction ids interleaved
     bottom-up, each reaction followed by the product recorded for that step -- so the interpreter
     for it lives here too, and both the verifier script and the tests read the same one. Steps run
     through `_run_reaction_with_optional_permutations`, the function behind `simulate_reaction`; a
@@ -447,7 +447,7 @@ def replay_route(
     id instead, and is rejected up front: read under this grammar, its next reactant would pass
     for the previous step's product and every later step would fail for that reason alone.
 
-    `smarts_by_id` maps a template id to its SMARTS. Pass `compiled` to reuse initialized
+    `smarts_by_id` maps a reaction id to its SMARTS. Pass `compiled` to reuse initialized
     reactions across routes. Returns `ok`, `steps`, `steps_reproduced`, the reasons a route fell
     short, and for each unreproduced step the template, its reactants and the expected product,
     so a caller can diagnose further without re-walking the route.
@@ -455,12 +455,12 @@ def replay_route(
     Chem, AllChem, rdChemReactions = _rdkit_reaction_modules()
     compiled = {} if compiled is None else compiled
 
-    def reaction_for(template_id: str) -> Any:
-        if template_id not in compiled:
-            reaction = AllChem.ReactionFromSmarts(smarts_by_id[template_id])
+    def reaction_for(reaction_id: str) -> Any:
+        if reaction_id not in compiled:
+            reaction = AllChem.ReactionFromSmarts(smarts_by_id[reaction_id])
             rdChemReactions.ChemicalReaction.Initialize(reaction)
-            compiled[template_id] = reaction
-        return compiled[template_id]
+            compiled[reaction_id] = reaction
+        return compiled[reaction_id]
 
     tokens = pathway.split(";")
     if not route_records_products(pathway, smarts_by_id):
@@ -482,7 +482,7 @@ def replay_route(
             del stack[-count:]
             stack.append(("pending", token, reactants))
         elif stack and isinstance(stack[-1], tuple):
-            _, template_id, reactants = stack[-1]
+            _, reaction_id, reactants = stack[-1]
             steps += 1
             mols = [Chem.MolFromSmiles(smiles) for smiles in reactants]
             if any(mol is None for mol in mols):
@@ -490,13 +490,13 @@ def replay_route(
                 ok = False
                 break
             generated, *_ = _run_reaction_with_optional_permutations(
-                reaction_for(template_id), mols, Chem, try_permutations=True
+                reaction_for(reaction_id), mols, Chem, try_permutations=True
             )
             if token in generated:
                 steps_ok += 1
             else:
                 reasons.append("not reproduced")
-                failures.append({"template_id": template_id, "reactants": list(reactants), "expected": token})
+                failures.append({"reaction_id": reaction_id, "reactants": list(reactants), "expected": token})
                 ok = False
             stack[-1] = token
         else:
@@ -676,7 +676,7 @@ def generate_targets(
     build_errors: dict[str, int] = {}
     first_build_error: str | None = None
     template_usage: dict[str, int] = {}
-    template_id_set = set(matrix_dir.template_ids)
+    reaction_id_set = set(matrix_dir.reaction_ids)
     with open(output, "w") as out:
         for result in results:
             attempts += result["attempts"]
@@ -701,7 +701,7 @@ def generate_targets(
                     # Counted here, not in the worker: a shard's own totals include routes this
                     # merge is about to drop as duplicates of another shard's.
                     for token in pathway.split(";"):
-                        if token in template_id_set:
+                        if token in reaction_id_set:
                             template_usage[token] = template_usage.get(token, 0) + 1
                     out.write((line if options.with_pathway else product) + "\n")
                     written += 1
@@ -715,7 +715,7 @@ def generate_targets(
         "attempts": attempts,
         "yield": round(written / attempts, 4) if attempts else None,
         "distinct_templates_used": len(template_usage),
-        "templates_available": len(matrix_dir.template_ids),
+        "templates_available": len(matrix_dir.reaction_ids),
         "mw_filtered": mw_filtered,
         "sa_filtered": sa_filtered,
         "unscoreable_filtered": unscoreable_filtered,

@@ -31,7 +31,7 @@ class ReactionTemplateTests(unittest.TestCase):
             source.write_text(
                 json.dumps(
                     {
-                        "template_id": "demo:R001",
+                        "reaction_id": "demo:R001",
                         "name": "Alcohol oxidation",
                         "description": "Convert an alcohol-like reactant pattern to a carbonyl-like product.",
                         "smarts": "[C:1][O:2]>>[C:1]=[O:2]",
@@ -47,7 +47,7 @@ class ReactionTemplateTests(unittest.TestCase):
 
             self.assertEqual(stats["inserted"], 1)
             self.assertEqual(result["count"], 1)
-            self.assertEqual(result["results"][0]["template_id"], "demo:R001")
+            self.assertEqual(result["results"][0]["reaction_id"], "demo:R001")
             self.assertIn("alcohol", result["results"][0]["tags"])
             self.assertEqual(result["results"][0]["reactant_count"], 1)
 
@@ -59,7 +59,7 @@ class ReactionTemplateTests(unittest.TestCase):
             source.write_text(
                 json.dumps(
                     {
-                        "template_id": "demo:R001",
+                        "reaction_id": "demo:R001",
                         "name": "Alcohol oxidation",
                         "description": "Convert an alcohol-like reactant pattern to a carbonyl-like product.",
                         "smarts": "[C:1][O:2]>>[C:1]=[O:2]",
@@ -74,9 +74,9 @@ class ReactionTemplateTests(unittest.TestCase):
             result = SynthesisTools(db_path).search_reaction_templates("alcohol carbonyl product", limit=5)
 
             self.assertEqual(result["count"], 1)
-            self.assertEqual(result["results"][0]["template_id"], "demo:R001")
+            self.assertEqual(result["results"][0]["reaction_id"], "demo:R001")
 
-    def test_template_ids_are_namespaced_by_library(self):
+    def test_reaction_ids_are_namespaced_by_library(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             first = tmp_path / "first.jsonl"
@@ -85,7 +85,7 @@ class ReactionTemplateTests(unittest.TestCase):
             first.write_text(
                 json.dumps(
                     {
-                        "template_id": "R001",
+                        "reaction_id": "R001",
                         "name": "First library oxidation",
                         "description": "First library template.",
                         "smarts": "[C:1][O:2]>>[C:1]=[O:2]",
@@ -97,7 +97,7 @@ class ReactionTemplateTests(unittest.TestCase):
             second.write_text(
                 json.dumps(
                     {
-                        "template_id": "R001",
+                        "reaction_id": "R001",
                         "name": "Second library amination",
                         "description": "Second library template.",
                         "smarts": "[C:1][Cl:2].[N:3]>>[C:1][N:3]",
@@ -115,17 +115,17 @@ class ReactionTemplateTests(unittest.TestCase):
             tools = SynthesisTools(db_path)
             first_result = tools.search_reaction_templates("R001", library="first")
             second_result = tools.search_reaction_templates("R001", library="second")
-            self.assertEqual(first_result["results"][0]["template_id"], "first:R001")
-            self.assertEqual(second_result["results"][0]["template_id"], "second:R001")
+            self.assertEqual(first_result["results"][0]["reaction_id"], "first:R001")
+            self.assertEqual(second_result["results"][0]["reaction_id"], "second:R001")
 
-    def test_database_allows_same_source_template_id_in_different_libraries(self):
+    def test_database_allows_same_source_reaction_id_in_different_libraries(self):
         with tempfile.TemporaryDirectory() as tmp:
             db_path = Path(tmp) / "test.sqlite"
             db.init_db(db_path)
             with db.session(db_path) as conn:
                 inserted_first = db.upsert_reaction_template(
                     conn,
-                    template_id="R001",
+                    reaction_id="R001",
                     library="first",
                     name="First",
                     description="First library template.",
@@ -135,7 +135,7 @@ class ReactionTemplateTests(unittest.TestCase):
                 )
                 inserted_second = db.upsert_reaction_template(
                     conn,
-                    template_id="R001",
+                    reaction_id="R001",
                     library="second",
                     name="Second",
                     description="Second library template.",
@@ -193,7 +193,7 @@ class ReactionTemplateTests(unittest.TestCase):
                 json.dumps(
                     {
                         "library": "demo",
-                        "template_id": "demo:R000",
+                        "reaction_id": "demo:R000",
                         "name": "Curated nitrile installation",
                         "family": "curated nitrile formation",
                         "description": "Curated description for model-facing template discovery.",
@@ -237,7 +237,7 @@ class ReactionTemplateTests(unittest.TestCase):
             annotations = Path(tmp) / "annotations.jsonl"
             base = {
                 "library": "demo",
-                "template_id": "demo:R000",
+                "reaction_id": "demo:R000",
                 "family": "test family",
                 "family_metadata": {
                     "description": "Shared description.",
@@ -253,7 +253,7 @@ class ReactionTemplateTests(unittest.TestCase):
 
             second = {
                 **base,
-                "template_id": "demo:R001",
+                "reaction_id": "demo:R001",
                 "family_metadata": {
                     "description": "Different description.",
                     "search_terms": ["shared term"],
@@ -279,7 +279,7 @@ class ReactionTemplateTests(unittest.TestCase):
             for extra, expected_error in invalid_values:
                 with self.subTest(extra=extra):
                     annotations.write_text(
-                        json.dumps({"template_id": "demo:R000", **extra}) + "\n",
+                        json.dumps({"reaction_id": "demo:R000", **extra}) + "\n",
                         encoding="utf-8",
                     )
                     with self.assertRaisesRegex(ValueError, expected_error):
@@ -315,8 +315,8 @@ class ReactionTemplateTests(unittest.TestCase):
             source = Path(tmp) / "templates.jsonl"
             db_path = Path(tmp) / "test.sqlite"
             records = []
-            for template_id in sorted(selected_ids):
-                record = dict(annotations[("synformer", template_id)])
+            for reaction_id in sorted(selected_ids):
+                record = dict(annotations[("synformer", reaction_id)])
                 record.pop("reactant_roles", None)
                 record["smarts"] = "[*:1]>>[*:1]"
                 records.append(record)
@@ -330,7 +330,7 @@ class ReactionTemplateTests(unittest.TestCase):
             for query, expected in expected_ids.items():
                 with self.subTest(query=query):
                     result = tools.search_reaction_templates(query, limit=10)
-                    result_ids = {item["template_id"] for item in result["results"]}
+                    result_ids = {item["reaction_id"] for item in result["results"]}
                     self.assertTrue(expected.issubset(result_ids))
 
     def test_production_annotations_classify_isocyanate_amine_as_urea_formation(self):
@@ -354,7 +354,7 @@ class ReactionTemplateTests(unittest.TestCase):
             annotations.write_text(
                 json.dumps(
                     {
-                        "template_id": "demo:R000",
+                        "reaction_id": "demo:R000",
                         "reactant_roles": [{"position": 1, "role": "first reactant"}],
                     }
                 )
@@ -377,7 +377,7 @@ class ReactionTemplateTests(unittest.TestCase):
             source.write_text(
                 json.dumps(
                     {
-                        "template_id": "R001",
+                        "reaction_id": "R001",
                         "reaction_smarts": "[C:1][O:2]>>[C:1]=[O:2]",
                         "name": "Curated inline template",
                         "description": "Curated inline description.",
@@ -407,7 +407,7 @@ class ReactionTemplateTests(unittest.TestCase):
             source.write_text(
                 json.dumps(
                     {
-                        "template_id": "R001",
+                        "reaction_id": "R001",
                         "reaction_smarts": "[C:1]>>[C:1]",
                         "tags": ["suzuki"],
                         "confidence": "high",
@@ -420,7 +420,7 @@ class ReactionTemplateTests(unittest.TestCase):
             ingest_reaction_templates(source, db_path=db_path, library="demo")
             result = SynthesisTools(db_path).search_reaction_templates("suzuki")
 
-            self.assertEqual(result["results"][0]["template_id"], "demo:R001")
+            self.assertEqual(result["results"][0]["reaction_id"], "demo:R001")
             self.assertIn("suzuki", result["results"][0]["tags"])
 
     def test_external_annotation_replaces_structured_source_tags_by_default(self):
@@ -431,7 +431,7 @@ class ReactionTemplateTests(unittest.TestCase):
             source.write_text(
                 json.dumps(
                     {
-                        "template_id": "R001",
+                        "reaction_id": "R001",
                         "reaction_smarts": "[C:1].[N:2]>>[C:1][N:2]",
                         "family": "suzuki coupling",
                         "tags": ["suzuki"],
@@ -444,7 +444,7 @@ class ReactionTemplateTests(unittest.TestCase):
             annotations.write_text(
                 json.dumps(
                     {
-                        "template_id": "demo:R001",
+                        "reaction_id": "demo:R001",
                         "family": "amide formation",
                         "search_terms": ["amide coupling"],
                     }
@@ -463,7 +463,7 @@ class ReactionTemplateTests(unittest.TestCase):
 
             self.assertEqual(tools.search_reaction_templates("suzuki")["count"], 0)
             result = tools.search_reaction_templates("amide coupling")
-            self.assertEqual(result["results"][0]["template_id"], "demo:R001")
+            self.assertEqual(result["results"][0]["reaction_id"], "demo:R001")
             self.assertNotIn("suzuki", result["results"][0]["tags"])
 
     def test_csv_inline_annotation_fields_accept_json_and_blank_cells(self):
@@ -473,12 +473,12 @@ class ReactionTemplateTests(unittest.TestCase):
             with source.open("w", encoding="utf-8", newline="") as handle:
                 writer = csv.DictWriter(
                     handle,
-                    fieldnames=("template_id", "reaction_smarts", "search_terms", "confidence"),
+                    fieldnames=("reaction_id", "reaction_smarts", "search_terms", "confidence"),
                 )
                 writer.writeheader()
                 writer.writerow(
                     {
-                        "template_id": "R001",
+                        "reaction_id": "R001",
                         "reaction_smarts": "[C:1]>>[C:1]",
                         "search_terms": json.dumps(["curated oxidation"]),
                         "confidence": "high",
@@ -486,7 +486,7 @@ class ReactionTemplateTests(unittest.TestCase):
                 )
                 writer.writerow(
                     {
-                        "template_id": "R002",
+                        "reaction_id": "R002",
                         "reaction_smarts": "[N:1]>>[N:1]",
                         "search_terms": "",
                         "confidence": "",
@@ -497,7 +497,7 @@ class ReactionTemplateTests(unittest.TestCase):
             result = SynthesisTools(db_path).search_reaction_templates("curated oxidation")
 
             self.assertEqual(stats["inserted"], 2)
-            self.assertEqual(result["results"][0]["template_id"], "demo:R001")
+            self.assertEqual(result["results"][0]["reaction_id"], "demo:R001")
 
     def test_bracket_led_inline_annotation_text_falls_back_from_json(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -507,7 +507,7 @@ class ReactionTemplateTests(unittest.TestCase):
             source.write_text(
                 json.dumps(
                     {
-                        "template_id": "R001",
+                        "reaction_id": "R001",
                         "reaction_smarts": "[C:1]>>[C:1]",
                         "search_terms": "[3+2] cycloaddition, dipolar",
                         "retro_planning_notes": note,
@@ -522,7 +522,7 @@ class ReactionTemplateTests(unittest.TestCase):
             result = tools.search_reaction_templates("dipolar")
             template = tools.get_reaction_template("demo:R001")["template"]
 
-            self.assertEqual(result["results"][0]["template_id"], "demo:R001")
+            self.assertEqual(result["results"][0]["reaction_id"], "demo:R001")
             self.assertIn("[3+2] cycloaddition", template["query_hints"])
             self.assertIn(note, template["execution_hints"])
 
@@ -533,7 +533,7 @@ class ReactionTemplateTests(unittest.TestCase):
             source.write_text(
                 json.dumps(
                     {
-                        "template_id": "R001",
+                        "reaction_id": "R001",
                         "reaction_smarts": "nosmarts",
                         "reactant_roles": [
                             {"position": 1, "role": "first"},
@@ -558,7 +558,7 @@ class ReactionTemplateTests(unittest.TestCase):
             names = ["coupling coupling coupling", "coupling", "coupling", "suzuki", "coupling"]
             source.write_text(
                 "".join(
-                    json.dumps({"template_id": f"R{index:03d}", "smarts": "[C:1]>>[C:1]", "name": name}) + "\n"
+                    json.dumps({"reaction_id": f"R{index:03d}", "smarts": "[C:1]>>[C:1]", "name": name}) + "\n"
                     for index, name in enumerate(names)
                 ),
                 encoding="utf-8",
@@ -568,8 +568,8 @@ class ReactionTemplateTests(unittest.TestCase):
             result = SynthesisTools(db_path).search_reaction_templates("suzuki coupling")
 
             # "suzuki" occurs in one template and "coupling" in four, so the rare term wins.
-            self.assertEqual(result["results"][0]["template_id"], "demo:R003")
-            self.assertEqual(result["results"][1]["template_id"], "demo:R000")
+            self.assertEqual(result["results"][0]["reaction_id"], "demo:R003")
+            self.assertEqual(result["results"][1]["reaction_id"], "demo:R000")
 
     def test_runtime_token_aliases_are_scoped_to_the_annotated_template(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -578,7 +578,7 @@ class ReactionTemplateTests(unittest.TestCase):
             source.write_text(
                 json.dumps(
                     {
-                        "template_id": "R001",
+                        "reaction_id": "R001",
                         "reaction_smarts": "[C:1]-[N:2]>>[C:1]-[N:2]",
                         "name": "Curated imine-like transformation",
                         "search_terms": ["imine conversion"],
@@ -589,7 +589,7 @@ class ReactionTemplateTests(unittest.TestCase):
                 + "\n"
                 + json.dumps(
                     {
-                        "template_id": "R002",
+                        "reaction_id": "R002",
                         "reaction_smarts": "[C:1]-[N:2]>>[C:1]-[N:2]",
                         "name": "Unaliased transformation",
                         "search_terms": ["imine conversion"],
@@ -603,18 +603,18 @@ class ReactionTemplateTests(unittest.TestCase):
             tools = SynthesisTools(db_path)
             result = tools.search_reaction_templates("C=N installation")
 
-            self.assertEqual(result["results"][0]["template_id"], "demo:R001")
+            self.assertEqual(result["results"][0]["reaction_id"], "demo:R001")
             self.assertEqual(result["results"][0]["token_aliases"], {"c=n": ["imine"]})
             before = db._cached_reaction_text_index.cache_info()
             tools.search_reaction_templates("C=N installation")
             self.assertEqual(db._cached_reaction_text_index.cache_info().hits, before.hits + 1)
             # Only R001's alias matches; single letters and SMARTS never count as text matches.
-            self.assertEqual([item["template_id"] for item in result["results"]], ["demo:R001"])
+            self.assertEqual([item["reaction_id"] for item in result["results"]], ["demo:R001"])
             self.assertEqual(tools.search_reaction_templates("medium")["count"], 0)
             # Atom-map digits, element letters and stopwords must not match every template.
             self.assertEqual(tools.search_reaction_templates("zzz 1")["count"], 0)
             self.assertEqual(tools.search_reaction_templates("make a thing with the N")["count"], 0)
-            self.assertEqual(tools.search_reaction_templates("imines")["results"][0]["template_id"], "demo:R001")
+            self.assertEqual(tools.search_reaction_templates("imines")["results"][0]["reaction_id"], "demo:R001")
 
     def test_smarts_queries_match_exact_and_partial_template_smarts(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -627,7 +627,7 @@ class ReactionTemplateTests(unittest.TestCase):
             ]
             source.write_text(
                 "".join(
-                    json.dumps({"template_id": f"R{index:03d}", "smarts": value, "name": "coupling"}) + "\n"
+                    json.dumps({"reaction_id": f"R{index:03d}", "smarts": value, "name": "coupling"}) + "\n"
                     for index, value in enumerate(smarts)
                 ),
                 encoding="utf-8",
@@ -638,9 +638,9 @@ class ReactionTemplateTests(unittest.TestCase):
             exact = tools.search_reaction_templates(smarts[2])["results"]
             partial = tools.search_reaction_templates("[c:7][Br]")["results"]
 
-            self.assertEqual(exact[0]["template_id"], "demo:R002")
+            self.assertEqual(exact[0]["reaction_id"], "demo:R002")
             # Atom-map numbers are ignored, so the aryl bromide atoms find R001 alone.
-            self.assertEqual([item["template_id"] for item in partial], ["demo:R001"])
+            self.assertEqual([item["reaction_id"] for item in partial], ["demo:R001"])
 
     def test_search_phrase_matching_preserves_repeats_and_terms_after_twelve(self):
         repeated = db._normalize_reaction_search_phrase("amine to amine coupling")
@@ -702,7 +702,7 @@ class ReactionTemplateTests(unittest.TestCase):
             result = SynthesisTools(db_path).search_reaction_templates("urea amine coupling", limit=5)
 
             self.assertEqual(result["count"], 1)
-            self.assertEqual(result["results"][0]["template_id"], "demo:R000")
+            self.assertEqual(result["results"][0]["reaction_id"], "demo:R000")
             self.assertIn("urea formation", result["results"][0]["tags"])
             self.assertIn("amine coupling", result["results"][0]["tags"])
             self.assertIn("urea", result["results"][0]["description"])
@@ -742,7 +742,7 @@ class ReactionTemplateTests(unittest.TestCase):
                 library="demo",
             )
 
-            self.assertEqual(result["results"][0]["template_id"], "demo:R001")
+            self.assertEqual(result["results"][0]["reaction_id"], "demo:R001")
             self.assertEqual(result["results"][0]["reaction_family"], "amide formation")
             self.assertIn("carboxylic acid plus amine", result["results"][0]["query_hints"])
             self.assertEqual(result["results"][1]["reaction_family"], "urea formation")
@@ -750,8 +750,8 @@ class ReactionTemplateTests(unittest.TestCase):
                 for query in record.get("evaluation_queries", []):
                     ranked = SynthesisTools(db_path).search_reaction_templates(query, limit=3)
                     self.assertIn(
-                        record["template_id"],
-                        [item["template_id"] for item in ranked["results"]],
+                        record["reaction_id"],
+                        [item["reaction_id"] for item in ranked["results"]],
                     )
 
     def test_reaction_library_overview_groups_templates_by_family(self):
@@ -779,7 +779,7 @@ class ReactionTemplateTests(unittest.TestCase):
 
             self.assertEqual(overview["template_count"], 2)
             self.assertEqual(overview["families"][0]["family"], "amide formation")
-            self.assertEqual(overview["families"][0]["example_template_ids"], ["demo:R001"])
+            self.assertEqual(overview["families"][0]["example_reaction_ids"], ["demo:R001"])
             self.assertIn("amide coupling", overview["families"][0]["query_hints"])
 
     def test_reaction_library_overview_prefers_later_family_metadata_to_personal_hints(self):
@@ -788,13 +788,13 @@ class ReactionTemplateTests(unittest.TestCase):
             db_path = Path(tmp) / "test.sqlite"
             records = [
                 {
-                    "template_id": "R001",
+                    "reaction_id": "R001",
                     "reaction_smarts": "[C:1]>>[C:1]",
                     "family": "shared family",
                     "search_terms": ["personal first-template hint"],
                 },
                 {
-                    "template_id": "R002",
+                    "reaction_id": "R002",
                     "reaction_smarts": "[N:1]>>[N:1]",
                     "family": "shared family",
                     "search_terms": ["personal second-template hint"],
@@ -830,7 +830,7 @@ class ReactionTemplateTests(unittest.TestCase):
                 json.dumps(
                     {
                         "library": "demo",
-                        "template_id": "demo:R000",
+                        "reaction_id": "demo:R000",
                         "name": "Ketone addition with quaternary carboxylation",
                         "family": "abstract carbonyl transformation",
                         "description": (
@@ -1188,7 +1188,7 @@ class ReactionTemplateTests(unittest.TestCase):
                     [
                         json.dumps(
                             {
-                                "template_id": "demo:R001",
+                                "reaction_id": "demo:R001",
                                 "name": "Alcohol oxidation",
                                 "description": "Convert alcohol to carbonyl.",
                                 "smarts": "[C:1][O:2]>>[C:1]=[O:2]",
@@ -1196,7 +1196,7 @@ class ReactionTemplateTests(unittest.TestCase):
                         ),
                         json.dumps(
                             {
-                                "template_id": "demo:R002",
+                                "reaction_id": "demo:R002",
                                 "name": "Amide formation",
                                 "description": "Couple amine and acid.",
                                 "smarts": "[N:1].[C:2](=[O:3])O>>[N:1][C:2](=[O:3])",
@@ -1219,7 +1219,7 @@ class ReactionTemplateTests(unittest.TestCase):
 
             self.assertTrue(result["valid"])
             self.assertEqual(result["count"], 1)
-            self.assertEqual(result["results"][0]["template_id"], "demo:R002")
+            self.assertEqual(result["results"][0]["reaction_id"], "demo:R002")
             structure = result["results"][0]["structure_match"]
             self.assertTrue(structure["reactant_match"])
             self.assertTrue(structure["product_match"])
@@ -1262,7 +1262,7 @@ class ReactionTemplateTests(unittest.TestCase):
                     [
                         json.dumps(
                             {
-                                "template_id": "demo:R001",
+                                "reaction_id": "demo:R001",
                                 "name": "Carbonyl identity",
                                 "description": "Structurally matches carbonyl product but does not split to stock.",
                                 "smarts": "[C:1]=[O:2]>>[C:1]=[O:2]",
@@ -1270,7 +1270,7 @@ class ReactionTemplateTests(unittest.TestCase):
                         ),
                         json.dumps(
                             {
-                                "template_id": "demo:R002",
+                                "reaction_id": "demo:R002",
                                 "name": "Alcohol oxidation",
                                 "description": "Reverse split gives alcohol.",
                                 "smarts": "[C:1][O:2]>>[C:1]=[O:2]",
@@ -1293,7 +1293,7 @@ class ReactionTemplateTests(unittest.TestCase):
 
             self.assertTrue(result["valid"])
             self.assertTrue(result["reverse_ranking"]["applied"])
-            self.assertEqual(result["results"][0]["template_id"], "demo:R002")
+            self.assertEqual(result["results"][0]["reaction_id"], "demo:R002")
             usefulness = result["results"][0]["reverse_usefulness"]
             self.assertGreater(usefulness["score"], 100)
             self.assertEqual(usefulness["fully_grounded_candidate_sets"], 1)
@@ -1310,7 +1310,7 @@ class ReactionTemplateTests(unittest.TestCase):
                     [
                         json.dumps(
                             {
-                                "template_id": "demo:R001",
+                                "reaction_id": "demo:R001",
                                 "name": "Carbonyl identity",
                                 "description": "Structurally ranked first by template ID.",
                                 "smarts": "[C:1]=[O:2]>>[C:1]=[O:2]",
@@ -1318,7 +1318,7 @@ class ReactionTemplateTests(unittest.TestCase):
                         ),
                         json.dumps(
                             {
-                                "template_id": "demo:R002",
+                                "reaction_id": "demo:R002",
                                 "name": "Alcohol oxidation",
                                 "description": "Reverse split gives alcohol.",
                                 "smarts": "[C:1][O:2]>>[C:1]=[O:2]",
@@ -1345,10 +1345,10 @@ class ReactionTemplateTests(unittest.TestCase):
             # Both templates fit the product; the grounded alcohol split ranks first.
             self.assertNotIn("results", result)
             self.assertEqual(
-                [item["template_id"] for item in result["structural_results"]], ["demo:R002", "demo:R001"]
+                [item["reaction_id"] for item in result["structural_results"]], ["demo:R002", "demo:R001"]
             )
             self.assertEqual(result["structural_count"], len(result["structural_results"]))
-            self.assertEqual(result["text_results"][0]["template_id"], "demo:R002")
+            self.assertEqual(result["text_results"][0]["reaction_id"], "demo:R002")
             self.assertEqual(result["text_count"], len(result["text_results"]))
 
     def test_search_reaction_templates_text_list_is_independent_of_molecule_truncation(self):
@@ -1360,7 +1360,7 @@ class ReactionTemplateTests(unittest.TestCase):
             for index in range(121):
                 records.append(
                     {
-                        "template_id": f"demo:R{index:03d}",
+                        "reaction_id": f"demo:R{index:03d}",
                         "name": "Special carbonyl identity" if index == 120 else "Carbonyl identity",
                         "description": "Structurally matches carbonyl product.",
                         "smarts": "[C:1]=[O:2]>>[C:1]=[O:2]",
@@ -1384,7 +1384,7 @@ class ReactionTemplateTests(unittest.TestCase):
             self.assertEqual(result["search_mode"], "text_and_molecule")
             self.assertEqual(result["matched_template_count"], 121)
             self.assertEqual(result["structural_count"], 5)
-            self.assertEqual(result["text_results"][0]["template_id"], "demo:R120")
+            self.assertEqual(result["text_results"][0]["reaction_id"], "demo:R120")
 
     def test_search_reaction_templates_records_reverse_failures(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1394,7 +1394,7 @@ class ReactionTemplateTests(unittest.TestCase):
             source.write_text(
                 json.dumps(
                     {
-                        "template_id": "demo:R001",
+                        "reaction_id": "demo:R001",
                         "name": "Two product carbonyl template",
                         "description": "Partial product-side match but reverse requires both products.",
                         "smarts": "[C:1][O:2]>>[C:1]=[O:2].[OH2]",

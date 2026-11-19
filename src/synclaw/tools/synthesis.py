@@ -358,7 +358,7 @@ class SynthesisTools:
         for match in enriched:
             reverse_result = reactions.simulate_reverse_reaction(
                 conn,
-                reaction_id=str(match.get("template_id") or ""),
+                reaction_id=str(match.get("reaction_id") or ""),
                 product_smiles=product_smiles,
                 max_outcomes=REVERSE_RANK_MAX_OUTCOMES,
                 library=self.reaction_libraries,
@@ -550,9 +550,9 @@ class SynthesisTools:
         step_results = []
         with db.session(self.db_path) as conn:
             for index, step in enumerate(steps, start=1):
-                reaction_id = str(step.get("reaction_id") or step.get("template_id") or "")
+                reaction_id = str(step.get("reaction_id") or "")
                 product = str(step.get("product_smiles") or "")
-                refs = step.get("reactants") or step.get("reactant_refs") or []
+                refs = step.get("reactants") or []
                 if not reaction_id:
                     result = {"valid": False, "issues": [f"step {index}: reaction_id is required"]}
                 elif not isinstance(refs, list) or not refs:
@@ -604,7 +604,7 @@ class SynthesisTools:
         used_intermediates = {
             str(ref)
             for position, step in enumerate(steps, start=1)
-            if isinstance(refs := step.get("reactants") or step.get("reactant_refs"), list)
+            if isinstance(refs := step.get("reactants"), list)
             for ref in refs
             if str(ref) in {f"INT:{earlier}" for earlier in range(1, position)}
         }
@@ -1097,7 +1097,7 @@ def _compact_reverse_reaction_result(result: dict[str, Any]) -> None:
     template = result.pop("template", None)
     if isinstance(template, dict):
         result["template_summary"] = {
-            "template_id": template.get("template_id"),
+            "reaction_id": template.get("reaction_id"),
             "reaction_family": template.get("reaction_family"),
             "description": template.get("description"),
             "reactant_roles": template.get("reactant_roles"),

@@ -15,7 +15,7 @@ from synclaw.tasks.targets import (
     MATRIX_FILE,
     OFFSET_FILE,
     REACTION_FILE,
-    TEMPLATE_ID_FILE,
+    REACTION_ID_FILE,
     GenerationOptions,
     MatrixDir,
     generate_targets,
@@ -54,7 +54,7 @@ def write_matrix_dir(directory: Path, blocks: list[str] = BLOCKS) -> Path:
     np.save(directory / OFFSET_FILE, np.array(offsets, dtype=np.int64))
 
     (directory / REACTION_FILE).write_text("".join(f"{smarts}\n" for _, smarts in TEMPLATES))
-    (directory / TEMPLATE_ID_FILE).write_text("".join(f"{name}\n" for name, _ in TEMPLATES))
+    (directory / REACTION_ID_FILE).write_text("".join(f"{name}\n" for name, _ in TEMPLATES))
 
     matrix = np.lib.format.open_memmap(
         directory / MATRIX_FILE,
@@ -88,7 +88,7 @@ def test_load_matrix_dir_reads_the_documented_layout(matrix_dir: Path) -> None:
     assert isinstance(matrix_dir, MatrixDir)
     assert matrix_dir.num_blocks == len(BLOCKS)
     assert matrix_dir.num_templates == len(TEMPLATES)
-    assert matrix_dir.template_ids == [name for name, _ in TEMPLATES]
+    assert matrix_dir.reaction_ids == [name for name, _ in TEMPLATES]
 
 
 def test_load_matrix_dir_names_missing_files(tmp_path: Path) -> None:
@@ -244,10 +244,10 @@ def test_routes_never_fall_below_min_steps(matrix_dir: Path, tmp_path: Path) -> 
     generate_targets(
         matrix_dir, output, GenerationOptions(count=25, min_steps=2, max_steps=3, workers=1, seed=9)
     )
-    template_ids = {line.strip() for line in open(matrix_dir / TEMPLATE_ID_FILE) if line.strip()}
+    reaction_ids = {line.strip() for line in open(matrix_dir / REACTION_ID_FILE) if line.strip()}
     for line in open(output):
         pathway = line.rstrip("\n").split("\t")[1]
-        assert sum(1 for token in pathway.split(";") if token in template_ids) >= 2
+        assert sum(1 for token in pathway.split(";") if token in reaction_ids) >= 2
 
 
 def test_replay_rejects_a_tampered_route(matrix_dir: Path, tmp_path: Path) -> None:
@@ -320,12 +320,12 @@ def test_template_usage_counts_only_the_routes_that_were_kept(matrix_dir: Path, 
     summary = generate_targets(
         matrix_dir, output, GenerationOptions(count=60, workers=4, seed=2, max_steps=2)
     )
-    template_ids = {line.strip() for line in open(matrix_dir / TEMPLATE_ID_FILE) if line.strip()}
+    reaction_ids = {line.strip() for line in open(matrix_dir / REACTION_ID_FILE) if line.strip()}
     actual: dict[str, int] = {}
     for line in open(output):
         pathway = line.rstrip("\n").split("\t")[1]
         for token in pathway.split(";"):
-            if token in template_ids:
+            if token in reaction_ids:
                 actual[token] = actual.get(token, 0) + 1
     stats = json.loads(Path(summary["stats_path"]).read_text())
     assert stats["template_usage"] == actual

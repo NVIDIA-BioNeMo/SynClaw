@@ -423,11 +423,11 @@ def summarize_tool_call_arguments(name: str, arguments: dict[str, Any]) -> list[
 
 
 def render_submitted_step(index: int, step: dict[str, Any]) -> list[str]:
-    reactants = step.get("reactants") or step.get("reactant_refs") or []
+    reactants = step.get("reactants") or []
     return [
         f"### Step {index}",
         "",
-        f"- Template: `{step.get('reaction_id') or step.get('template_id')}`",
+        f"- Template: `{step.get('reaction_id')}`",
         f"- Reactants: {format_smiles_list(reactants)}",
         f"- Claimed product: `{step.get('product_smiles')}`",
         "",
@@ -633,7 +633,7 @@ def render_result(name: str, result: dict[str, Any], max_results: int) -> list[s
             score_text = f" [{', '.join(score_bits)}]" if score_bits else ""
             lines.append(
                 "- "
-                + f"`{item.get('template_id')}`"
+                + f"`{item.get('reaction_id')}`"
                 + f" ({', '.join(item.get('tags') or [])})"
                 + score_text
                 + f": {item.get('description', '')}"
@@ -641,7 +641,7 @@ def render_result(name: str, result: dict[str, Any], max_results: int) -> list[s
         if "text_results" in result:
             lines.append(
                 f"- Text results: `{len(result['text_results'])}`: "
-                + ", ".join(f"`{item.get('template_id')}`" for item in result["text_results"][:max_results])
+                + ", ".join(f"`{item.get('reaction_id')}`" for item in result["text_results"][:max_results])
             )
         return lines
 
@@ -691,7 +691,7 @@ def render_result(name: str, result: dict[str, Any], max_results: int) -> list[s
             structure = item.get("structure_match") or {}
             lines.append(
                 "- "
-                + f"`{item.get('template_id')}`"
+                + f"`{item.get('reaction_id')}`"
                 + f" score `{structure.get('score')}`"
                 + f": {item.get('description', '')}"
             )

@@ -108,7 +108,7 @@ CREATE TABLE IF NOT EXISTS import_errors (
 
 CREATE TABLE IF NOT EXISTS reaction_templates (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    template_id TEXT NOT NULL,
+    reaction_id TEXT NOT NULL,
     library TEXT NOT NULL,
     name TEXT NOT NULL,
     description TEXT NOT NULL,
@@ -117,7 +117,7 @@ CREATE TABLE IF NOT EXISTS reaction_templates (
     metadata_json TEXT NOT NULL DEFAULT '{}',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
-    UNIQUE(template_id, library)
+    UNIQUE(reaction_id, library)
 );
 
 CREATE INDEX IF NOT EXISTS idx_reaction_templates_library ON reaction_templates(library);
@@ -131,7 +131,7 @@ CREATE TABLE IF NOT EXISTS reaction_library_catalog (
 );
 CREATE INDEX IF NOT EXISTS idx_reaction_templates_name ON reaction_templates(name);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_reaction_templates_template_library
-    ON reaction_templates(template_id, library);
+    ON reaction_templates(reaction_id, library);
 """
 
 
@@ -829,7 +829,7 @@ def building_block_ids_identical_to(conn: sqlite3.Connection, smiles: str) -> fr
 
 def upsert_reaction_template(
     conn: sqlite3.Connection,
-    template_id: str,
+    reaction_id: str,
     library: str,
     name: str,
     description: str,
@@ -838,20 +838,20 @@ def upsert_reaction_template(
     metadata_json: str,
 ) -> bool:
     existing = conn.execute(
-        "SELECT id FROM reaction_templates WHERE template_id = ? AND library = ?",
-        (template_id, library),
+        "SELECT id FROM reaction_templates WHERE reaction_id = ? AND library = ?",
+        (reaction_id, library),
     ).fetchone()
     timestamp = now_iso()
     if existing is None:
         conn.execute(
             """
             INSERT INTO reaction_templates(
-                template_id, library, name, description, smarts,
+                reaction_id, library, name, description, smarts,
                 tags_json, metadata_json, created_at, updated_at
             )
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (template_id, library, name, description, smarts, tags_json, metadata_json, timestamp, timestamp),
+            (reaction_id, library, name, description, smarts, tags_json, metadata_json, timestamp, timestamp),
         )
         return True
     conn.execute(
@@ -868,18 +868,18 @@ def upsert_reaction_template(
 
 def get_reaction_template(
     conn: sqlite3.Connection,
-    template_id: str,
+    reaction_id: str,
     *,
     library: LibrarySelection = None,
 ) -> dict[str, Any] | None:
     library_where, library_params = _reaction_library_filter(library)
     cursor = conn.execute(
         f"""
-        SELECT template_id, library, name, description, smarts, tags_json, metadata_json
+        SELECT reaction_id, library, name, description, smarts, tags_json, metadata_json
         FROM reaction_templates
-        WHERE template_id = ? AND {library_where}
+        WHERE reaction_id = ? AND {library_where}
         """,
-        (template_id, *library_params),
+        (reaction_id, *library_params),
     )
     row = cursor.fetchone()
     return _reaction_template_row(row) if row is not None else None
@@ -895,7 +895,7 @@ def get_reaction_template_by_smarts(
 
     library_where, library_params = _reaction_library_filter(library)
     rows = conn.execute(
-        "SELECT template_id, library, name, description, smarts, tags_json, metadata_json "
+        "SELECT reaction_id, library, name, description, smarts, tags_json, metadata_json "
         f"FROM reaction_templates WHERE smarts = ? AND {library_where} LIMIT 2",
         (str(smarts).strip(), *library_params),
     ).fetchall()
@@ -935,7 +935,7 @@ def search_reaction_templates(
             index.text.cosine(query_terms | alias_terms, position)
             + index.smarts.cosine(query_smarts_terms, position),
             curated,
-            row["template_id"].lower() == text.lower() or row["smarts"] == text,
+            row["reaction_id"].lower() == text.lower() or row["smarts"] == text,
             len(query_terms & index.text.documents[position].keys()) / max(1, len(query_terms)),
         ))
     # Cosine scores are scaled to the best match so curated aliases, hints and exclusions
@@ -947,7 +947,7 @@ def search_reaction_templates(
         if exact_id or score > 0:
             matches.append((row, score, exact_id, coverage))
     matches.sort(key=lambda match: (
-        -match[2], -match[1], -match[3], match[0]["library"], match[0]["template_id"],
+        -match[2], -match[1], -match[3], match[0]["library"], match[0]["reaction_id"],
     ))
     return [copy.deepcopy(row) for row, *_ in matches[:limit]]
 
@@ -984,7 +984,7 @@ def _smarts_terms(text: str) -> list[str]:
 
 def _template_search_document(template: dict[str, Any]) -> Counter[str]:
     return Counter(_text_terms(" ".join([
-        str(template.get("template_id", "")),
+        str(template.get("reaction_id", "")),
         str(template.get("name", "")),
         str(template.get("description", "")),
         " ".join(template.get("tags") or []),
@@ -1062,10 +1062,10 @@ def list_reaction_templates(
     where_sql = f"WHERE {where}"
     cursor = conn.execute(
         f"""
-        SELECT template_id, library, name, description, smarts, tags_json, metadata_json
+        SELECT reaction_id, library, name, description, smarts, tags_json, metadata_json
         FROM reaction_templates
         {where_sql}
-        ORDER BY library, template_id
+        ORDER BY library, reaction_id
         LIMIT ?
         """,
         (*params, limit),
@@ -1317,10 +1317,10 @@ def reaction_template_library_overview(
     where = f"WHERE {selection_where}"
     rows = conn.execute(
         f"""
-        SELECT template_id, library, name, description, smarts, tags_json, metadata_json
+        SELECT reaction_id, library, name, description, smarts, tags_json, metadata_json
         FROM reaction_templates
         {where}
-        ORDER BY library, template_id
+        ORDER BY library, reaction_id
         """,
         params,
     ).fetchall()
@@ -1343,7 +1343,7 @@ def reaction_template_library_overview(
                 "description": str(family_metadata.get("description") or "").strip(),
                 "query_hints": family_query_hints,
                 "count": 0,
-                "example_template_ids": [],
+                "example_reaction_ids": [],
             },
         )
         if not group["description"]:
@@ -1351,8 +1351,8 @@ def reaction_template_library_overview(
         if family_query_hints and not group["query_hints"]:
             group["query_hints"] = family_query_hints
         group["count"] += 1
-        if len(group["example_template_ids"]) < examples_per_family:
-            group["example_template_ids"].append(template["template_id"])
+        if len(group["example_reaction_ids"]) < examples_per_family:
+            group["example_reaction_ids"].append(template["reaction_id"])
     for group in grouped.values():
         if not group["description"] or not group["query_hints"]:
             raise ValueError(
@@ -1390,8 +1390,8 @@ def _notable_reaction_templates(
         priority = overview.get("priority", 0)
         if isinstance(priority, bool) or not isinstance(priority, int) or priority <= 0:
             continue
-        category = str(overview.get("category") or template.get("template_id") or "")
-        scored.append((priority, category, str(template.get("template_id") or ""), template))
+        category = str(overview.get("category") or template.get("reaction_id") or "")
+        scored.append((priority, category, str(template.get("reaction_id") or ""), template))
     scored.sort(key=lambda item: (-item[0], item[1], item[2]))
     notable = []
     seen_categories = set()

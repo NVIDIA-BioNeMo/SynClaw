@@ -17,7 +17,7 @@ from synclaw.tools.synthesis import SynthesisTools
 @pytest.mark.parametrize("metadata", [None, {}, {"description": "Scope."}, {"search_terms": ["family hint"]}, {"description": " ", "search_terms": ["family hint"]}, {"description": "Scope.", "search_terms": []}])
 def test_incomplete_family_metadata_fails_the_family_overview(tmp_path, metadata):
     records = [
-        {"template_id": f"R{i:03d}", "smarts": "[C:1]>>[C:1]", "family": f"family {i}",
+        {"reaction_id": f"R{i:03d}", "smarts": "[C:1]>>[C:1]", "family": f"family {i}",
          "family_metadata": {"description": "Fixture family.", "search_terms": ["family hint"]}}
         for i in range(9)
     ]
@@ -56,12 +56,12 @@ def test_annotations_that_match_nothing_fail_the_import_and_roll_it_back(tmp_pat
     """A library/ID mismatch must fail the import and roll it back, not report annotated: 0."""
     source = tmp_path / "templates.jsonl"
     source.write_text(json.dumps({
-        "template_id": "R001", "smarts": "[C:1]>>[C:1]", "family": "fam",
+        "reaction_id": "R001", "smarts": "[C:1]>>[C:1]", "family": "fam",
         "family_metadata": {"description": "Fixture family.", "search_terms": ["hint"]},
     }) + "\n")
     annotations = tmp_path / "annotations.jsonl"
     annotations.write_text(json.dumps({
-        "template_id": "R001", "library": "other-library", "name": "Amide coupling",
+        "reaction_id": "R001", "library": "other-library", "name": "Amide coupling",
     }) + "\n")
     database = tmp_path / "synclaw.sqlite"
 
@@ -77,7 +77,7 @@ def test_incomplete_library_metadata_fails_before_the_run_starts(tmp_path):
     """The same error the prompt raises, reported once up front with the library named."""
     source = tmp_path / "templates.jsonl"
     source.write_text(json.dumps({
-        "template_id": "R001", "smarts": "[C:1]>>[C:1]", "family": "fam",
+        "reaction_id": "R001", "smarts": "[C:1]>>[C:1]", "family": "fam",
     }) + "\n")
     database = tmp_path / "synclaw.sqlite"
     ingest_reaction_templates(source, database, library="demo")

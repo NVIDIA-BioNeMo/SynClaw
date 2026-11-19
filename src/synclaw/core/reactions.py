@@ -29,7 +29,7 @@ SMARTS_ARROW = ">>"
 # Every reactant order is tried, so a model-written SMARTS is held to the largest library arity.
 MAX_SMARTS_REACTANTS = 4
 TEMPLATE_KEYS = ("smarts", "reaction_smarts", "template", "template_smarts")
-ID_KEYS = ("template_id", "id", "reaction_id", "name")
+ID_KEYS = ("reaction_id",)
 NAME_KEYS = ("name", "title", "reaction_name")
 DESCRIPTION_KEYS = ("description", "desc", "natural_language", "notes")
 TAG_KEYS = ("tags", "tag", "class", "reaction_class")
@@ -66,7 +66,7 @@ def ingest_reaction_libraries(
     for library, source in catalog["sources"].items():
         for row in db.iter_jsonl(_verified_bundled_file(template_dir, source)):
             if row["family"] not in families:
-                raise ValueError(f"{row['template_id']}: family {row['family']!r} is missing from families.json")
+                raise ValueError(f"{row['reaction_id']}: family {row['family']!r} is missing from families.json")
             records.append((library, {**row, "family_metadata": families[row["family"]]}))
     if len({row["smarts"] for _, row in records}) != len(records):
         raise ValueError("Bundled reaction sources contain duplicated SMARTS")
@@ -136,7 +136,7 @@ def ingest_reaction_templates(
             if not normalized["smarts"] or SMARTS_ARROW not in normalized["smarts"]:
                 stats["invalid"] += 1
                 continue
-            annotation = annotations.get((library, normalized["template_id"]))
+            annotation = annotations.get((library, normalized["reaction_id"]))
             if annotation is not None:
                 normalized = apply_template_annotation(
                     normalized,
@@ -177,11 +177,11 @@ def load_template_annotations(
     annotations: dict[tuple[str, str], dict[str, Any]] = {}
     family_metadata: dict[tuple[str, str], dict[str, Any]] = {}
     for line_number, record in enumerate(db.iter_jsonl(annotations_path), start=1):
-        template_id = _first_value(record, ID_KEYS)
-        if template_id in (None, ""):
-            raise ValueError(f"{annotations_path}:{line_number}: annotation requires template_id")
+        reaction_id = _first_value(record, ID_KEYS)
+        if reaction_id in (None, ""):
+            raise ValueError(f"{annotations_path}:{line_number}: annotation requires reaction_id")
         annotation_library = str(record.get("library") or library)
-        normalized_id = _normalize_template_id(template_id, index=0, library=annotation_library)
+        normalized_id = _normalize_reaction_id(reaction_id, index=0, library=annotation_library)
         key = (annotation_library, normalized_id)
         if key in annotations:
             raise ValueError(f"{annotations_path}:{line_number}: duplicate annotation for {normalized_id}")
@@ -289,7 +289,7 @@ def apply_template_annotation(
         expected_positions = list(range(1, reactant_count + 1))
         if positions != expected_positions:
             raise ValueError(
-                f"{value.get('template_id')}: reactant role positions {positions} "
+                f"{value.get('reaction_id')}: reactant role positions {positions} "
                 f"do not match template positions {expected_positions}"
             )
     name = annotation.get("name") or annotation.get("title")
@@ -392,12 +392,12 @@ def _decode_inline_annotation_value(key: str, value: Any, *, source: str) -> Any
 
 def normalize_template_record(record: dict[str, Any], index: int, library: str) -> dict[str, Any]:
     smarts = _first_value(record, TEMPLATE_KEYS)
-    template_id = _normalize_template_id(_first_value(record, ID_KEYS), index=index, library=library)
+    reaction_id = _normalize_reaction_id(_first_value(record, ID_KEYS), index=index, library=library)
     name = _first_value(record, NAME_KEYS)
     description = _first_value(record, DESCRIPTION_KEYS)
     tags = _normalize_tags(_first_value(record, TAG_KEYS))
     if not name:
-        name = _infer_name(str(template_id), str(smarts or ""))
+        name = _infer_name(str(reaction_id), str(smarts or ""))
     if not description:
         description = _infer_description(str(smarts or ""))
     # Keep the record's own metadata (e.g. provenance) and nest any other unused fields,
@@ -415,7 +415,7 @@ def normalize_template_record(record: dict[str, Any], index: int, library: str) 
     if source_fields:
         metadata["source_fields"] = source_fields
     value = {
-        "template_id": str(template_id),
+        "reaction_id": str(reaction_id),
         "library": library,
         "name": str(name),
         "description": str(description),
@@ -425,9 +425,9 @@ def normalize_template_record(record: dict[str, Any], index: int, library: str) 
     }
     if not value["smarts"] or SMARTS_ARROW not in value["smarts"]:
         return value
-    inline_annotation = _inline_template_annotation(record, source=str(template_id))
+    inline_annotation = _inline_template_annotation(record, source=str(reaction_id))
     if inline_annotation:
-        _validate_template_annotation(inline_annotation, source=str(template_id))
+        _validate_template_annotation(inline_annotation, source=str(reaction_id))
     return (
         apply_template_annotation(
             value,
@@ -439,7 +439,7 @@ def normalize_template_record(record: dict[str, Any], index: int, library: str) 
     )
 
 
-def _normalize_template_id(value: Any, *, index: int, library: str) -> str:
+def _normalize_reaction_id(value: Any, *, index: int, library: str) -> str:
     if value in (None, ""):
         return f"{library}:R{index:03d}"
     text = str(value)
@@ -518,7 +518,7 @@ def search_reaction_templates_structural_matches(
             reaction = AllChem.ReactionFromSmarts(template["smarts"])
             rdChemReactions.ChemicalReaction.Initialize(reaction)
         except Exception as exc:
-            execution_issues.append(f"{template.get('template_id')}: RDKit could not parse template: {exc}")
+            execution_issues.append(f"{template.get('reaction_id')}: RDKit could not parse template: {exc}")
             continue
 
         reactant_templates = [
@@ -537,7 +537,7 @@ def search_reaction_templates_structural_matches(
         if run_forward and reactant_inputs and len(reactant_inputs) == reaction.GetNumReactantTemplates():
             forward_result = simulate_reaction(
                 conn,
-                reaction_id=str(template["template_id"]),
+                reaction_id=str(template["reaction_id"]),
                 reactant_smiles=[str(v["canonical_smiles"]) for v in reactant_validations],
                 max_products=50,
                 try_permutations=try_permutations,
@@ -617,7 +617,7 @@ def structural_rank_key(match: dict[str, Any]) -> tuple[Any, ...]:
     return (
         -float(match.get("structure_match", {}).get("score", 0.0)),
         match.get("library", ""),
-        match.get("template_id", ""),
+        match.get("reaction_id", ""),
     )
 
 
@@ -733,7 +733,7 @@ def _simulate_reaction_smarts(
         ):
             result = _simulate_template(
                 template,
-                str(template["template_id"]),
+                str(template["reaction_id"]),
                 reactant_smiles,
                 product_smiles,
                 max_products=None,
@@ -788,7 +788,7 @@ def _smarts_grounding_candidates(
         template_scan_limit=50000,
     )
     for match in matches.get("results") or []:
-        if exact is None or (match["template_id"], match["library"]) != (exact["template_id"], exact["library"]):
+        if exact is None or (match["reaction_id"], match["library"]) != (exact["reaction_id"], exact["library"]):
             yield {key: value for key, value in match.items() if key != "structure_match"}
 
 
@@ -1315,8 +1315,8 @@ def _dedupe_texts(values: list[str]) -> list[str]:
     return result
 
 
-def _infer_name(template_id: str, smarts: str) -> str:
-    return f"Reaction template {template_id}"
+def _infer_name(reaction_id: str, smarts: str) -> str:
+    return f"Reaction template {reaction_id}"
 
 
 def _infer_description(smarts: str) -> str:

@@ -23,7 +23,7 @@ def load_script():
 def test_renders_the_run_prompt_with_task_and_run_exclusions(tmp_path: Path) -> None:
     templates = tmp_path / "templates.jsonl"
     templates.write_text(json.dumps({
-        "template_id": "R000", "smarts": "[C:1][O:2]>>[C:1]=[O:2]", "family": "oxidation",
+        "reaction_id": "R000", "smarts": "[C:1][O:2]>>[C:1]=[O:2]", "family": "oxidation",
         "family_metadata": {"description": "Alcohol to carbonyl.", "search_terms": ["alcohol oxidation"]},
     }) + "\n", encoding="utf-8")
     bbs = tmp_path / "bbs.txt"

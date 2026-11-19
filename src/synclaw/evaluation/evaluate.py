@@ -209,7 +209,7 @@ def _replay_submission(
     arguments = payload["dispatch_arguments"]
     steps = arguments.get("steps")
     if isinstance(steps, list):
-        resolved_steps = _resolve_template_ids(tools, steps, _recorded_step_smarts(recorded))
+        resolved_steps = _resolve_reaction_ids(tools, steps, _recorded_step_smarts(recorded))
         if resolved_steps is None:
             return None
         arguments = {**arguments, "steps": resolved_steps}
@@ -222,7 +222,7 @@ def _replay_submission(
     )
 
 
-def _resolve_template_ids(
+def _resolve_reaction_ids(
     tools: SynthesisTools,
     steps: list[Any],
     recorded_smarts: dict[int, str],
@@ -247,7 +247,7 @@ def _resolve_template_ids(
             if template is None and index in recorded_smarts:
                 template = db.get_reaction_template_by_smarts(conn, recorded_smarts[index], library=library)
                 if template is not None:
-                    step = {**step, "reaction_id": template["template_id"]}
+                    step = {**step, "reaction_id": template["reaction_id"]}
             if template is None:
                 return None
             resolved.append(step)
