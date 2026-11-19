@@ -33,8 +33,11 @@ def catalog_families() -> dict[str, dict[str, Any]]:
 
 def catalog_records() -> list[dict[str, Any]]:
     catalog = libraries_json()
-    return [row for source in catalog["sources"].values()
-            for row in db.iter_jsonl(ASSETS / source["file"])]
+    return [
+        row
+        for source in catalog["sources"].values()
+        for row in db.iter_jsonl(ASSETS / source["file"])
+    ]
 
 
 def test_source_catalog_has_unique_smarts_provenance_and_consistent_manifest():
@@ -89,7 +92,9 @@ def test_imported_default_union_needs_no_runtime_annotation_files(catalog_db, mo
     for source in DEFAULT_REACTION_LIBRARIES:
         reaction_id = next(row["reaction_id"] for row in rows if row["library"] == source)
         result = call_local_tool(
-            SynthesisTools(catalog_db), "search_reaction_templates", {"query": reaction_id},
+            SynthesisTools(catalog_db),
+            "search_reaction_templates",
+            {"query": reaction_id},
         )
         assert result["library"] == DEFAULT_REACTION_LIBRARIES
         assert reaction_id in {row["reaction_id"] for row in result["results"]}
@@ -121,12 +126,20 @@ def test_raw_synformer_rows_require_explicit_annotated_import(tmp_path):
     assert row["family_metadata"] == catalog_families()[template["family"]]
 
 
-@pytest.mark.parametrize(("selection", "count"), [
-    (["synformer"], 114), (["paroutes"], 176), (["ord"], 203), (["nvidia"], 8),
-    (["synformer", "paroutes"], 290), (["synformer", "ord"], 317),
-    (["paroutes", "ord"], 379), (["ord", "nvidia"], 211),
-    (list(DEFAULT_REACTION_LIBRARIES), 501),
-])
+@pytest.mark.parametrize(
+    ("selection", "count"),
+    [
+        (["synformer"], 114),
+        (["paroutes"], 176),
+        (["ord"], 203),
+        (["nvidia"], 8),
+        (["synformer", "paroutes"], 290),
+        (["synformer", "ord"], 317),
+        (["paroutes", "ord"], 379),
+        (["ord", "nvidia"], 211),
+        (list(DEFAULT_REACTION_LIBRARIES), 501),
+    ],
+)
 def test_unions_drive_search_and_the_family_overview(catalog_db, selection, count):
     with db.session(catalog_db) as conn:
         db.require_reaction_library(conn, selection)
@@ -153,14 +166,22 @@ def test_reimport_preserves_stock_and_replaces_raw_synformer_rows(tmp_path):
     ingest_reaction_templates(custom, database, library="custom")
     with db.session(database) as conn:
         stock = [tuple(r) for r in conn.execute("SELECT * FROM building_blocks ORDER BY id")]
-        custom_before = [tuple(r) for r in conn.execute("SELECT * FROM reaction_templates WHERE library = 'custom'")]
+        custom_before = [
+            tuple(r)
+            for r in conn.execute("SELECT * FROM reaction_templates WHERE library = 'custom'")
+        ]
     stats = ingest_reaction_libraries(database)
     assert stats["replaced"] == 114
     again = ingest_reaction_libraries(database)
     assert again["replaced"] == again["inserted"] == 501
     with db.session(database) as conn:
-        assert [tuple(r) for r in conn.execute("SELECT * FROM building_blocks ORDER BY id")] == stock
-        assert [tuple(r) for r in conn.execute("SELECT * FROM reaction_templates WHERE library = 'custom'")] == custom_before
+        assert [
+            tuple(r) for r in conn.execute("SELECT * FROM building_blocks ORDER BY id")
+        ] == stock
+        assert [
+            tuple(r)
+            for r in conn.execute("SELECT * FROM reaction_templates WHERE library = 'custom'")
+        ] == custom_before
         assert len(db.list_reaction_templates(conn, library=DEFAULT_REACTION_LIBRARIES)) == 501
         assert db.get_reaction_template(conn, "synformer:R033") is None
     db.require_prepared_building_block_search(database)
@@ -170,7 +191,9 @@ def test_bundled_templates_execute(catalog_db):
     tools = SynthesisTools(catalog_db)
     for reaction_id in ("synformer:R008", "nvidia:R000"):
         assert tools.simulate_reaction(
-            reaction_id=reaction_id, reactants=["CN", "CC(=O)O"], product_smiles="CNC(C)=O",
+            reaction_id=reaction_id,
+            reactants=["CN", "CC(=O)O"],
+            product_smiles="CNC(C)=O",
         )["product_matched"]
     products = tools.simulate_reaction(reaction_id="ord:R253", reactants=["CC(=O)O", "CNC"])
     assert any(len(ps) == 2 for ps in products["generated_product_sets"])
@@ -178,10 +201,25 @@ def test_bundled_templates_execute(catalog_db):
 
 def test_union_text_and_structural_search_covers_only_selected_libraries(tmp_path):
     records = [
-        {"reaction_id": "P", "library": "paroutes", "smarts": "[C:1][O:2]>>[C:1]=[O:2]",
-         "name": "Alcohol oxidation", "token_aliases": {"dehydrogenation": ["oxidation"]}},
-        {"reaction_id": "O", "library": "ord", "smarts": "[C:1][O:2]>>[C:1][O:2]", "name": "Alcohol identity"},
-        {"reaction_id": "S", "library": "synformer", "smarts": "[C:1][N:2]>>[C:1][N:2]", "name": "Amine identity"},
+        {
+            "reaction_id": "P",
+            "library": "paroutes",
+            "smarts": "[C:1][O:2]>>[C:1]=[O:2]",
+            "name": "Alcohol oxidation",
+            "token_aliases": {"dehydrogenation": ["oxidation"]},
+        },
+        {
+            "reaction_id": "O",
+            "library": "ord",
+            "smarts": "[C:1][O:2]>>[C:1][O:2]",
+            "name": "Alcohol identity",
+        },
+        {
+            "reaction_id": "S",
+            "library": "synformer",
+            "smarts": "[C:1][N:2]>>[C:1][N:2]",
+            "name": "Amine identity",
+        },
     ]
     database = tmp_path / "fixture.sqlite"
     for row in records:
@@ -197,10 +235,17 @@ def test_union_text_and_structural_search_covers_only_selected_libraries(tmp_pat
         assert sorted(r["reaction_id"] for r in hits) == ["ord:O", "paroutes:P"]
         hits = tools.search_reaction_templates("dehydrogenation", library=selection)["results"]
         assert [r["reaction_id"] for r in hits] == ["paroutes:P"]
-        hits = tools.search_reaction_templates(reactant_smiles=["CCO"], library=selection)["results"]
+        hits = tools.search_reaction_templates(reactant_smiles=["CCO"], library=selection)[
+            "results"
+        ]
         assert sorted(r["reaction_id"] for r in hits) == ["ord:O", "paroutes:P"]
-        both = tools.search_reaction_templates("oxidation", reactant_smiles=["CCO"], library=selection)
-        assert sorted(r["reaction_id"] for r in both["structural_results"]) == ["ord:O", "paroutes:P"]
+        both = tools.search_reaction_templates(
+            "oxidation", reactant_smiles=["CCO"], library=selection
+        )
+        assert sorted(r["reaction_id"] for r in both["structural_results"]) == [
+            "ord:O",
+            "paroutes:P",
+        ]
         assert [r["reaction_id"] for r in both["text_results"]] == ["paroutes:P"]
     with db.session(database) as conn:
         with pytest.raises(RuntimeError, match="'absent'.*available:"):
@@ -212,7 +257,11 @@ def test_cli_imports_catalog_and_selects_union(tmp_path):
     assert args.func(args)["records"] == 501
     args = build_parser().parse_args(["mcp", "serve", "--reaction-library", "synformer", "ord"])
     assert args.reaction_library == ["synformer", "ord"]
-    assert normalize_libraries(["ord,paroutes", "ord", " synformer "]) == ("ord", "paroutes", "synformer")
+    assert normalize_libraries(["ord,paroutes", "ord", " synformer "]) == (
+        "ord",
+        "paroutes",
+        "synformer",
+    )
     with pytest.raises(ValueError, match="Reaction libraries"):
         normalize_libraries([123])
     args = build_parser().parse_args(["ingest-reactions", "--library", "ord"])
@@ -227,7 +276,9 @@ def test_bundled_import_records_catalog_and_detects_stale_or_untracked_libraries
         assert records["ord"]["template_count"] == 203
         assert records["nvidia"]["template_count"] == 8
         db.require_reaction_library(conn, None)
-        conn.execute("UPDATE reaction_library_catalog SET catalog_sha256 = 'old' WHERE library = 'ord'")
+        conn.execute(
+            "UPDATE reaction_library_catalog SET catalog_sha256 = 'old' WHERE library = 'ord'"
+        )
         with pytest.raises(RuntimeError, match="'ord' is out of date"):
             db.require_reaction_library(conn, ["ord"])
         # Each source is pinned separately, so other selections stay usable.
@@ -241,7 +292,9 @@ def test_bundled_import_records_catalog_and_detects_stale_or_untracked_libraries
             "VALUES ('rxn-template:R000', 'rxn-template', '', '', '[C:1]>>[C:1]', '', '')"
         )
         db.require_reaction_library(conn, DEFAULT_REACTION_LIBRARIES)
-        with pytest.raises(RuntimeError, match="'rxn-template' has no import record.*remove-reactions"):
+        with pytest.raises(
+            RuntimeError, match="'rxn-template' has no import record.*remove-reactions"
+        ):
             db.require_reaction_library(conn, None)
         assert db.remove_reaction_libraries(conn, "rxn-template") == 1
         db.require_reaction_library(conn, None)
@@ -250,8 +303,12 @@ def test_bundled_import_records_catalog_and_detects_stale_or_untracked_libraries
 def test_staleness_is_checked_per_source_and_hints_fit_each_library(catalog_db):
     with db.session(catalog_db) as conn:
         db.require_reaction_library(conn, DEFAULT_REACTION_LIBRARIES)
-        conn.execute("UPDATE reaction_library_catalog SET catalog_sha256 = 'old' WHERE library = 'paroutes'")
-        with pytest.raises(RuntimeError, match="'paroutes' is out of date.*rebuild the prepared database"):
+        conn.execute(
+            "UPDATE reaction_library_catalog SET catalog_sha256 = 'old' WHERE library = 'paroutes'"
+        )
+        with pytest.raises(
+            RuntimeError, match="'paroutes' is out of date.*rebuild the prepared database"
+        ):
             db.require_reaction_library(conn, DEFAULT_REACTION_LIBRARIES)
         db.require_reaction_library(conn, ["synformer", "ord", "nvidia"])
         assert db.remove_reaction_libraries(conn, "nvidia") == 8
@@ -259,11 +316,17 @@ def test_staleness_is_checked_per_source_and_hints_fit_each_library(catalog_db):
         with pytest.raises(RuntimeError, match="'nvidia', 'mylib' has no templates") as missing:
             db.require_reaction_library(conn, ["nvidia", "mylib"])
         assert "import the bundled sources" in str(missing.value)
-        assert "--library mylib" in str(missing.value) and "--library nvidia" not in str(missing.value)
+        assert "--library mylib" in str(missing.value) and "--library nvidia" not in str(
+            missing.value
+        )
         # A bundled source this version no longer ships cannot be fixed by reimporting.
-        conn.execute("UPDATE reaction_library_catalog SET library = 'retired' WHERE library = 'ord'")
+        conn.execute(
+            "UPDATE reaction_library_catalog SET library = 'retired' WHERE library = 'ord'"
+        )
         conn.execute("UPDATE reaction_templates SET library = 'retired' WHERE library = 'ord'")
-        with pytest.raises(RuntimeError, match="'retired' was imported as a bundled source.*remove-reactions"):
+        with pytest.raises(
+            RuntimeError, match="'retired' was imported as a bundled source.*remove-reactions"
+        ):
             db.require_reaction_library(conn, ["retired"])
 
 
@@ -303,12 +366,20 @@ def test_library_selection_is_a_hard_boundary_for_template_execution(catalog_db,
     lookup = tools.get_reaction_template("nvidia:R000")
     assert not lookup["found"]
     assert outside in lookup["issues"][0]
-    forward = tools.simulate_reaction(reaction_id="nvidia:R000", reactants=["CN", "CC(=O)O"], product_smiles="CNC(C)=O")
+    forward = tools.simulate_reaction(
+        reaction_id="nvidia:R000", reactants=["CN", "CC(=O)O"], product_smiles="CNC(C)=O"
+    )
     assert not forward["valid"] and outside in forward["issues"][0]
     reverse = tools.simulate_reverse_reaction(reaction_id="nvidia:R000", product_smiles="CNC(C)=O")
     assert not reverse["valid"] and outside in reverse["issues"][0]
     submission = tools.submit_pathway(
-        steps=[{"reaction_id": "nvidia:R000", "reactants": ["CN", "CC(=O)O"], "product_smiles": "CNC(C)=O"}],
+        steps=[
+            {
+                "reaction_id": "nvidia:R000",
+                "reactants": ["CN", "CC(=O)O"],
+                "product_smiles": "CNC(C)=O",
+            }
+        ],
         target_smiles="CNC(C)=O",
     )
     assert any(outside in issue for issue in submission["issues"])
@@ -319,7 +390,9 @@ def test_library_selection_is_a_hard_boundary_for_template_execution(catalog_db,
     # Templates inside the selection still run.
     assert tools.get_reaction_template("synformer:R008")["found"]
     assert tools.simulate_reaction(
-        reaction_id="synformer:R008", reactants=["CN", "CC(=O)O"], product_smiles="CNC(C)=O",
+        reaction_id="synformer:R008",
+        reactants=["CN", "CC(=O)O"],
+        product_smiles="CNC(C)=O",
     )["product_matched"]
     unknown = SynthesisTools(catalog_db).simulate_reaction(reaction_id="nope:R1", reactants=["CN"])
     assert unknown["issues"] == ["Unknown reaction template: nope:R1"]
@@ -331,7 +404,9 @@ def test_ord_templates_trace_to_uspto_grants_and_nvidia_templates_are_separate()
     assert len(ord_members) == 203
     for record in ord_members:
         sources = record["metadata"]["provenance"]
-        assert [p["source_id"] for p in sources] == ["uspto-grants-lowe-2017"], record["reaction_id"]
+        assert [p["source_id"] for p in sources] == ["uspto-grants-lowe-2017"], record[
+            "reaction_id"
+        ]
         assert re.fullmatch(r"US\w+:\d+", sources[0]["source_record_id"]), record["reaction_id"]
     nvidia = [r for r in records if r["library"] == "nvidia"]
     assert [r["reaction_id"] for r in nvidia] == [f"nvidia:R{i:03d}" for i in range(8)]
@@ -349,7 +424,11 @@ def test_ord_templates_trace_to_uspto_grants_and_nvidia_templates_are_separate()
 def test_custom_record_fields_cannot_pose_as_curated_annotations(tmp_path):
     source = tmp_path / "custom.jsonl"
     rows = [
-        {"reaction_id": "X1", "smarts": "[C:1][OH]>>[C:1]Cl", "annotation": {"family": "bogus", "search_terms": ["fake"]}},
+        {
+            "reaction_id": "X1",
+            "smarts": "[C:1][OH]>>[C:1]Cl",
+            "annotation": {"family": "bogus", "search_terms": ["fake"]},
+        },
         {"reaction_id": "X2", "smarts": "[C:1][NH2]>>[C:1]Cl", "metadata": "free-text note"},
     ]
     source.write_text("".join(json.dumps(row) + "\n" for row in rows))

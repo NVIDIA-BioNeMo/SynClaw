@@ -36,16 +36,21 @@ def test_stopping_uses_the_same_identity_as_scoring(floor, target, product, iden
     submission = {
         "accepted": True,
         **score_pathway_against_target(
-            [product], target_smiles=target, target_validation=chem.validate_smiles(target),
-            preferred_smiles=None, accepted=True,
+            [product],
+            target_smiles=target,
+            target_validation=chem.validate_smiles(target),
+            preferred_smiles=None,
+            accepted=True,
         ),
     }
     assert submission["identical_to_target"] is identical
     decision = handle_tool_result(
         RolloutPolicyConfig(**({} if floor is None else {"stop_condition": floor})),
         RolloutPolicyState(),
-        name="submit_pathway", arguments={"steps": [], "building_block": "BB:1"},
-        result=submission, target_smiles=target,
+        name="submit_pathway",
+        arguments={"steps": [], "building_block": "BB:1"},
+        result=submission,
+        target_smiles=target,
     )
     expected_stop = identical or (floor == 1.0 and submission["similarity_to_target"] >= 1.0)
     assert (decision.terminal_submission is not None) is expected_stop
@@ -55,9 +60,12 @@ def test_stopping_uses_the_same_identity_as_scoring(floor, target, product, iden
             assert "verify an exact synthesis route before submitting again." in decision.repair
         else:
             numeric_decision = handle_tool_result(
-                RolloutPolicyConfig(stop_condition=1.0), RolloutPolicyState(),
-                name="submit_pathway", arguments={"steps": [], "building_block": "BB:1"},
-                result=submission, target_smiles=target,
+                RolloutPolicyConfig(stop_condition=1.0),
+                RolloutPolicyState(),
+                name="submit_pathway",
+                arguments={"steps": [], "building_block": "BB:1"},
+                result=submission,
+                target_smiles=target,
             )
             assert decision.repair == numeric_decision.repair
             assert "A better reconstruction is guaranteed to be possible" in decision.repair
@@ -65,10 +73,15 @@ def test_stopping_uses_the_same_identity_as_scoring(floor, target, product, iden
 
 def test_unverified_identity_never_meets_exact_floor(inchi_unavailable):
     decision = handle_tool_result(
-        RolloutPolicyConfig(stop_condition="exact"), RolloutPolicyState(),
-        name="submit_pathway", arguments={}, target_smiles="CCO",
+        RolloutPolicyConfig(stop_condition="exact"),
+        RolloutPolicyState(),
+        name="submit_pathway",
+        arguments={},
+        target_smiles="CCO",
         result={
-            "accepted": True, "final_smiles": "OCC", "similarity_to_target": 1.0,
+            "accepted": True,
+            "final_smiles": "OCC",
+            "similarity_to_target": 1.0,
             "identical_to_target": True,
         },
     )
@@ -77,11 +90,16 @@ def test_unverified_identity_never_meets_exact_floor(inchi_unavailable):
 
 def test_cached_identity_does_not_override_the_validated_product():
     decision = handle_tool_result(
-        RolloutPolicyConfig(stop_condition="exact"), RolloutPolicyState(),
-        name="submit_pathway", arguments={}, target_smiles="CCCCCCC",
+        RolloutPolicyConfig(stop_condition="exact"),
+        RolloutPolicyState(),
+        name="submit_pathway",
+        arguments={},
+        target_smiles="CCCCCCC",
         result={
-            "accepted": True, "actual_final_smiles": "CCCCCCCC",
-            "final_smiles": "CCCCCCC", "similarity_to_target": 1.0,
+            "accepted": True,
+            "actual_final_smiles": "CCCCCCCC",
+            "final_smiles": "CCCCCCC",
+            "similarity_to_target": 1.0,
             "identical_to_target": True,
         },
     )
@@ -90,11 +108,13 @@ def test_cached_identity_does_not_override_the_validated_product():
 
 def test_exact_floor_keeps_persistence_at_perfect_fingerprint_similarity():
     state = RolloutPolicyState(
-        total_tool_calls=2, best_accepted_similarity=1.0,
+        total_tool_calls=2,
+        best_accepted_similarity=1.0,
         best_accepted_submission={"accepted": True, "final_smiles": "CCCCCCCC"},
     )
     decision = handle_no_tool_response(
-        RolloutPolicyConfig(stop_condition="exact"), state,
+        RolloutPolicyConfig(stop_condition="exact"),
+        state,
         content="This is close enough.",
     )
     assert NON_TOOL_PERSISTENCE_GUARANTEE_SENTENCE in decision.reminder
@@ -113,8 +133,11 @@ def test_exact_floor_still_returns_best_valid_analogue_at_tool_limit():
     submission = {"accepted": True, "final_smiles": "CCCCCCCC", "similarity_to_target": 1.0}
     decision = handle_tool_result(
         RolloutPolicyConfig(stop_condition="exact", max_tool_calls=1),
-        RolloutPolicyState(), name="submit_pathway", arguments={},
-        result=submission, target_smiles="CCCCCCC",
+        RolloutPolicyState(),
+        name="submit_pathway",
+        arguments={},
+        result=submission,
+        target_smiles="CCCCCCC",
     )
     assert decision.terminal_due_to_tool_limit
     assert decision.terminal_submission == submission
@@ -122,13 +145,23 @@ def test_exact_floor_still_returns_best_valid_analogue_at_tool_limit():
 
 @pytest.mark.parametrize(
     ("value", "expected"),
-    [("exact", "exact"), (" EXACT ", "exact"), ("model", "model"), (" Model ", "model"), (0, 0.0), ("0.8", 0.8), (1, 1.0)],
+    [
+        ("exact", "exact"),
+        (" EXACT ", "exact"),
+        ("model", "model"),
+        (" Model ", "model"),
+        (0, 0.0),
+        ("0.8", 0.8),
+        (1, 1.0),
+    ],
 )
 def test_parse_stop_condition_accepts_numbers_exact_and_model(value, expected):
     assert parse_stop_condition(value) == expected
 
 
-@pytest.mark.parametrize("value", [float("nan"), float("inf"), -0.1, 1.1, "excat", None, [0.5], True])
+@pytest.mark.parametrize(
+    "value", [float("nan"), float("inf"), -0.1, 1.1, "excat", None, [0.5], True]
+)
 def test_parse_stop_condition_rejects_out_of_range_and_unknown_values(value):
     with pytest.raises(ValueError, match="between 0 and 1"):
         parse_stop_condition(value)

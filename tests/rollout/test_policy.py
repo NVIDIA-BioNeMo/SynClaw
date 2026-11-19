@@ -107,9 +107,7 @@ def test_no_tool_response_uses_shared_persistence_and_force_submit_policy(tool_c
     assert state.forced_submit_requested is True
 
     search_only_state = RolloutPolicyState(total_tool_calls=tool_calls)
-    search_only_first = handle_no_tool_response(
-        config, search_only_state, content="still thinking"
-    )
+    search_only_first = handle_no_tool_response(config, search_only_state, content="still thinking")
     search_only_second = handle_no_tool_response(
         config, search_only_state, content="still thinking"
     )
@@ -142,9 +140,7 @@ def test_prepare_tool_call_normalizes_payloads_independent_of_event_index() -> N
 
     assert endpoint.name == later.name == "submit_pathway"
     assert endpoint.dispatch_arguments == later.dispatch_arguments
-    assert endpoint.dispatch_arguments == {
-        "steps": [{"reaction_id": "R1", "reactants": ["CC"]}]
-    }
+    assert endpoint.dispatch_arguments == {"steps": [{"reaction_id": "R1", "reactants": ["CC"]}]}
     assert endpoint.event_payload["ignored_target_smiles"] == "hidden"
     assert endpoint.event_payload["ignored_final_smiles"] == "ignored"
 
@@ -343,13 +339,23 @@ def test_task_budgets_override_the_runner_and_keep_its_unset_values() -> None:
     assert task_budget_config({}, runner) == runner
     assert task_budget_config({"max_turns": None}, runner) == runner
     resolved = task_budget_config(
-        {"max_turns": 40, "max_tool_calls": 75, "max_model_len": 131072, "max_tokens": 16384,
-         "budget_feedback": False},
+        {
+            "max_turns": 40,
+            "max_tool_calls": 75,
+            "max_model_len": 131072,
+            "max_tokens": 16384,
+            "budget_feedback": False,
+        },
         runner,
     )
     assert resolved.budget_fields == {
-        "max_turns": 40, "max_tool_calls": 75, "max_model_len": 131072, "max_tokens": 16384,
-        "context_limit_stated": True, "context_safety_margin_fraction": 1 / 32, "budget_feedback": False,
+        "max_turns": 40,
+        "max_tool_calls": 75,
+        "max_model_len": 131072,
+        "max_tokens": 16384,
+        "context_limit_stated": True,
+        "context_safety_margin_fraction": 1 / 32,
+        "budget_feedback": False,
         "stop_condition": "exact",
     }
     # Turn, tool-call and output budgets may exceed the runner's; nothing caps them at the server.
@@ -368,15 +374,24 @@ def test_task_context_may_lower_but_not_raise_the_runner_limit() -> None:
     assert task_budget_config({"max_model_len": 65536}, runner).max_model_len == 65536
 
 
-@pytest.mark.parametrize(("task", "runner_context", "match"), [
-    ({"max_model_len": 262144}, 131072, "exceeds the runner's context limit 131072"),
-    ({"max_model_len": 512}, 131072, "leaves no room for output"),  # Nothing left after the margin.
-    ({"budget_feedback": "false"}, 131072, "must be true or false"),
-    # Unlimited turns or output need a context limit to end or clip the rollout.
-    ({"max_tokens": "inf"}, None, "needs a known context limit"),
-    ({"max_turns": "inf"}, None, "Unlimited turns need a known context limit"),
-])
-def test_invalid_task_budgets_are_refused(task: dict, runner_context: int | None, match: str) -> None:
+@pytest.mark.parametrize(
+    ("task", "runner_context", "match"),
+    [
+        ({"max_model_len": 262144}, 131072, "exceeds the runner's context limit 131072"),
+        (
+            {"max_model_len": 512},
+            131072,
+            "leaves no room for output",
+        ),  # Nothing left after the margin.
+        ({"budget_feedback": "false"}, 131072, "must be true or false"),
+        # Unlimited turns or output need a context limit to end or clip the rollout.
+        ({"max_tokens": "inf"}, None, "needs a known context limit"),
+        ({"max_turns": "inf"}, None, "Unlimited turns need a known context limit"),
+    ],
+)
+def test_invalid_task_budgets_are_refused(
+    task: dict, runner_context: int | None, match: str
+) -> None:
     with pytest.raises(ValueError, match=match):
         task_budget_config(task, RolloutPolicyConfig(max_model_len=runner_context))
 
@@ -390,9 +405,13 @@ def test_turn_warning_is_progress_feedback_but_final_turn_notices_are_not() -> N
     assert final and "final allowed turn" in final[0]
 
 
-def _accepted_analogue(state: RolloutPolicyState, config: RolloutPolicyConfig, similarity: float = 0.6):
+def _accepted_analogue(
+    state: RolloutPolicyState, config: RolloutPolicyConfig, similarity: float = 0.6
+):
     return handle_tool_result(
-        config, state, name="submit_pathway",
+        config,
+        state,
+        name="submit_pathway",
         arguments={"steps": [], "building_block": "BB:1"},
         result={**_accepted_submission(similarity), "actual_final_smiles": "CCN"},
         target_smiles="CCO",
@@ -416,23 +435,33 @@ def test_when_the_model_stops_an_exact_match_leaves_the_rollout_open_for_its_ans
     config = _config(stop_condition="model")
     state = RolloutPolicyState()
     decision = handle_tool_result(
-        config, state, name="submit_pathway", arguments={"steps": [], "building_block": "BB:1"},
-        result={**_accepted_submission(1.0), "actual_final_smiles": "CCO"}, target_smiles="CCO",
+        config,
+        state,
+        name="submit_pathway",
+        arguments={"steps": [], "building_block": "BB:1"},
+        result={**_accepted_submission(1.0), "actual_final_smiles": "CCO"},
+        target_smiles="CCO",
     )
 
     assert decision.terminal_submission is None and decision.repair is None
     assert state.best_accepted_identical and state.low_similarity_submissions == 0
-    answer = handle_no_tool_response(config, state, content="The route above makes the exact target.")
+    answer = handle_no_tool_response(
+        config, state, content="The route above makes the exact target."
+    )
     assert answer.finish_reason == "model_stop_best_accepted_submission"
 
 
 @pytest.mark.parametrize("tool_calls", [3, 0])  # Including a first reply with no tool call.
-def test_when_the_model_stops_it_is_asked_once_for_a_submission_when_none_was_accepted(tool_calls: int) -> None:
+def test_when_the_model_stops_it_is_asked_once_for_a_submission_when_none_was_accepted(
+    tool_calls: int,
+) -> None:
     config = _config(stop_condition="model")
     state = RolloutPolicyState(total_tool_calls=tool_calls)
 
     first = handle_no_tool_response(config, state, content="I cannot find a route.")
-    assert first.reminder.startswith("Call submit_pathway now") and "guaranteed" not in first.reminder
+    assert (
+        first.reminder.startswith("Call submit_pathway now") and "guaranteed" not in first.reminder
+    )
     assert state.forced_submit_requested
     second = handle_no_tool_response(config, state, content="Still no route.")
     assert second.finish_reason == "model_stop_no_accepted_submission"
@@ -444,8 +473,12 @@ def test_when_the_model_stops_a_rejected_submission_does_not_earn_a_second_reque
 
     assert handle_no_tool_response(config, state, content="I cannot find a route.").reminder
     handle_tool_result(
-        config, state, name="submit_pathway", arguments={"steps": []},
-        result={"accepted": False, "error_message": "Ungrounded starting reactant."}, target_smiles="CCO",
+        config,
+        state,
+        name="submit_pathway",
+        arguments={"steps": []},
+        result={"accepted": False, "error_message": "Ungrounded starting reactant."},
+        target_smiles="CCO",
     )
     decision = handle_no_tool_response(config, state, content="Still no route.")
 
@@ -470,18 +503,30 @@ def test_inf_budgets_are_unlimited_and_the_context_stays_enforced_unstated() -> 
 def test_when_the_model_stops_failed_calls_get_only_their_own_errors(stop_condition: str) -> None:
     config = _config(stop_condition=stop_condition)
     rejected = handle_tool_result(
-        config, RolloutPolicyState(), name="submit_pathway", arguments={"steps": []},
-        result={"accepted": False, "error_message": "Ungrounded starting reactant.", "issues": ["x"]},
+        config,
+        RolloutPolicyState(),
+        name="submit_pathway",
+        arguments={"steps": []},
+        result={
+            "accepted": False,
+            "error_message": "Ungrounded starting reactant.",
+            "issues": ["x"],
+        },
         target_smiles="CCO",
     )
     failed = handle_tool_result(
-        config, RolloutPolicyState(), name="search_building_blocks", arguments={},
+        config,
+        RolloutPolicyState(),
+        name="search_building_blocks",
+        arguments={},
         result={"error": "invalid arguments", "retryable": True, "issues": ["query is missing"]},
         target_smiles="CCO",
     )
 
     coached = stop_condition == "exact"
-    assert (rejected.repair is not None and "Repair it using the tools" in rejected.repair) == coached
+    assert (
+        rejected.repair is not None and "Repair it using the tools" in rejected.repair
+    ) == coached
     assert (failed.repair is not None and "Correct the arguments" in failed.repair) == coached
 
 
@@ -493,13 +538,16 @@ def test_out_of_range_margins_are_refused() -> None:
         RolloutPolicyConfig(max_model_len=512)
 
 
-@pytest.mark.parametrize(("context", "fraction", "margin"), [
-    (262144, 1 / 32, 8192),  # The default context keeps the old fixed margin.
-    (131072, 1 / 32, 4096),
-    (8192, 1 / 32, 512),  # Floored, rather than 256.
-    (262144, 0.0, 0),
-    (None, 1 / 32, 0),  # No context limit, so nothing to clip against.
-])
+@pytest.mark.parametrize(
+    ("context", "fraction", "margin"),
+    [
+        (262144, 1 / 32, 8192),  # The default context keeps the old fixed margin.
+        (131072, 1 / 32, 4096),
+        (8192, 1 / 32, 512),  # Floored, rather than 256.
+        (262144, 0.0, 0),
+        (None, 1 / 32, 0),  # No context limit, so nothing to clip against.
+    ],
+)
 def test_the_safety_margin_scales_with_the_context_limit(context, fraction, margin) -> None:
     config = RolloutPolicyConfig(max_model_len=context, context_safety_margin_fraction=fraction)
     assert config.context_safety_margin_tokens == margin

@@ -128,7 +128,10 @@ def test_an_explicit_env_name_wins_over_the_table(monkeypatch, no_keys) -> None:
 def test_missing_key_message_names_the_provider_variables() -> None:
     assert "OPENROUTER_API_KEY" in providers.missing_api_key_message("openrouter")
     assert "--api-key-env" in providers.missing_api_key_message("openrouter")
-    assert providers.missing_api_key_message("custom", "MY_KEY") == "API key variable MY_KEY is not set"
+    assert (
+        providers.missing_api_key_message("custom", "MY_KEY")
+        == "API key variable MY_KEY is not set"
+    )
 
 
 def test_only_a_named_key_variable_makes_the_key_required() -> None:
@@ -195,8 +198,14 @@ def test_preset_keys_follow_only_the_preset_endpoint(
 
     monkeypatch.setenv("NVIDIA_API_KEY", "nvidia")
     args = argparse.Namespace(
-        provider="nvbuild", model="example-model", api_mode=None, base_url=None,
-        responses_url=None, messages_url=None, responses_state_mode=None, reasoning_effort=None,
+        provider="nvbuild",
+        model="example-model",
+        api_mode=None,
+        base_url=None,
+        responses_url=None,
+        messages_url=None,
+        responses_state_mode=None,
+        reasoning_effort=None,
     )
     for name, value in argv_overrides.items():
         setattr(args, name, value)
@@ -209,7 +218,10 @@ def test_preset_keys_follow_only_the_preset_endpoint(
     # Elsewhere the key is optional, and --api-key-env still supplies one.
     assert providers.api_key_required("nvbuild", use_preset_keys=use_preset_keys) is expected
     monkeypatch.setenv("OTHER_KEY", "other")
-    assert providers.resolve_api_key("nvbuild", "OTHER_KEY", use_preset_keys=use_preset_keys) == "other"
+    assert (
+        providers.resolve_api_key("nvbuild", "OTHER_KEY", use_preset_keys=use_preset_keys)
+        == "other"
+    )
 
 
 class _FakeResponse:
@@ -236,10 +248,20 @@ def _sent_headers(api_key, auth_header):
 
     with patch("urllib.request.urlopen", side_effect=fake_urlopen):
         anthropic_completion(
-            messages_url="https://gateway.example.test/v1/messages", api_key=api_key,
-            model="m", system="s", messages=[{"role": "user", "content": "q"}], max_tokens=16,
-            temperature=None, top_p=None, reasoning_effort=None, retries=0, request_timeout=5.0,
-            tool_choice=None, tools=[], auth_header=auth_header,
+            messages_url="https://gateway.example.test/v1/messages",
+            api_key=api_key,
+            model="m",
+            system="s",
+            messages=[{"role": "user", "content": "q"}],
+            max_tokens=16,
+            temperature=None,
+            top_p=None,
+            reasoning_effort=None,
+            retries=0,
+            request_timeout=5.0,
+            tool_choice=None,
+            tools=[],
+            auth_header=auth_header,
         )
     return captured
 

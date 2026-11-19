@@ -35,7 +35,9 @@ def formaldehyde_watchlist(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> N
     ("smiles", "threshold", "refused"),
     [(FLAGGED, 0.8, True), ("CCN", 0.8, False), (FLAGGED, 1.0, False)],
 )
-def test_watchlist_similarity_must_exceed_threshold(monkeypatch, smiles, threshold, refused) -> None:
+def test_watchlist_similarity_must_exceed_threshold(
+    monkeypatch, smiles, threshold, refused
+) -> None:
     monkeypatch.setenv(toxicity.ENV_THRESHOLD, str(threshold))
     screen = toxicity.ToxicityScreen()
 
@@ -59,15 +61,18 @@ def test_screen_is_opt_in_and_requires_a_watchlist_only_when_enabled(monkeypatch
     with pytest.raises(toxicity.WatchlistUnavailable, match="download-public-data"):
         toxicity.ToxicityScreen()
     # An explicit mode overrides the environment and never loads the watchlist when off.
-    assert toxicity.ToxicityScreen(toxicity.ToxicityConfig.resolve(mode="off")).check([("target", FLAGGED)]) is None
+    assert (
+        toxicity.ToxicityScreen(toxicity.ToxicityConfig.resolve(mode="off")).check(
+            [("target", FLAGGED)]
+        )
+        is None
+    )
 
 
 def _tools(tmp_path: Path) -> SynthesisTools:
     (tmp_path / "bbs.txt").write_text("SMILES\nCO\nCCN\nCCCC\n", encoding="utf-8")
     (tmp_path / "templates.txt").write_text(
-        "[C:1][O:2]>>[C:1]=[O:2]\n"
-        "[C:1]=[O:2]>>[C:1][O:2]\n"
-        "[C:1][C:2]>>[C:1]=[C:2]\n",
+        "[C:1][O:2]>>[C:1]=[O:2]\n[C:1]=[O:2]>>[C:1][O:2]\n[C:1][C:2]>>[C:1]=[C:2]\n",
         encoding="utf-8",
     )
     db_path = tmp_path / "test.sqlite"
@@ -77,7 +82,9 @@ def _tools(tmp_path: Path) -> SynthesisTools:
 
 
 @pytest.mark.parametrize("intermediate", [False, True])
-def test_route_through_a_flagged_product_is_rejected_with_a_reason(tmp_path: Path, intermediate: bool) -> None:
+def test_route_through_a_flagged_product_is_rejected_with_a_reason(
+    tmp_path: Path, intermediate: bool
+) -> None:
     steps = [{"reaction_id": "demo:R000", "reactants": ["BB:1"], "product_smiles": FLAGGED}]
     if intermediate:
         steps.append({"reaction_id": "demo:R001", "reactants": ["INT:1"], "product_smiles": "CO"})
@@ -98,9 +105,15 @@ def test_unselected_generated_route_products_are_screened(tmp_path: Path, monkey
     monkeypatch.setenv(toxicity.ENV_WATCHLIST, str(watchlist))
     tools = _tools(tmp_path)
 
-    result = tools.submit_pathway(steps=[{
-        "reaction_id": "demo:R002", "reactants": ["BB:3"], "product_smiles": "C=CCC",
-    }])
+    result = tools.submit_pathway(
+        steps=[
+            {
+                "reaction_id": "demo:R002",
+                "reactants": ["BB:3"],
+                "product_smiles": "C=CCC",
+            }
+        ]
+    )
 
     assert result["reaction_validation"] == "valid"
     assert result["accepted"] is False and result["refused"] is True
@@ -109,7 +122,9 @@ def test_unselected_generated_route_products_are_screened(tmp_path: Path, monkey
 
 
 @pytest.mark.parametrize(("building_block", "accepted"), [("BB:1", True), ("BB:2", False)])
-def test_direct_purchase_checks_the_purchased_product(tmp_path: Path, monkeypatch, building_block, accepted) -> None:
+def test_direct_purchase_checks_the_purchased_product(
+    tmp_path: Path, monkeypatch, building_block, accepted
+) -> None:
     watchlist = tmp_path / "purchase_watchlist.txt"
     watchlist.write_text("CCN\n")
     monkeypatch.setenv(toxicity.ENV_WATCHLIST, str(watchlist))
@@ -126,28 +141,58 @@ def test_direct_purchase_checks_the_purchased_product(tmp_path: Path, monkeypatc
     [("on", FLAGGED, 0), ("on", "CCN", 1), ("off", FLAGGED, 1)],
 )
 def test_hosted_target_screening_is_opt_in_and_preserves_trace_results(
-    tmp_path: Path, monkeypatch, mode: str, target: str, expected_requests: int,
+    tmp_path: Path,
+    monkeypatch,
+    mode: str,
+    target: str,
+    expected_requests: int,
 ) -> None:
     taskset = tmp_path / "tasks.jsonl"
-    taskset.write_text(json.dumps({
-        "task_id": "fixture", "target_smiles": target, "system_prompt": "Plan syntheses.",
-        "question": "Make the target.", "prompt_fingerprint": PROMPT_FINGERPRINT,
-    }) + "\n")
+    taskset.write_text(
+        json.dumps(
+            {
+                "task_id": "fixture",
+                "target_smiles": target,
+                "system_prompt": "Plan syntheses.",
+                "question": "Make the target.",
+                "prompt_fingerprint": PROMPT_FINGERPRINT,
+            }
+        )
+        + "\n"
+    )
     parser = argparse.ArgumentParser()
     model_runner.add_arguments(parser)
-    args = parser.parse_args([
-        "--model", "fixture", "--api-mode", "chat", "--taskset", str(taskset),
-        "--db", str(tmp_path / "test.sqlite"), "--trace", str(tmp_path / "trace.jsonl"),
-        "--summary-output", str(tmp_path / "summary.csv"), "--max-turns", "1",
-        "--toxicity-screen", mode,
-    ])
+    args = parser.parse_args(
+        [
+            "--model",
+            "fixture",
+            "--api-mode",
+            "chat",
+            "--taskset",
+            str(taskset),
+            "--db",
+            str(tmp_path / "test.sqlite"),
+            "--trace",
+            str(tmp_path / "trace.jsonl"),
+            "--summary-output",
+            str(tmp_path / "summary.csv"),
+            "--max-turns",
+            "1",
+            "--toxicity-screen",
+            mode,
+        ]
+    )
     monkeypatch.setattr(model_runner, "resolve_api_key", lambda *args, **kwargs: "fixture-key")
     monkeypatch.setattr(prompts, "validate_model_run_database", lambda *args, **kwargs: None)
     requests = []
 
     def complete(**kwargs):
         requests.append(kwargs)
-        return {"choices": [{"message": {"role": "assistant", "content": "Done."}, "finish_reason": "stop"}]}
+        return {
+            "choices": [
+                {"message": {"role": "assistant", "content": "Done."}, "finish_reason": "stop"}
+            ]
+        }
 
     monkeypatch.setattr(model_runner, "chat_completion", complete)
     summary = model_runner.run_model_from_args(args)
@@ -158,7 +203,9 @@ def test_hosted_target_screening_is_opt_in_and_preserves_trace_results(
     assert summary["toxicity_refused_count"] == (1 if expected_requests == 0 else 0)
     events = [json.loads(line) for line in Path(args.trace).read_text().splitlines()]
     if mode == "on":
-        assert events[0]["event_type"] == ("target_refused" if expected_requests == 0 else "target_screened")
+        assert events[0]["event_type"] == (
+            "target_refused" if expected_requests == 0 else "target_screened"
+        )
     with Path(args.summary_output).open() as handle:
         row = next(csv.DictReader(handle))
     assert row["target_smiles"] == target
@@ -175,13 +222,24 @@ def test_replay_keeps_a_refusal_the_run_recorded(tmp_path: Path) -> None:
     live = tools.submit_pathway(steps=steps, target_smiles="CC")
     assert live["refused"] is True
     call = prepare_tool_call(
-        raw_name="submit_pathway", raw_arguments={"steps": steps}, raw_tool_call={}, event_index=0,
+        raw_name="submit_pathway",
+        raw_arguments={"steps": steps},
+        raw_tool_call={},
+        event_index=0,
     )
     events = [
-        {"event_type": "tool_call", "tool_name": "submit_pathway", "target_smiles": "CC",
-         "payload": call.event_payload},
-        {"event_type": "tool_result", "tool_name": "submit_pathway", "target_smiles": "CC",
-         "payload": {"result": live, "outcome": "ok"}},
+        {
+            "event_type": "tool_call",
+            "tool_name": "submit_pathway",
+            "target_smiles": "CC",
+            "payload": call.event_payload,
+        },
+        {
+            "event_type": "tool_result",
+            "tool_name": "submit_pathway",
+            "target_smiles": "CC",
+            "payload": {"result": live, "outcome": "ok"},
+        },
     ]
 
     replayed = replay_selected_submission(events, tools.db_path, "CC")
@@ -189,23 +247,50 @@ def test_replay_keeps_a_refusal_the_run_recorded(tmp_path: Path) -> None:
     assert replayed is not None and replayed["accepted"] is False
 
 
-def test_enabled_screen_keeps_the_initial_messages_in_the_trace(tmp_path: Path, monkeypatch) -> None:
+def test_enabled_screen_keeps_the_initial_messages_in_the_trace(
+    tmp_path: Path, monkeypatch
+) -> None:
     taskset = tmp_path / "tasks.jsonl"
-    taskset.write_text(json.dumps({
-        "task_id": "fixture", "target_smiles": "CCN", "system_prompt": "Plan syntheses.",
-        "question": "Make the target.", "prompt_fingerprint": PROMPT_FINGERPRINT,
-    }) + "\n")
+    taskset.write_text(
+        json.dumps(
+            {
+                "task_id": "fixture",
+                "target_smiles": "CCN",
+                "system_prompt": "Plan syntheses.",
+                "question": "Make the target.",
+                "prompt_fingerprint": PROMPT_FINGERPRINT,
+            }
+        )
+        + "\n"
+    )
     parser = argparse.ArgumentParser()
     model_runner.add_arguments(parser)
-    args = parser.parse_args([
-        "--model", "fixture", "--api-mode", "chat", "--taskset", str(taskset),
-        "--db", str(tmp_path / "test.sqlite"), "--trace", str(tmp_path / "trace.jsonl"), "--max-turns", "1",
-    ])
+    args = parser.parse_args(
+        [
+            "--model",
+            "fixture",
+            "--api-mode",
+            "chat",
+            "--taskset",
+            str(taskset),
+            "--db",
+            str(tmp_path / "test.sqlite"),
+            "--trace",
+            str(tmp_path / "trace.jsonl"),
+            "--max-turns",
+            "1",
+        ]
+    )
     monkeypatch.setattr(model_runner, "resolve_api_key", lambda *args, **kwargs: "fixture-key")
     monkeypatch.setattr(prompts, "validate_model_run_database", lambda *args, **kwargs: None)
     monkeypatch.setattr(
-        model_runner, "chat_completion",
-        lambda **kwargs: {"choices": [{"message": {"role": "assistant", "content": "Done."}, "finish_reason": "stop"}]},
+        model_runner,
+        "chat_completion",
+        lambda **kwargs: {
+            "choices": [
+                {"message": {"role": "assistant", "content": "Done."}, "finish_reason": "stop"}
+            ]
+        },
     )
     model_runner.run_model_from_args(args)
 
@@ -234,7 +319,10 @@ def test_refused_direct_purchase_carries_no_similarity(tmp_path: Path, monkeypat
     result = _tools(tmp_path).submit_pathway(building_block="BB:2", target_smiles="CC")
 
     assert result["accepted"] is False and result["refused"] is True
-    assert result["similarity_to_target"] is None and result["constitutional_similarity_to_target"] is None
+    assert (
+        result["similarity_to_target"] is None
+        and result["constitutional_similarity_to_target"] is None
+    )
 
 
 def test_checkpoint_from_a_different_screening_mode_is_not_resumed() -> None:
@@ -243,24 +331,38 @@ def test_checkpoint_from_a_different_screening_mode_is_not_resumed() -> None:
     parser = argparse.ArgumentParser()
     model_runner.add_arguments(parser)
     args = parser.parse_args(["--model", "fixture", "--toxicity-screen", "on"])
-    checkpoint = {"model": "fixture", "provider": args.provider, "api_mode": args.api_mode,
-                  "task_id": "t", "target_smiles": "CC"}
+    checkpoint = {
+        "model": "fixture",
+        "provider": args.provider,
+        "api_mode": args.api_mode,
+        "task_id": "t",
+        "target_smiles": "CC",
+    }
     task = {"task_id": "t", "target_smiles": "CC"}
     config = policy.RolloutPolicyConfig()
 
     assert not model_runner.checkpoint_matches_run(checkpoint, args, task, config)
-    assert not model_runner.checkpoint_matches_run({**checkpoint, "toxicity_screen": "off"}, args, task, config)
+    assert not model_runner.checkpoint_matches_run(
+        {**checkpoint, "toxicity_screen": "off"}, args, task, config
+    )
     screened = {
-        **checkpoint, "toxicity_screen": "on",
+        **checkpoint,
+        "toxicity_screen": "on",
         "toxicity_watchlist": str(toxicity.ToxicityConfig.resolve().watchlist.resolve()),
         "toxicity_threshold": toxicity.DEFAULT_THRESHOLD,
     }
     assert model_runner.checkpoint_matches_run(screened, args, task, config)
-    assert not model_runner.checkpoint_matches_run({**screened, "toxicity_threshold": 0.5}, args, task, config)
-    assert not model_runner.checkpoint_matches_run({**screened, "toxicity_watchlist": "/elsewhere.txt"}, args, task, config)
+    assert not model_runner.checkpoint_matches_run(
+        {**screened, "toxicity_threshold": 0.5}, args, task, config
+    )
+    assert not model_runner.checkpoint_matches_run(
+        {**screened, "toxicity_watchlist": "/elsewhere.txt"}, args, task, config
+    )
 
 
-@pytest.mark.parametrize(("name", "value"), [(toxicity.ENV_THRESHOLD, "0,8"), (toxicity.ENV_THRESHOLD, "2")])
+@pytest.mark.parametrize(
+    ("name", "value"), [(toxicity.ENV_THRESHOLD, "0,8"), (toxicity.ENV_THRESHOLD, "2")]
+)
 def test_bad_screen_settings_exit_with_a_clean_error(
     tmp_path: Path, monkeypatch, capsys, name: str, value: str
 ) -> None:
@@ -268,7 +370,9 @@ def test_bad_screen_settings_exit_with_a_clean_error(
 
     monkeypatch.setenv(name, value)
     with pytest.raises(SystemExit) as exit_info:
-        cli.main(["tool", "submit-pathway", "--steps-json", "[]", "--db", str(tmp_path / "test.sqlite")])
+        cli.main(
+            ["tool", "submit-pathway", "--steps-json", "[]", "--db", str(tmp_path / "test.sqlite")]
+        )
 
     assert exit_info.value.code == 1 and "error:" in capsys.readouterr().err
 

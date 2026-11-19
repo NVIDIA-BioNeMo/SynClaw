@@ -104,10 +104,15 @@ def _call_event(arguments, target):
     """A submit_pathway call event as the rollout loop records it."""
 
     call = policy.prepare_tool_call(
-        raw_name="submit_pathway", raw_arguments=json.dumps(arguments), raw_tool_call={}, event_index=0,
+        raw_name="submit_pathway",
+        raw_arguments=json.dumps(arguments),
+        raw_tool_call={},
+        event_index=0,
     )
     return {
-        "event_type": "tool_call", "tool_name": "submit_pathway", "target_smiles": target,
+        "event_type": "tool_call",
+        "tool_name": "submit_pathway",
+        "target_smiles": target,
         "payload": call.event_payload,
     }
 
@@ -116,24 +121,32 @@ def _result_event(result, target):
     """A submit_pathway result event as the rollout loop records it."""
 
     return {
-        "event_type": "tool_result", "tool_name": "submit_pathway", "target_smiles": target,
+        "event_type": "tool_result",
+        "tool_name": "submit_pathway",
+        "target_smiles": target,
         "payload": {"result": result, "outcome": "ok"},
     }
-
 
 
 class ImportAndEvalTests(unittest.TestCase):
     def _prepare_minimal_model_db(self, db_path: Path) -> None:
         templates = db_path.with_name("templates.jsonl")
         bbs = db_path.with_name("bbs.txt")
-        templates.write_text(json.dumps({
-            "reaction_id": "R000", "smarts": "[C:1][O:2]>>[C:1]=[O:2]",
-            "family": "oxidation",
-            "family_metadata": {
-                "description": "Fixture alcohol-to-carbonyl transformation.",
-                "search_terms": ["alcohol oxidation"],
-            },
-        }) + "\n", encoding="utf-8")
+        templates.write_text(
+            json.dumps(
+                {
+                    "reaction_id": "R000",
+                    "smarts": "[C:1][O:2]>>[C:1]=[O:2]",
+                    "family": "oxidation",
+                    "family_metadata": {
+                        "description": "Fixture alcohol-to-carbonyl transformation.",
+                        "search_terms": ["alcohol oxidation"],
+                    },
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
         bbs.write_text("SMILES\nCO\n", encoding="utf-8")
         reactions.ingest_reaction_templates(templates, db_path=db_path, library="demo")
         db.ingest_building_blocks(bbs, db_path)
@@ -197,11 +210,18 @@ class ImportAndEvalTests(unittest.TestCase):
             }
             result = SynthesisTools(db_path).submit_pathway(**arguments, target_smiles="CCO")
             events = [
-                {"event_type": "message", "role": "user", "target_smiles": "CCO", "payload": {"text": "Plan CCO"}},
+                {
+                    "event_type": "message",
+                    "role": "user",
+                    "target_smiles": "CCO",
+                    "payload": {"text": "Plan CCO"},
+                },
                 _call_event(arguments, "CCO"),
                 _result_event(result, "CCO"),
             ]
-            trace.write_text("\n".join(json.dumps(event) for event in events) + "\n", encoding="utf-8")
+            trace.write_text(
+                "\n".join(json.dumps(event) for event in events) + "\n", encoding="utf-8"
+            )
 
             summary = evaluate_trace_file(trace, db_path, model="mock-model")
 
@@ -238,9 +258,7 @@ class ImportAndEvalTests(unittest.TestCase):
                             "submitted_final_smiles": "CCO",
                             "constitutional_similarity_to_target": 1.0,
                             "stereo_aware_similarity_to_target": 1.0,
-                            "steps": [
-                                {"valid": True, "actual_product_smiles": "CCO"}
-                            ],
+                            "steps": [{"valid": True, "actual_product_smiles": "CCO"}],
                         },
                     },
                 },
@@ -270,19 +288,30 @@ class ImportAndEvalTests(unittest.TestCase):
             reactions.ingest_reaction_templates(templates, db_path=db_path, library="demo")
             db.ingest_building_blocks(bbs, db_path)
             first = {
-                "steps": [{"reaction_id": "demo:R000", "reactants": ["CO"], "product_smiles": "C=O"}],
+                "steps": [
+                    {"reaction_id": "demo:R000", "reactants": ["CO"], "product_smiles": "C=O"}
+                ],
                 "pathway_text": "First candidate.",
             }
             second = {
-                "steps": [{"reaction_id": "demo:R000", "reactants": ["CCO"], "product_smiles": "CC=O"}],
+                "steps": [
+                    {"reaction_id": "demo:R000", "reactants": ["CCO"], "product_smiles": "CC=O"}
+                ],
                 "pathway_text": "Second candidate.",
             }
             events = [
-                {"event_type": "message", "role": "user", "target_smiles": "CC=O", "payload": {"text": "Plan CC=O"}},
+                {
+                    "event_type": "message",
+                    "role": "user",
+                    "target_smiles": "CC=O",
+                    "payload": {"text": "Plan CC=O"},
+                },
                 _call_event(first, "CC=O"),
                 _call_event(second, "CC=O"),
             ]
-            trace.write_text("\n".join(json.dumps(event) for event in events) + "\n", encoding="utf-8")
+            trace.write_text(
+                "\n".join(json.dumps(event) for event in events) + "\n", encoding="utf-8"
+            )
 
             summary = evaluate_trace_file(trace, db_path, model="mock-model")
 
@@ -291,7 +320,10 @@ class ImportAndEvalTests(unittest.TestCase):
             self.assertEqual(summary["similarity_to_target"], 1.0)
 
             restricted = evaluate_trace_file(
-                trace, db_path, model="mock-model", tool_config={"reaction_library": ["other"]},
+                trace,
+                db_path,
+                model="mock-model",
+                tool_config={"reaction_library": ["other"]},
             )
             self.assertIsNone(restricted["accepted"])
 
@@ -300,7 +332,9 @@ class ImportAndEvalTests(unittest.TestCase):
                 **second,
                 "steps": [{**second["steps"][0], "reaction_id": "retired:R033"}],
             }
-            recorded = {"steps": [{"step_index": 1, "template": {"smarts": "[C:1][O:2]>>[C:1]=[O:2]"}}]}
+            recorded = {
+                "steps": [{"step_index": 1, "template": {"smarts": "[C:1][O:2]>>[C:1]=[O:2]"}}]
+            }
             events = [
                 events[0],
                 _call_event(first, "CC=O"),
@@ -308,7 +342,9 @@ class ImportAndEvalTests(unittest.TestCase):
                 _call_event(retired, "CC=O"),
                 _result_event(recorded, "CC=O"),
             ]
-            trace.write_text("\n".join(json.dumps(event) for event in events) + "\n", encoding="utf-8")
+            trace.write_text(
+                "\n".join(json.dumps(event) for event in events) + "\n", encoding="utf-8"
+            )
             self.assertTrue(evaluate_trace_file(trace, db_path, model="mock-model")["accepted"])
 
     def test_evaluate_trace_scores_an_enantiomer_with_stereo_aware_similarity(self):
@@ -336,18 +372,22 @@ class ImportAndEvalTests(unittest.TestCase):
                             "final_smiles": "F[C@@H](Cl)Br",
                             "submitted_final_smiles": "F[C@@H](Cl)Br",
                             "steps": [{"valid": True, "actual_product_smiles": "F[C@@H](Cl)Br"}],
-                        }
+                        },
                     },
                 },
             ]
-            trace.write_text("\n".join(json.dumps(event) for event in events) + "\n", encoding="utf-8")
+            trace.write_text(
+                "\n".join(json.dumps(event) for event in events) + "\n", encoding="utf-8"
+            )
 
             summary = evaluate_trace_file(trace, db_path, model="mock-model")
 
             self.assertTrue(summary["accepted"])
             self.assertEqual(summary["constitutional_similarity_to_target"], 1.0)
             self.assertLess(summary["stereo_aware_similarity_to_target"], 1.0)
-            self.assertEqual(summary["similarity_to_target"], summary["stereo_aware_similarity_to_target"])
+            self.assertEqual(
+                summary["similarity_to_target"], summary["stereo_aware_similarity_to_target"]
+            )
 
     def test_evaluate_trace_keeps_the_best_accepted_submission_over_a_later_one(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -357,14 +397,23 @@ class ImportAndEvalTests(unittest.TestCase):
             self._prepare_minimal_model_db(db_path)
             exact = {"steps": [], "building_block": "BB:1", "pathway_text": "Buy methanol."}
             analogue = {
-                "steps": [{"reaction_id": "demo:R000", "reactants": ["BB:1"], "product_smiles": "C=O"}],
+                "steps": [
+                    {"reaction_id": "demo:R000", "reactants": ["BB:1"], "product_smiles": "C=O"}
+                ],
                 "pathway_text": "Oxidize methanol.",
             }
             events = [
-                {"event_type": "message", "role": "user", "target_smiles": "CO", "payload": {"text": "Plan CO"}},
+                {
+                    "event_type": "message",
+                    "role": "user",
+                    "target_smiles": "CO",
+                    "payload": {"text": "Plan CO"},
+                },
                 *(_call_event(arguments, "CO") for arguments in (exact, analogue)),
             ]
-            trace.write_text("\n".join(json.dumps(event) for event in events) + "\n", encoding="utf-8")
+            trace.write_text(
+                "\n".join(json.dumps(event) for event in events) + "\n", encoding="utf-8"
+            )
 
             summary = evaluate_trace_file(trace, db_path, model="mock-model")
 
@@ -381,15 +430,26 @@ class ImportAndEvalTests(unittest.TestCase):
             analogue = {"steps": [], "building_block": "BB:1", "pathway_text": "Buy methanol."}
             exact = {
                 "steps": [
-                    {"reaction_id": "[CH3:1][OH:2]>>[CH2:1]=[O:2]", "reactants": ["BB:1"], "product_smiles": "C=O"}
+                    {
+                        "reaction_id": "[CH3:1][OH:2]>>[CH2:1]=[O:2]",
+                        "reactants": ["BB:1"],
+                        "product_smiles": "C=O",
+                    }
                 ],
                 "pathway_text": "Oxidize methanol.",
             }
             events = [
-                {"event_type": "message", "role": "user", "target_smiles": "C=O", "payload": {"text": "Plan C=O"}},
+                {
+                    "event_type": "message",
+                    "role": "user",
+                    "target_smiles": "C=O",
+                    "payload": {"text": "Plan C=O"},
+                },
                 *(_call_event(arguments, "C=O") for arguments in (analogue, exact)),
             ]
-            trace.write_text("\n".join(json.dumps(event) for event in events) + "\n", encoding="utf-8")
+            trace.write_text(
+                "\n".join(json.dumps(event) for event in events) + "\n", encoding="utf-8"
+            )
 
             summary = evaluate_trace_file(trace, db_path, model="mock-model")
 
@@ -402,7 +462,12 @@ class ImportAndEvalTests(unittest.TestCase):
             db_path = tmp_path / "eval.sqlite"
             trace = tmp_path / "trace.jsonl"
             events = [
-                {"event_type": "message", "role": "user", "target_smiles": "CC=O", "payload": {"text": "Plan CC=O"}},
+                {
+                    "event_type": "message",
+                    "role": "user",
+                    "target_smiles": "CC=O",
+                    "payload": {"text": "Plan CC=O"},
+                },
                 {
                     "event_type": "tool_result",
                     "tool_name": "submit_pathway",
@@ -416,7 +481,7 @@ class ImportAndEvalTests(unittest.TestCase):
                             "final_smiles": "CCO",
                             "submitted_final_smiles": "CCO",
                             "steps": [{"valid": True, "actual_product_smiles": "CCO"}],
-                        }
+                        },
                     },
                 },
                 {
@@ -440,7 +505,9 @@ class ImportAndEvalTests(unittest.TestCase):
                     "payload": {"runtime_seconds": 123.45},
                 },
             ]
-            trace.write_text("\n".join(json.dumps(event) for event in events) + "\n", encoding="utf-8")
+            trace.write_text(
+                "\n".join(json.dumps(event) for event in events) + "\n", encoding="utf-8"
+            )
 
             summary = evaluate_trace_file(trace, db_path, model="mock-model")
 
@@ -455,7 +522,12 @@ class ImportAndEvalTests(unittest.TestCase):
             db_path = tmp_path / "eval.sqlite"
             trace = tmp_path / "trace.jsonl"
             events = [
-                {"event_type": "message", "role": "user", "target_smiles": "CC=O", "payload": {"text": "Plan CC=O"}},
+                {
+                    "event_type": "message",
+                    "role": "user",
+                    "target_smiles": "CC=O",
+                    "payload": {"text": "Plan CC=O"},
+                },
                 {
                     "event_type": "selected_submission",
                     "tool_name": "submit_pathway",
@@ -473,7 +545,9 @@ class ImportAndEvalTests(unittest.TestCase):
                     },
                 },
             ]
-            trace.write_text("\n".join(json.dumps(event) for event in events) + "\n", encoding="utf-8")
+            trace.write_text(
+                "\n".join(json.dumps(event) for event in events) + "\n", encoding="utf-8"
+            )
 
             summary = evaluate_trace_file(
                 trace,
@@ -493,7 +567,12 @@ class ImportAndEvalTests(unittest.TestCase):
             db_path = tmp_path / "eval.sqlite"
             trace = tmp_path / "trace.jsonl"
             events = [
-                {"event_type": "message", "role": "user", "target_smiles": "CCO", "payload": {"text": "Plan CCO"}},
+                {
+                    "event_type": "message",
+                    "role": "user",
+                    "target_smiles": "CCO",
+                    "payload": {"text": "Plan CCO"},
+                },
                 {
                     "event_type": "message",
                     "role": "assistant",
@@ -528,7 +607,9 @@ class ImportAndEvalTests(unittest.TestCase):
                     },
                 },
             ]
-            trace.write_text("\n".join(json.dumps(event) for event in events) + "\n", encoding="utf-8")
+            trace.write_text(
+                "\n".join(json.dumps(event) for event in events) + "\n", encoding="utf-8"
+            )
 
             summary = evaluate_trace_file(trace, db_path, model="mock-model")
 
@@ -545,7 +626,12 @@ class ImportAndEvalTests(unittest.TestCase):
             db_path = tmp_path / "eval.sqlite"
             trace = tmp_path / "trace.jsonl"
             events = [
-                {"event_type": "message", "role": "user", "target_smiles": "CCO", "payload": {"text": "Plan CCO"}},
+                {
+                    "event_type": "message",
+                    "role": "user",
+                    "target_smiles": "CCO",
+                    "payload": {"text": "Plan CCO"},
+                },
                 {
                     "event_type": "message",
                     "role": "assistant",
@@ -579,7 +665,9 @@ class ImportAndEvalTests(unittest.TestCase):
                     },
                 },
             ]
-            trace.write_text("\n".join(json.dumps(event) for event in events) + "\n", encoding="utf-8")
+            trace.write_text(
+                "\n".join(json.dumps(event) for event in events) + "\n", encoding="utf-8"
+            )
 
             summary = evaluate_trace_file(trace, db_path, model="example-org/example-model")
 
@@ -685,7 +773,9 @@ class ImportAndEvalTests(unittest.TestCase):
 
         self.assertFalse(checkpoint_matches_run(checkpoint, args, task, config))
         self.assertTrue(
-            checkpoint_matches_run({**checkpoint, "responses_state_mode": "previous_id"}, args, task, config)
+            checkpoint_matches_run(
+                {**checkpoint, "responses_state_mode": "previous_id"}, args, task, config
+            )
         )
 
     def test_model_runner_keeps_max_effort_for_messages_api(self):
@@ -979,7 +1069,9 @@ class ImportAndEvalTests(unittest.TestCase):
         )
 
     def test_submit_pathway_schema_allows_zero_step_direct_purchase(self):
-        schema = next(schema for schema in TOOL_SCHEMAS if schema["function"]["name"] == "submit_pathway")
+        schema = next(
+            schema for schema in TOOL_SCHEMAS if schema["function"]["name"] == "submit_pathway"
+        )
         parameters = schema["function"]["parameters"]
         properties = parameters["properties"]
 
@@ -989,18 +1081,27 @@ class ImportAndEvalTests(unittest.TestCase):
 
     def test_initial_prompt_allows_direct_purchase_submission(self):
         task = build_llm_task(
-            "CO", task_id="toy-0001", dataset="toy", source_file="toy.smi",
+            "CO",
+            task_id="toy-0001",
+            dataset="toy",
+            source_file="toy.smi",
         )
         messages = build_initial_messages(
-            task=task, config=policy.RolloutPolicyConfig(max_model_len=262144),
+            task=task,
+            config=policy.RolloutPolicyConfig(max_model_len=262144),
         )
 
         self.assertIn("You are performing synthesis planning", messages[0]["content"])
         self.assertIn("single valid building_block for direct purchase", messages[0]["content"])
-        self.assertIn("Submit pathways with submit_pathway, which you may call more than once", messages[0]["content"])
+        self.assertIn(
+            "Submit pathways with submit_pathway, which you may call more than once",
+            messages[0]["content"],
+        )
         # The fixed limits and the run-start context limits share the final paragraph.
         self.assertTrue(
-            messages[0]["content"].split("\n\n")[-1].startswith(
+            messages[0]["content"]
+            .split("\n\n")[-1]
+            .startswith(
                 "Use no more than 150 total tool calls or 80 assistant turns. Your context-window budget"
             )
         )
@@ -1027,8 +1128,15 @@ class ImportAndEvalTests(unittest.TestCase):
 
     def test_harness_prompt_names_no_optional_tool(self):
         optional = [name for name in TOOL_NAMES if name not in {"submit_pathway", "similarity"}]
-        task = build_llm_task("CCO", task_id="fixture-0001", dataset="fixture", source_file="fixture")
-        prompts = [message["content"] for message in build_initial_messages(task=task, config=policy.RolloutPolicyConfig(max_tool_calls=10))]
+        task = build_llm_task(
+            "CCO", task_id="fixture-0001", dataset="fixture", source_file="fixture"
+        )
+        prompts = [
+            message["content"]
+            for message in build_initial_messages(
+                task=task, config=policy.RolloutPolicyConfig(max_tool_calls=10)
+            )
+        ]
 
         for prompt, name in itertools.product(prompts, optional):
             self.assertNotIn(name, prompt)
@@ -1040,11 +1148,15 @@ class ImportAndEvalTests(unittest.TestCase):
 
     def test_single_tool_call_budget_reads_in_the_singular(self):
         messages = build_initial_messages(
-            task=build_llm_task("CCO", task_id="fixture-0001", dataset="fixture", source_file="fixture"),
+            task=build_llm_task(
+                "CCO", task_id="fixture-0001", dataset="fixture", source_file="fixture"
+            ),
             config=policy.RolloutPolicyConfig(max_tool_calls=1, max_turns=8),
         )
 
-        self.assertIn("Use no more than 1 total tool call or 8 assistant turns.", messages[0]["content"])
+        self.assertIn(
+            "Use no more than 1 total tool call or 8 assistant turns.", messages[0]["content"]
+        )
 
     def test_model_runner_omits_run_and_task_excluded_tools_from_schema(self):
         import argparse
@@ -1099,17 +1211,25 @@ class ImportAndEvalTests(unittest.TestCase):
                 seen_kwargs.append(kwargs)
                 return {"choices": [{"message": {"role": "assistant", "content": "No tool call."}}]}
 
-            with patch.dict(os.environ, {"TEST_AGENTIC_SYNTHESIS_API_KEY": "test-key"}), patch(
-                "synclaw.runners.model_runner.chat_completion",
-                side_effect=fake_chat_completion,
+            with (
+                patch.dict(os.environ, {"TEST_AGENTIC_SYNTHESIS_API_KEY": "test-key"}),
+                patch(
+                    "synclaw.runners.model_runner.chat_completion",
+                    side_effect=fake_chat_completion,
+                ),
             ):
                 summary = run_model_from_args(args)
 
             self.assertEqual(
-                summary["excluded_tools"], ["mces", "search_reaction_templates", "simulate_reverse_reaction"]
+                summary["excluded_tools"],
+                ["mces", "search_reaction_templates", "simulate_reverse_reaction"],
             )
             tool_names = {schema["function"]["name"] for schema in seen_kwargs[0]["tools"]}
-            prompt = seen_kwargs[0]["messages"][0]["content"] + "\n\n" + seen_kwargs[0]["messages"][1]["content"]
+            prompt = (
+                seen_kwargs[0]["messages"][0]["content"]
+                + "\n\n"
+                + seen_kwargs[0]["messages"][1]["content"]
+            )
             self.assertNotIn("simulate_reverse_reaction", tool_names)
             self.assertNotIn("search_reaction_templates", tool_names)
             self.assertNotIn("mces", tool_names)
@@ -1218,7 +1338,13 @@ class ImportAndEvalTests(unittest.TestCase):
                 retries=0,
                 request_timeout=12.0,
                 tool_choice={"type": "tool", "name": "submit_pathway"},
-                tools=[{"name": "similarity", "description": "Compute", "input_schema": {"type": "object"}}],
+                tools=[
+                    {
+                        "name": "similarity",
+                        "description": "Compute",
+                        "input_schema": {"type": "object"},
+                    }
+                ],
             )
 
         self.assertEqual(response["id"], "msg_123")
@@ -1341,9 +1467,12 @@ class ImportAndEvalTests(unittest.TestCase):
                     "usage": {"input_tokens": 20, "output_tokens": 4},
                 }
 
-            with patch.dict(os.environ, {"TEST_AGENTIC_SYNTHESIS_API_KEY": "test-key"}), patch(
-                "synclaw.runners.model_runner.anthropic_completion",
-                side_effect=fake_anthropic_completion,
+            with (
+                patch.dict(os.environ, {"TEST_AGENTIC_SYNTHESIS_API_KEY": "test-key"}),
+                patch(
+                    "synclaw.runners.model_runner.anthropic_completion",
+                    side_effect=fake_anthropic_completion,
+                ),
             ):
                 summary = run_model_from_args(args)
 
@@ -1403,7 +1532,9 @@ class ImportAndEvalTests(unittest.TestCase):
         self.assertEqual(resumed_messages[2]["content"][0]["type"], "text")
         self.assertEqual(resumed.checkpoint_fields()["anthropic_tool_results"], [])
 
-    def test_model_runner_anthropic_messages_mode_requests_final_submit_without_forced_tool_choice(self):
+    def test_model_runner_anthropic_messages_mode_requests_final_submit_without_forced_tool_choice(
+        self,
+    ):
         import argparse
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -1484,9 +1615,12 @@ class ImportAndEvalTests(unittest.TestCase):
                     "usage": {"input_tokens": 20, "output_tokens": 4},
                 }
 
-            with patch.dict(os.environ, {"TEST_AGENTIC_SYNTHESIS_API_KEY": "test-key"}), patch(
-                "synclaw.runners.model_runner.anthropic_completion",
-                side_effect=fake_anthropic_completion,
+            with (
+                patch.dict(os.environ, {"TEST_AGENTIC_SYNTHESIS_API_KEY": "test-key"}),
+                patch(
+                    "synclaw.runners.model_runner.anthropic_completion",
+                    side_effect=fake_anthropic_completion,
+                ),
             ):
                 summary = run_model_from_args(args)
 
@@ -1572,7 +1706,9 @@ class ImportAndEvalTests(unittest.TestCase):
                                             "type": "function",
                                             "function": {
                                                 "name": "search_building_blocks",
-                                                "arguments": json.dumps({"query": "CO", "limit": 1}),
+                                                "arguments": json.dumps(
+                                                    {"query": "CO", "limit": 1}
+                                                ),
                                             },
                                         }
                                     ],
@@ -1582,9 +1718,12 @@ class ImportAndEvalTests(unittest.TestCase):
                     }
                 raise RuntimeError("rate limit after first turn")
 
-            with patch.dict(os.environ, {"TEST_AGENTIC_SYNTHESIS_API_KEY": "test-key"}), patch(
-                "synclaw.runners.model_runner.chat_completion",
-                side_effect=failing_chat_completion,
+            with (
+                patch.dict(os.environ, {"TEST_AGENTIC_SYNTHESIS_API_KEY": "test-key"}),
+                patch(
+                    "synclaw.runners.model_runner.chat_completion",
+                    side_effect=failing_chat_completion,
+                ),
             ):
                 with self.assertRaises(RuntimeError):
                     run_model_from_args(args)
@@ -1602,10 +1741,14 @@ class ImportAndEvalTests(unittest.TestCase):
             self.assertIn("submission_guidance", search_result_event["payload"]["result"])
             self.assertIn("model_result", search_result_event["payload"])
             self.assertIn("model_result_compaction", search_result_event["payload"])
-            self.assertNotIn("submission_note", search_result_event["payload"]["model_result"]["results"][0])
+            self.assertNotIn(
+                "submission_note", search_result_event["payload"]["model_result"]["results"][0]
+            )
             checkpoint_payload = json.loads(checkpoint.read_text(encoding="utf-8"))
             tool_messages = [
-                message for message in checkpoint_payload["messages"] if message.get("role") == "tool"
+                message
+                for message in checkpoint_payload["messages"]
+                if message.get("role") == "tool"
             ]
             self.assertEqual(len(tool_messages), 1)
             model_visible_result = json.loads(tool_messages[0]["content"])
@@ -1657,9 +1800,12 @@ class ImportAndEvalTests(unittest.TestCase):
                     run_model_from_args(args)
             moved_trace.rename(trace)
 
-            with patch.dict(os.environ, {"TEST_AGENTIC_SYNTHESIS_API_KEY": "test-key"}), patch(
-                "synclaw.runners.model_runner.chat_completion",
-                side_effect=successful_chat_completion,
+            with (
+                patch.dict(os.environ, {"TEST_AGENTIC_SYNTHESIS_API_KEY": "test-key"}),
+                patch(
+                    "synclaw.runners.model_runner.chat_completion",
+                    side_effect=successful_chat_completion,
+                ),
             ):
                 summary = run_model_from_args(args)
 
@@ -1695,7 +1841,9 @@ class ImportAndEvalTests(unittest.TestCase):
 
         self.assertEqual(arguments["reactant_smiles"], ["N", "O=CO"])
         self.assertEqual(arguments["product_smiles"], ["NC=O"])
-        self.assertEqual([item["field"] for item in coercions], ["reactant_smiles", "product_smiles"])
+        self.assertEqual(
+            [item["field"] for item in coercions], ["reactant_smiles", "product_smiles"]
+        )
 
     def test_model_runner_does_not_coerce_non_json_reactant_text(self):
         arguments, coercions = coerce_tool_arguments(
@@ -1815,9 +1963,7 @@ class ImportAndEvalTests(unittest.TestCase):
 
         self.assertEqual(message["content"], "Searching next.")
         self.assertNotIn("tool_calls", message)
-        self.assertEqual(
-            message["response_model"], "example-org/example-model-revision-1"
-        )
+        self.assertEqual(message["response_model"], "example-org/example-model-revision-1")
         self.assertEqual(message["system_fingerprint"], "deployment-abc")
 
     def test_responses_parser_preserves_token_usage(self):
@@ -1995,15 +2141,26 @@ class ImportAndEvalTests(unittest.TestCase):
                     return {"choices": [{"message": first_message}]}
                 return {"choices": [{"message": {"role": "assistant", "content": "No tool call."}}]}
 
-            with patch.dict(os.environ, {"TEST_AGENTIC_SYNTHESIS_API_KEY": "test-key"}), patch(
-                "synclaw.runners.model_runner.chat_completion",
-                side_effect=fake_chat_completion,
+            with (
+                patch.dict(os.environ, {"TEST_AGENTIC_SYNTHESIS_API_KEY": "test-key"}),
+                patch(
+                    "synclaw.runners.model_runner.chat_completion",
+                    side_effect=fake_chat_completion,
+                ),
             ):
                 run_model_from_args(args)
 
             second_messages = seen_messages[1]
-            call_bad_index = next(i for i, message in enumerate(second_messages) if message.get("tool_call_id") == "call_bad")
-            call_good_index = next(i for i, message in enumerate(second_messages) if message.get("tool_call_id") == "call_good")
+            call_bad_index = next(
+                i
+                for i, message in enumerate(second_messages)
+                if message.get("tool_call_id") == "call_bad"
+            )
+            call_good_index = next(
+                i
+                for i, message in enumerate(second_messages)
+                if message.get("tool_call_id") == "call_good"
+            )
             self.assertLess(call_bad_index, call_good_index)
             self.assertNotIn("notice", json.loads(second_messages[call_bad_index]["content"]))
             self.assertIn(
@@ -2021,12 +2178,19 @@ def test_checkpoint_rejects_a_different_submission_floor():
     import argparse
 
     args = argparse.Namespace(
-        model="m", provider="p", api_mode="chat", responses_state_mode=None,
+        model="m",
+        provider="p",
+        api_mode="chat",
+        responses_state_mode=None,
         stop_condition="exact",
     )
     task = {"task_id": "t", "target_smiles": "CCO"}
     checkpoint = {
-        "model": "m", "provider": "p", "api_mode": "chat", "task_id": "t", "target_smiles": "CCO",
+        "model": "m",
+        "provider": "p",
+        "api_mode": "chat",
+        "task_id": "t",
+        "target_smiles": "CCO",
         "stop_condition": 1.0,
     }
 
@@ -2039,16 +2203,28 @@ def test_checkpoint_rejects_a_different_endpoint_or_auth_header():
     import argparse
 
     args = argparse.Namespace(
-        model="m", provider="custom", api_mode="responses", responses_state_mode="previous_id",
-        base_url="", responses_url="https://a.example/v1/responses", messages_url="",
+        model="m",
+        provider="custom",
+        api_mode="responses",
+        responses_state_mode="previous_id",
+        base_url="",
+        responses_url="https://a.example/v1/responses",
+        messages_url="",
         auth_header="bearer",
     )
     task = {"task_id": "t", "target_smiles": "CCO"}
     checkpoint = {
-        "model": "m", "provider": "custom", "api_mode": "responses",
-        "responses_state_mode": "previous_id", "responses_previous_id": "resp_1",
-        "base_url": "", "responses_url": "https://a.example/v1/responses", "messages_url": "",
-        "auth_header": "bearer", "task_id": "t", "target_smiles": "CCO",
+        "model": "m",
+        "provider": "custom",
+        "api_mode": "responses",
+        "responses_state_mode": "previous_id",
+        "responses_previous_id": "resp_1",
+        "base_url": "",
+        "responses_url": "https://a.example/v1/responses",
+        "messages_url": "",
+        "auth_header": "bearer",
+        "task_id": "t",
+        "target_smiles": "CCO",
     }
 
     assert checkpoint_matches_run(checkpoint, args, task, policy.RolloutPolicyConfig())
@@ -2062,6 +2238,11 @@ def test_checkpoint_rejects_a_different_endpoint_or_auth_header():
 def test_cost_is_omitted_when_only_some_responses_report_it():
     from synclaw.token_usage import sum_token_usage
 
-    assert sum_token_usage([{"input_tokens": 1, "cost": 0.5}, {"input_tokens": 2, "cost": 0.25}])["cost"] == 0.75
+    assert (
+        sum_token_usage([{"input_tokens": 1, "cost": 0.5}, {"input_tokens": 2, "cost": 0.25}])[
+            "cost"
+        ]
+        == 0.75
+    )
     partial = sum_token_usage([{"input_tokens": 1, "cost": 0.5}, {"input_tokens": 2}])
     assert partial == {"input_tokens": 3}

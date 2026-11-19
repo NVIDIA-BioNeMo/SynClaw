@@ -18,8 +18,10 @@ from synclaw.tools.synthesis import score_pathway_against_target
 )
 def test_exact_generated_product_outranks_preferred_analogue(target, exact, preferred):
     result = score_pathway_against_target(
-        [preferred, exact], target_smiles=target,
-        target_validation=chem.validate_smiles(target), preferred_smiles=preferred,
+        [preferred, exact],
+        target_smiles=target,
+        target_validation=chem.validate_smiles(target),
+        preferred_smiles=preferred,
         accepted=True,
     )
     assert result["actual_final_smiles"] == exact

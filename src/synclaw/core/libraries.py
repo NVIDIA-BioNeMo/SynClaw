@@ -25,7 +25,9 @@ def normalize_libraries(value: LibrarySelection) -> tuple[str, ...]:
     values = [value] if isinstance(value, str) else value
     if not isinstance(values, (list, tuple)) or any(not isinstance(v, str) for v in values):
         raise ValueError("Reaction libraries must be names or a list of names")
-    return tuple(dict.fromkeys(name.strip() for v in values for name in v.split(",") if name.strip()))
+    return tuple(
+        dict.fromkeys(name.strip() for v in values for name in v.split(",") if name.strip())
+    )
 
 
 BUNDLED_REACTION_SOURCE = "bundled"

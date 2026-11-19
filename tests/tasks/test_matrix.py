@@ -88,7 +88,9 @@ def test_every_matrix_bit_is_a_substructure_match(catalog: Path, tmp_path: Path)
     for column, template_smarts in enumerate(smarts):
         reaction = AllChem.ReactionFromSmarts(template_smarts)
         rdChemReactions.ChemicalReaction.Initialize(reaction)
-        queries = [reaction.GetReactantTemplate(i) for i in range(reaction.GetNumReactantTemplates())]
+        queries = [
+            reaction.GetReactantTemplate(i) for i in range(reaction.GetNumReactantTemplates())
+        ]
         for row, smiles in enumerate(blocks):
             mol = Chem.MolFromSmiles(smiles)
             expected = 0
@@ -116,7 +118,9 @@ def test_reactant_queries_match_a_smarts_round_trip() -> None:
     for record in records:
         reaction = AllChem.ReactionFromSmarts(record["smarts"])
         rdChemReactions.ChemicalReaction.Initialize(reaction)
-        probes = [Chem.MolFromSmiles(s) for s in ("CCN", "CC(=O)Cl", "O=[N+]([O-])c1ccccc1", "OCCO")]
+        probes = [
+            Chem.MolFromSmiles(s) for s in ("CCN", "CC(=O)Cl", "O=[N+]([O-])c1ccccc1", "OCCO")
+        ]
         for direct, template in zip(
             reactant_queries(record["smarts"]),
             [reaction.GetReactantTemplate(i) for i in range(reaction.GetNumReactantTemplates())],
@@ -142,7 +146,9 @@ def test_salts_are_dropped_by_default_and_kept_on_request(catalog: Path, tmp_pat
     assert "CCN.Cl" in (tmp_path / "keep" / BUILDING_BLOCK_FILE).read_text()
 
 
-def test_atom_mapped_entries_are_dropped_by_default_and_can_be_stripped(catalog: Path, tmp_path: Path) -> None:
+def test_atom_mapped_entries_are_dropped_by_default_and_can_be_stripped(
+    catalog: Path, tmp_path: Path
+) -> None:
     dropped = build(catalog, tmp_path / "drop")
     assert dropped["building_blocks"]["atom_mapped_dropped"] == 1
     assert ":7" not in (tmp_path / "drop" / BUILDING_BLOCK_FILE).read_text()
@@ -178,15 +184,19 @@ def test_offsets_address_each_block_line(catalog: Path, tmp_path: Path) -> None:
 def test_templates_the_engine_cannot_run_are_dropped_with_a_reason(tmp_path: Path) -> None:
     records = [
         {"reaction_id": "test:ok", "library": "test", "smarts": "[C:1][OH]>>[C:1]O"},
-        {"reaction_id": "test:four", "library": "test",
-         "smarts": "[C:1].[C:2].[C:3].[C:4]>>[C:1][C:2][C:3][C:4]"},
+        {
+            "reaction_id": "test:four",
+            "library": "test",
+            "smarts": "[C:1].[C:2].[C:3].[C:4]>>[C:1][C:2][C:3][C:4]",
+        },
         {"reaction_id": "test:broken", "library": "test", "smarts": "not a reaction"},
     ]
     stats = write_templates(records, tmp_path)
     assert stats["kept"] == 1 and stats["dropped"] == 2
     assert [line.strip() for line in open(tmp_path / REACTION_ID_FILE)] == ["test:ok"]
     reasons = dict(
-        line.rstrip("\n").split("\t") for line in open(tmp_path / DROPPED_TEMPLATE_FILE).readlines()[1:]
+        line.rstrip("\n").split("\t")
+        for line in open(tmp_path / DROPPED_TEMPLATE_FILE).readlines()[1:]
     )
     assert "4 reactants" in reasons["test:four"]
     assert reasons["test:broken"]
@@ -196,7 +206,9 @@ def test_templates_come_from_the_installed_package(catalog: Path, tmp_path: Path
     """A directory built here cannot cite a template the package does not have."""
     directory = tmp_path / "matrix"
     build(catalog, directory)
-    known = {record["reaction_id"] for record in load_template_records(["synformer", "paroutes", "ord"])}
+    known = {
+        record["reaction_id"] for record in load_template_records(["synformer", "paroutes", "ord"])
+    }
     built = {line.strip() for line in open(directory / REACTION_ID_FILE) if line.strip()}
     assert built and built <= known
     assert set(bundled_reaction_catalog()["sources"]) >= {"synformer"}
@@ -224,7 +236,9 @@ def test_a_built_directory_generates_targets(catalog: Path, tmp_path: Path) -> N
         assert {token for token in pathway.split(";") if ":" in token and token in known}
 
 
-def test_a_limit_keeps_the_block_file_aligned_with_the_matrix(catalog: Path, tmp_path: Path) -> None:
+def test_a_limit_keeps_the_block_file_aligned_with_the_matrix(
+    catalog: Path, tmp_path: Path
+) -> None:
     directory = tmp_path / "matrix"
     full = build(catalog, tmp_path / "full")["building_blocks"]
     meta = build(catalog, directory, limit=2)

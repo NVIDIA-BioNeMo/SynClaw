@@ -100,7 +100,9 @@ def first_env(names: tuple[str, ...] | list[str]) -> str | None:
     return None
 
 
-def resolve_api_key(provider: str, api_key_env: str = "", *, use_preset_keys: bool = True) -> str | None:
+def resolve_api_key(
+    provider: str, api_key_env: str = "", *, use_preset_keys: bool = True
+) -> str | None:
     """Return the key from `--api-key-env` when given, else from the provider's own variables.
 
     Pass ``use_preset_keys=False`` when the request goes to an endpoint other than

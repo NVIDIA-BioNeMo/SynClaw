@@ -20,7 +20,10 @@ def test_wildcard_targets_are_rejected_because_they_can_never_match_exactly():
 
 
 def test_ordinary_targets_still_build():
-    assert build_llm_task("CCO", task_id="t", dataset="d", source_file="f")["canonical_target_smiles"] == "CCO"
+    assert (
+        build_llm_task("CCO", task_id="t", dataset="d", source_file="f")["canonical_target_smiles"]
+        == "CCO"
+    )
 
 
 def test_prompt_fingerprint_forces_regeneration_when_prompt_text_moves_on(tmp_path):
@@ -31,8 +34,10 @@ def test_prompt_fingerprint_forces_regeneration_when_prompt_text_moves_on(tmp_pa
     generate_llm_taskset(source, taskset, dataset="fixture")
     assert load_task(str(taskset), 0)["prompt_fingerprint"] == PROMPT_FINGERPRINT
 
-    for stamp, reported in (({}, "with no prompt fingerprint"),
-                            ({"prompt_fingerprint": "0123456789ab"}, "0123456789ab")):
+    for stamp, reported in (
+        ({}, "with no prompt fingerprint"),
+        ({"prompt_fingerprint": "0123456789ab"}, "0123456789ab"),
+    ):
         (tmp_path / "stale.jsonl").write_text(json.dumps({"task_id": "old", **stamp}) + "\n")
         with pytest.raises(RuntimeError, match=reported):
             load_task(str(tmp_path / "stale.jsonl"), 0)
@@ -40,10 +45,14 @@ def test_prompt_fingerprint_forces_regeneration_when_prompt_text_moves_on(tmp_pa
 
 def test_taskset_draws_one_tool_exclusion_set_per_task(tmp_path):
     source = tmp_path / "targets.smi"
-    source.write_text("SMILES\n" + "\n".join(["CCO", "CCN", "CCC", "c1ccccc1", "CC(=O)O", "CCCl"]) + "\n")
+    source.write_text(
+        "SMILES\n" + "\n".join(["CCO", "CCN", "CCC", "c1ccccc1", "CC(=O)O", "CCCl"]) + "\n"
+    )
     sets = [[], ["mces", "similarity"]]
 
-    first = generate_llm_taskset(source, tmp_path / "a.jsonl", dataset="d", tool_exclusion_sets=sets)
+    first = generate_llm_taskset(
+        source, tmp_path / "a.jsonl", dataset="d", tool_exclusion_sets=sets
+    )
     generate_llm_taskset(source, tmp_path / "b.jsonl", dataset="d", tool_exclusion_sets=sets)
     rows = [json.loads(line) for line in (tmp_path / "a.jsonl").read_text().splitlines()]
 
@@ -57,18 +66,28 @@ def test_taskset_draws_one_tool_exclusion_set_per_task(tmp_path):
 
 def test_task_cannot_exclude_submit_pathway():
     with pytest.raises(RuntimeError, match="Cannot exclude required tool"):
-        build_llm_task("CCO", task_id="t", dataset="d", source_file="f", excluded_tools=["submit_pathway"])
+        build_llm_task(
+            "CCO", task_id="t", dataset="d", source_file="f", excluded_tools=["submit_pathway"]
+        )
 
 
 def test_taskset_draws_budget_sets_independently_of_tool_exclusions(tmp_path):
     source = tmp_path / "targets.smi"
-    source.write_text("SMILES\n" + "\n".join(["CCO", "CCN", "CCC", "c1ccccc1", "CC(=O)O", "CCCl"]) + "\n")
+    source.write_text(
+        "SMILES\n" + "\n".join(["CCO", "CCN", "CCC", "c1ccccc1", "CC(=O)O", "CCCl"]) + "\n"
+    )
     tool_sets = [[], ["mces", "similarity"]]
     budget_sets = [{}, parse_budget_set("max_turns=40,max_tool_calls=75,budget_feedback=false")]
 
-    generate_llm_taskset(source, tmp_path / "tools.jsonl", dataset="d", tool_exclusion_sets=tool_sets)
+    generate_llm_taskset(
+        source, tmp_path / "tools.jsonl", dataset="d", tool_exclusion_sets=tool_sets
+    )
     stats = generate_llm_taskset(
-        source, tmp_path / "both.jsonl", dataset="d", tool_exclusion_sets=tool_sets, budget_sets=budget_sets,
+        source,
+        tmp_path / "both.jsonl",
+        dataset="d",
+        tool_exclusion_sets=tool_sets,
+        budget_sets=budget_sets,
     )
     tools_only = [json.loads(line) for line in (tmp_path / "tools.jsonl").read_text().splitlines()]
     rows = [json.loads(line) for line in (tmp_path / "both.jsonl").read_text().splitlines()]
@@ -79,28 +98,41 @@ def test_taskset_draws_budget_sets_independently_of_tool_exclusions(tmp_path):
     for row in budgeted:
         assert (row["max_turns"], row["max_tool_calls"], row["budget_feedback"]) == (40, 75, False)
     # Rows without a set carry no budget fields, so they inherit the runner's.
-    assert all("max_tokens" not in row and "budget_feedback" not in row for row in rows if row not in budgeted)
+    assert all(
+        "max_tokens" not in row and "budget_feedback" not in row
+        for row in rows
+        if row not in budgeted
+    )
     assert stats["budget_set_counts"] == {
         "none": len(rows) - len(budgeted),
         "budget_feedback=false,max_tool_calls=75,max_turns=40": len(budgeted),
     }
 
 
-@pytest.mark.parametrize(("text", "expected"), [
-    ("max_turns=inf,max_model_len=inf,max_tool_calls=40", {"max_turns": "inf", "max_model_len": "inf", "max_tool_calls": 40}),
-    ("budget_feedback=false,max_turns=40", {"max_turns": 40, "budget_feedback": False}),
-])
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        (
+            "max_turns=inf,max_model_len=inf,max_tool_calls=40",
+            {"max_turns": "inf", "max_model_len": "inf", "max_tool_calls": 40},
+        ),
+        ("budget_feedback=false,max_turns=40", {"max_turns": 40, "budget_feedback": False}),
+    ],
+)
 def test_budget_sets_accept_inf_and_flags(text, expected):
     assert parse_budget_set(text) == expected
 
 
-@pytest.mark.parametrize(("text", "message"), [
-    ("max_turns=0", "positive integer"),
-    ("max_turns=4.5", "must be an integer"),
-    ("budget_feedback=no", "true or false"),
-    ("max_turns", "name=value"),
-    ("max_context=1000", "Unknown task budget"),
-])
+@pytest.mark.parametrize(
+    ("text", "message"),
+    [
+        ("max_turns=0", "positive integer"),
+        ("max_turns=4.5", "must be an integer"),
+        ("budget_feedback=no", "true or false"),
+        ("max_turns", "name=value"),
+        ("max_context=1000", "Unknown task budget"),
+    ],
+)
 def test_bad_budget_sets_are_refused(text, message):
     with pytest.raises(ValueError, match=message):
         parse_budget_set(text)

@@ -6,7 +6,15 @@ from synclaw.cli import build_parser
 
 def test_search_reactions_library_does_not_consume_query():
     args = build_parser().parse_args(
-        ["tool", "search-reaction-templates", "--library", "synformer", "--library", "ord", "amide coupling"]
+        [
+            "tool",
+            "search-reaction-templates",
+            "--library",
+            "synformer",
+            "--library",
+            "ord",
+            "amide coupling",
+        ]
     )
 
     assert args.library == ["synformer", "ord"]

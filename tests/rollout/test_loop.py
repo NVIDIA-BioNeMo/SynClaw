@@ -174,9 +174,7 @@ def test_local_tool_executor_rejects_undeclared_or_invalid_calls(
     )
 
     execution = asyncio.run(
-        LocalToolExecutor(tools).execute(
-            [call], target_smiles="CCO", assistant_turn=1
-        )
+        LocalToolExecutor(tools).execute([call], target_smiles="CCO", assistant_turn=1)
     )[0]
 
     assert execution.result["error"] == "invalid_tool_call"
@@ -221,7 +219,10 @@ def test_local_tool_dispatcher_returns_an_error_for_a_non_finite_limit(tmp_path:
 @pytest.mark.parametrize(
     ("name", "arguments"),
     [
-        ("simulate_reaction", {"reaction_id": "demo:R000", "reactants": ["BB:99999999999999999999"]}),
+        (
+            "simulate_reaction",
+            {"reaction_id": "demo:R000", "reactants": ["BB:99999999999999999999"]},
+        ),
         (
             "submit_pathway",
             {
@@ -268,22 +269,28 @@ def test_local_tool_dispatcher_rejects_non_object_steps(step: Any) -> None:
     ],
 )
 def test_exact_submission_ends_after_its_batch_without_losing_identity(
-    max_tool_calls, floor, products,
+    max_tool_calls,
+    floor,
+    products,
 ) -> None:
     target = "O=c1cccc[nH]1"
     results = [
         {
             "accepted": accepted,
             **score_pathway_against_target(
-                [product], target_smiles=target, target_validation=chem.validate_smiles(target),
-                preferred_smiles=None, accepted=accepted,
+                [product],
+                target_smiles=target,
+                target_validation=chem.validate_smiles(target),
+                preferred_smiles=None,
+                accepted=accepted,
             ),
         }
         for product, accepted in products
     ]
     calls = [
         {
-            "id": f"call-{i}", "type": "function",
+            "id": f"call-{i}",
+            "type": "function",
             "function": {
                 "name": "submit_pathway",
                 "arguments": json.dumps({"steps": [], "building_block": f"BB:{i}"}),
@@ -293,11 +300,15 @@ def test_exact_submission_ends_after_its_batch_without_losing_identity(
     ]
     transport = FakeTransport([AssistantTurn({"role": "assistant", "tool_calls": calls})])
     tools = FakeTools(results.copy())
-    result = asyncio.run(run_rollout(
-        task=RolloutTask("tautomer", target, task().initial_messages),
-        config=config(stop_condition=floor, max_tool_calls=max_tool_calls),
-        transport=transport, tool_executor=tools, tool_schemas=TOOL_SCHEMAS,
-    ))
+    result = asyncio.run(
+        run_rollout(
+            task=RolloutTask("tautomer", target, task().initial_messages),
+            config=config(stop_condition=floor, max_tool_calls=max_tool_calls),
+            transport=transport,
+            tool_executor=tools,
+            tool_schemas=TOOL_SCHEMAS,
+        )
+    )
 
     assert len(transport.requests) == 1
     assert result.reason == "terminal_submission"
@@ -315,17 +326,28 @@ def test_exact_submission_ends_after_its_batch_without_losing_identity(
 
 
 def test_with_a_model_stop_condition_the_model_answers_after_an_exact_submission() -> None:
-    exact = {"accepted": True, "actual_final_smiles": "CCO", "stereo_aware_similarity_to_target": 1.0}
-    transport = FakeTransport([
-        tool_turn("submit_pathway", {"steps": []}),
-        AssistantTurn({"content": "The submitted route makes the target."}, "stop"),
-    ])
+    exact = {
+        "accepted": True,
+        "actual_final_smiles": "CCO",
+        "stereo_aware_similarity_to_target": 1.0,
+    }
+    transport = FakeTransport(
+        [
+            tool_turn("submit_pathway", {"steps": []}),
+            AssistantTurn({"content": "The submitted route makes the target."}, "stop"),
+        ]
+    )
 
-    result = _run_shared_rollout(transport, FakeTools([exact]), rollout_config=config(stop_condition="model"))
+    result = _run_shared_rollout(
+        transport, FakeTools([exact]), rollout_config=config(stop_condition="model")
+    )
 
     assert result.reason == "model_stop_best_accepted_submission"
     assert result.submission is not None and result.state.policy.best_accepted_identical
-    assert result.state.messages[-1] == {"role": "assistant", "content": "The submitted route makes the target."}
+    assert result.state.messages[-1] == {
+        "role": "assistant",
+        "content": "The submitted route makes the target.",
+    }
 
 
 def test_shared_rollout_selects_accepted_submission_and_records_trace() -> None:
@@ -381,9 +403,7 @@ def test_shared_rollout_handles_excluded_tool_without_dispatching_it() -> None:
     result = _run_shared_rollout(
         transport,
         tools,
-        rollout_config=config(
-            max_turns=1, excluded_tools=frozenset({"similarity"})
-        ),
+        rollout_config=config(max_turns=1, excluded_tools=frozenset({"similarity"})),
     )
 
     assert result.reason == "no_accepted_submission"
@@ -438,9 +458,7 @@ def test_shared_rollout_replays_malformed_tool_arguments_as_canonical_json() -> 
             ],
         }
     )
-    transport = FakeTransport(
-        [malformed, ControlledTermination("context_window_exceeded", "done")]
-    )
+    transport = FakeTransport([malformed, ControlledTermination("context_window_exceeded", "done")])
 
     result = _run_shared_rollout(transport)
 
@@ -448,9 +466,7 @@ def test_shared_rollout_replays_malformed_tool_arguments_as_canonical_json() -> 
         message for message in transport.requests[1] if message.get("role") == "assistant"
     )
     assert json.loads(replayed["tool_calls"][0]["function"]["arguments"]) == {}
-    raw_event = next(
-        event for event in result.state.events if event["event_type"] == "tool_call"
-    )
+    raw_event = next(event for event in result.state.events if event["event_type"] == "tool_call")
     assert raw_event["payload"]["raw_tool_call"]["function"]["arguments"] == "{\n"
 
 
@@ -488,14 +504,20 @@ def test_shared_rollout_marks_responses_output_limit_as_partial() -> None:
 @pytest.mark.parametrize("estimated_input_tokens", [40000, 220000])
 def test_output_limit_recovers_once_without_resetting_budgets(estimated_input_tokens):
     finish_reason = "length"
-    truncated = AssistantTurn({
-        "content": "Partial answer", "reasoning_content": "Partial plan",
-        "token_usage": {"output_tokens": 32768},
-    }, finish_reason=finish_reason)
+    truncated = AssistantTurn(
+        {
+            "content": "Partial answer",
+            "reasoning_content": "Partial plan",
+            "token_usage": {"output_tokens": 32768},
+        },
+        finish_reason=finish_reason,
+    )
     transport = FakeTransport([truncated, tool_turn("submit_pathway", {"steps": []})])
     tools = FakeTools([{"accepted": True, "stereo_aware_similarity_to_target": 1.0}])
     result = _run_shared_rollout(
-        transport, tools, rollout_config=config(max_turns=2),
+        transport,
+        tools,
+        rollout_config=config(max_turns=2),
         budget_provider=lambda *_: ContextBudgetSnapshot(262144, estimated_input_tokens, 32768),
     )
     assert result.reason == "terminal_submission" and not result.partial
@@ -522,7 +544,9 @@ def test_without_progress_feedback_an_output_limit_ends_the_rollout():
     truncated = AssistantTurn({"content": "Partial answer"}, finish_reason="length")
     transport = FakeTransport([truncated, tool_turn("submit_pathway", {"steps": []})])
     result = _run_shared_rollout(
-        transport, FakeTools([]), rollout_config=config(max_turns=4, budget_feedback=False),
+        transport,
+        FakeTools([]),
+        rollout_config=config(max_turns=4, budget_feedback=False),
     )
 
     assert result.reason == "max_tokens" and result.partial
@@ -532,15 +556,23 @@ def test_without_progress_feedback_an_output_limit_ends_the_rollout():
 
 def test_truncated_tool_batch_is_not_executed_and_keeps_reasoning_boundary():
     calls = [
-        {"id": "complete", "type": "function", "function": {
-            "name": "submit_pathway", "arguments": '{"steps": []}'}},
-        {"id": "partial", "type": "function", "function": {
-            "name": "simulate_reaction", "arguments": '{"reaction_id":'}},
+        {
+            "id": "complete",
+            "type": "function",
+            "function": {"name": "submit_pathway", "arguments": '{"steps": []}'},
+        },
+        {
+            "id": "partial",
+            "type": "function",
+            "function": {"name": "simulate_reaction", "arguments": '{"reaction_id":'},
+        },
     ]
-    transport = FakeTransport([
-        AssistantTurn({"tool_calls": calls, "reasoning_content": "Keep plan"}, "length"),
-        tool_turn("submit_pathway", {"steps": []}),
-    ])
+    transport = FakeTransport(
+        [
+            AssistantTurn({"tool_calls": calls, "reasoning_content": "Keep plan"}, "length"),
+            tool_turn("submit_pathway", {"steps": []}),
+        ]
+    )
     tools = FakeTools([{"accepted": True, "stereo_aware_similarity_to_target": 1.0}])
     result = _run_shared_rollout(transport, tools)
     assert tools.calls == ["submit_pathway"]
@@ -562,11 +594,16 @@ def test_truncated_tool_batch_is_not_executed_and_keeps_reasoning_boundary():
 def test_reasoning_only_recovery_keeps_work_from_earlier_tool_turns():
     search = tool_turn("search_building_blocks", {"query": "CCO"})
     search.message["reasoning_content"] = "First plan before search"
-    transport = FakeTransport([
-        search, AssistantTurn({"reasoning_content": "Continue plan after search"}, "length"),
-        tool_turn("submit_pathway", {"steps": []}),
-    ])
-    tools = FakeTools([{"matches": []}, {"accepted": True, "stereo_aware_similarity_to_target": 1.0}])
+    transport = FakeTransport(
+        [
+            search,
+            AssistantTurn({"reasoning_content": "Continue plan after search"}, "length"),
+            tool_turn("submit_pathway", {"steps": []}),
+        ]
+    )
+    tools = FakeTools(
+        [{"matches": []}, {"accepted": True, "stereo_aware_similarity_to_target": 1.0}]
+    )
     result = _run_shared_rollout(transport, tools)
     assistants = [m for m in transport.requests[2] if m["role"] == "assistant"]
     assert "First plan before search" in assistants[0]["content"]
@@ -600,18 +637,28 @@ def test_output_limit_retry_is_bounded_across_checkpoint_resume_and_keeps_best_r
 
     def checkpoint(_event, next_turn):
         if next_turn == 2:
-            saved.update(copy.deepcopy({
-                "messages": state.messages, "events": state.events,
-                "policy": state.policy.checkpoint_fields(), "assistant_turns": state.assistant_turns,
-            }))
+            saved.update(
+                copy.deepcopy(
+                    {
+                        "messages": state.messages,
+                        "events": state.events,
+                        "policy": state.policy.checkpoint_fields(),
+                        "assistant_turns": state.assistant_turns,
+                    }
+                )
+            )
 
-    transport = FakeTransport([
-        tool_turn("submit_pathway", {"steps": []}),
-        AssistantTurn({"reasoning_content": "Improve analogue"}, "length"),
-        RuntimeError("network interrupted"),
-    ])
+    transport = FakeTransport(
+        [
+            tool_turn("submit_pathway", {"steps": []}),
+            AssistantTurn({"reasoning_content": "Improve analogue"}, "length"),
+            RuntimeError("network interrupted"),
+        ]
+    )
     with pytest.raises(RuntimeError, match="network interrupted"):
-        _run_shared_rollout(transport, FakeTools([analogue]), state=state, event_callback=checkpoint)
+        _run_shared_rollout(
+            transport, FakeTools([analogue]), state=state, event_callback=checkpoint
+        )
     assert saved["policy"]["output_limit_recovery_used"]
     saved["policy"] = RolloutPolicyState.from_checkpoint(saved["policy"])
     restored = RolloutState(**saved)
@@ -630,9 +677,7 @@ def test_shared_rollout_returns_partial_result_when_tool_execution_times_out() -
         async def execute(self, calls, *, target_smiles, assistant_turn):
             raise ControlledTermination("tool_timeout", "chemistry call timed out")
 
-    transport = FakeTransport(
-        [tool_turn("similarity", {"smiles_a": "CC", "smiles_b": "CO"})]
-    )
+    transport = FakeTransport([tool_turn("similarity", {"smiles_a": "CC", "smiles_b": "CO"})])
 
     result = _run_shared_rollout(transport, TimeoutTools([]))
 
@@ -702,7 +747,9 @@ def test_shared_rollout_requests_and_accepts_a_tool_limit_final_submission() -> 
 def test_benchmark_empty_replies_still_obey_turn_budget() -> None:
     transport = FakeTransport([AssistantTurn({"content": ""}, "stop") for _ in range(3)])
 
-    result = _run_shared_rollout(transport, rollout_config=config(stop_condition="exact", max_turns=3))
+    result = _run_shared_rollout(
+        transport, rollout_config=config(stop_condition="exact", max_turns=3)
+    )
 
     assert len(transport.requests) == result.state.assistant_turns == 3
     assert result.state.policy.total_tool_calls == 0
@@ -712,4 +759,6 @@ def test_benchmark_empty_replies_still_obey_turn_budget() -> None:
 
 def test_unlimited_turns_require_a_budget_provider():
     with pytest.raises(ValueError, match="budget_provider"):
-        _run_shared_rollout(FakeTransport([]), rollout_config=config(max_turns=None, max_model_len=50000))
+        _run_shared_rollout(
+            FakeTransport([]), rollout_config=config(max_turns=None, max_model_len=50000)
+        )

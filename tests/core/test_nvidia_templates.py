@@ -63,10 +63,13 @@ def test_nvidia_rule_products(tools, reaction_id, reactants, expected):
 
 
 # Reverse simulation gives exact precursors: no radicals on the alcohol carbon or aniline nitrogen.
-@pytest.mark.parametrize(("reaction_id", "product", "precursors"), [
-    ("nvidia:R003", "CC(=O)SCc1ccccc1", ("OCc1ccccc1", "CC(=O)S")),
-    ("nvidia:R003", "O=C1c2ccccc2C(=O)N1Cc1ccccc1", ("OCc1ccccc1", "O=C1NC(=O)c2ccccc21")),
-])
+@pytest.mark.parametrize(
+    ("reaction_id", "product", "precursors"),
+    [
+        ("nvidia:R003", "CC(=O)SCc1ccccc1", ("OCc1ccccc1", "CC(=O)S")),
+        ("nvidia:R003", "O=C1c2ccccc2C(=O)N1Cc1ccccc1", ("OCc1ccccc1", "O=C1NC(=O)c2ccccc21")),
+    ],
+)
 def test_reverse_precursors_are_exact(tools, reaction_id, product, precursors):
     reverse = tools.simulate_reverse_reaction(reaction_id, product, include_near=False)
     assert {tuple(c["reactants"]) for c in reverse["candidate_reactant_sets"]} == {
@@ -75,14 +78,18 @@ def test_reverse_precursors_are_exact(tools, reaction_id, product, precursors):
 
 
 def test_aniline_rule_recovers_a_primary_aniline_in_reverse(tools):
-    reverse = tools.simulate_reverse_reaction("nvidia:R001", "c1ccc(NCc2ccccc2)cc1", include_near=False)
+    reverse = tools.simulate_reverse_reaction(
+        "nvidia:R001", "c1ccc(NCc2ccccc2)cc1", include_near=False
+    )
     anilines = {c["reactants"][0] for c in reverse["candidate_reactant_sets"]}
     assert _canonical("Nc1ccccc1") in anilines
 
 
 def test_mitsunobu_rule_inverts_the_alcohol_carbon_in_reverse(tools):
     # (S)-2-phenoxybutane comes from (R)-butan-2-ol under Mitsunobu inversion.
-    reverse = tools.simulate_reverse_reaction("nvidia:R003", "CC[C@H](C)Oc1ccccc1", include_near=False)
+    reverse = tools.simulate_reverse_reaction(
+        "nvidia:R003", "CC[C@H](C)Oc1ccccc1", include_near=False
+    )
     assert {tuple(c["reactants"]) for c in reverse["candidate_reactant_sets"]} == {
         (_canonical("C[C@@H](O)CC"), _canonical("Oc1ccccc1"))
     }

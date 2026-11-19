@@ -94,7 +94,10 @@ def _tool_event(kind, name, target, payload):
 
 @pytest.mark.parametrize("kinds", list(itertools.product(CALLS, repeat=3)), ids="-".join)
 def test_replayed_trace_scores_the_submission_the_run_selected(
-    tools, db_path, tmp_path, kinds,
+    tools,
+    db_path,
+    tmp_path,
+    kinds,
 ):
     """Without a selected_submission event, the evaluator must still score the run's choice."""
 
@@ -102,7 +105,12 @@ def test_replayed_trace_scores_the_submission_the_run_selected(
     config = RolloutPolicyConfig(stop_condition="model")
     state = RolloutPolicyState()
     events = [
-        {"event_type": "message", "role": "user", "target_smiles": target, "payload": {"text": target}}
+        {
+            "event_type": "message",
+            "role": "user",
+            "target_smiles": target,
+            "payload": {"text": target},
+        }
     ]
     for index, kind in enumerate(kinds):
         raw = CALLS[kind]
@@ -130,8 +138,12 @@ def test_replayed_trace_scores_the_submission_the_run_selected(
             outcome = "ok"
         if kind != "over_budget":
             handle_tool_result(
-                config, state, name="submit_pathway", arguments=call.dispatch_arguments,
-                result=result, target_smiles=target,
+                config,
+                state,
+                name="submit_pathway",
+                arguments=call.dispatch_arguments,
+                result=result,
+                target_smiles=target,
             )
         events += [
             _tool_event("tool_call", "submit_pathway", target, call.event_payload),
@@ -145,10 +157,15 @@ def test_replayed_trace_scores_the_submission_the_run_selected(
         # The run executed no submission, so there is nothing to score.
         assert replayed["has_final_submission"] is False
         return
-    with_selection = [*events, selected_submission_event(
-        task={"target_smiles": target}, submission=submission,
-        submission_arguments=arguments, reason="test",
-    )]
+    with_selection = [
+        *events,
+        selected_submission_event(
+            task={"target_smiles": target},
+            submission=submission,
+            submission_arguments=arguments,
+            reason="test",
+        ),
+    ]
 
     selected = _evaluate(tmp_path / "selected.jsonl", with_selection, db_path, target)
 

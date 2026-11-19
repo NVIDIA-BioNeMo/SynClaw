@@ -12,7 +12,9 @@ import pytest
 
 # Isolate tests from the user's screen config and real watchlist. Screening tests
 # opt in explicitly; other tests exercise the default without requiring downloads.
-os.environ["SYNCLAW_TOXICITY_WATCHLIST"] = str(Path(__file__).parent / "fixtures" / "toxicity_watchlist.txt")
+os.environ["SYNCLAW_TOXICITY_WATCHLIST"] = str(
+    Path(__file__).parent / "fixtures" / "toxicity_watchlist.txt"
+)
 os.environ.pop("SYNCLAW_TOXICITY_SCREEN", None)
 
 

@@ -44,8 +44,11 @@ def build_initial_messages(
 
     config = config or RolloutPolicyConfig()
     limits = [
-        *([f"{config.max_tool_calls} total tool call{'' if config.max_tool_calls == 1 else 's'}"]
-          if config.max_tool_calls > 0 else []),
+        *(
+            [f"{config.max_tool_calls} total tool call{'' if config.max_tool_calls == 1 else 's'}"]
+            if config.max_tool_calls > 0
+            else []
+        ),
         *([f"{config.max_turns} assistant turns"] if config.max_turns is not None else []),
     ]
     budget = [

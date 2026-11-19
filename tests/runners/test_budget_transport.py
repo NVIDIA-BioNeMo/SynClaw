@@ -65,7 +65,11 @@ def test_hosted_requests_send_the_output_cap_the_loop_chose(monkeypatch, api_mod
         requests.append(kwargs)
         return {"status": "completed", "output": [], "content": [], "choices": []}
 
-    function = {"chat": "chat_completion", "responses": "responses_completion", "messages": "anthropic_completion"}[api_mode]
+    function = {
+        "chat": "chat_completion",
+        "responses": "responses_completion",
+        "messages": "anthropic_completion",
+    }[api_mode]
     monkeypatch.setattr(model_runner, function, complete)
     asyncio.run(transport.complete([], tools=[], tool_choice="auto", max_output_tokens=13952))
     key = "max_output_tokens" if api_mode == "responses" else "max_tokens"
@@ -81,17 +85,26 @@ def test_hosted_provider_errors_still_propagate(monkeypatch, api_mode):
         assert kwargs.get("max_output_tokens", kwargs.get("max_tokens")) == 32768
         raise error
 
-    function = {"chat": "chat_completion", "responses": "responses_completion", "messages": "anthropic_completion"}[api_mode]
+    function = {
+        "chat": "chat_completion",
+        "responses": "responses_completion",
+        "messages": "anthropic_completion",
+    }[api_mode]
     monkeypatch.setattr(model_runner, function, rejected)
     with pytest.raises(RuntimeError) as caught:
         asyncio.run(transport.complete([], tools=[], tool_choice="auto", max_output_tokens=32768))
     assert caught.value is error
 
 
-@pytest.mark.parametrize("api_mode,state_mode", [
-    ("chat", "full"), ("responses", "full"),
-    ("responses", "previous_id"), ("messages", "full"),
-])
+@pytest.mark.parametrize(
+    "api_mode,state_mode",
+    [
+        ("chat", "full"),
+        ("responses", "full"),
+        ("responses", "previous_id"),
+        ("messages", "full"),
+    ],
+)
 def test_tool_feedback_preserves_native_reasoning_and_resume(monkeypatch, api_mode, state_mode):
     initial = [{"role": "user", "content": "plan"}]
     thinking = {"type": "thinking", "thinking": "keep my plan", "signature": "signed-unchanged"}
@@ -100,35 +113,65 @@ def test_tool_feedback_preserves_native_reasoning_and_resume(monkeypatch, api_mo
         {"type": "function_call", "call_id": key, "name": "search", "arguments": "{}"}
         for key in ("a", "b")
     ]
-    native_reply = [thinking, *[
-        {"type": "tool_use", "id": key, "name": "search", "input": {}} for key in ("a", "b")
-    ]]
-    response = {"id": "r1", "status": "completed", "output": [opaque, *calls],
-                "content": native_reply, "usage": {"input_tokens": 5000, "output_tokens": 1000}}
+    native_reply = [
+        thinking,
+        *[{"type": "tool_use", "id": key, "name": "search", "input": {}} for key in ("a", "b")],
+    ]
+    response = {
+        "id": "r1",
+        "status": "completed",
+        "output": [opaque, *calls],
+        "content": native_reply,
+        "usage": {"input_tokens": 5000, "output_tokens": 1000},
+    }
     captured = []
 
     def complete(**kwargs):
         captured.append(copy.deepcopy(kwargs))
         return response
 
-    function = {"chat": "chat_completion", "responses": "responses_completion", "messages": "anthropic_completion"}[api_mode]
+    function = {
+        "chat": "chat_completion",
+        "responses": "responses_completion",
+        "messages": "anthropic_completion",
+    }[api_mode]
     monkeypatch.setattr(model_runner, function, complete)
     transport = _transport(
-        api_mode, state_mode, responses_input_history=copy.deepcopy(initial),
+        api_mode,
+        state_mode,
+        responses_input_history=copy.deepcopy(initial),
         responses_pending_input=copy.deepcopy(initial),
         anthropic_messages=[model_runner.anthropic_text_message("plan")],
     )
     asyncio.run(transport.complete(initial, tools=[], tool_choice="auto", max_output_tokens=32768))
-    messages = [*initial, {"role": "assistant", "content": "", "reasoning_content": "keep my plan",
-                          "tool_calls": [{"id": c["call_id"], "type": "function", "function": {
-                              "name": "search", "arguments": "{}"}} for c in calls]}]
+    messages = [
+        *initial,
+        {
+            "role": "assistant",
+            "content": "",
+            "reasoning_content": "keep my plan",
+            "tool_calls": [
+                {
+                    "id": c["call_id"],
+                    "type": "function",
+                    "function": {"name": "search", "arguments": "{}"},
+                }
+                for c in calls
+            ],
+        },
+    ]
     for key in ("a", "b"):
         messages.append({"role": "tool", "tool_call_id": key, "content": '{"result":"CCO"}'})
         transport.append_tool(argparse.Namespace(call_id=key), '{"result":"CCO"}')
     before = copy.deepcopy(transport.checkpoint_fields())
     content, snapshot, status = prepare_budget_feedback(
-        transport.budget_snapshot, messages, [], BudgetFeedbackState(262144, 32768), turn_index=1,
-        turns_remaining=79, tool_calls_remaining=148,
+        transport.budget_snapshot,
+        messages,
+        [],
+        BudgetFeedbackState(262144, 32768),
+        turn_index=1,
+        turns_remaining=79,
+        tool_calls_remaining=148,
     )
     assert status == "emitted" and snapshot.input_tokens is not None
     assert transport.checkpoint_fields() == before
@@ -165,28 +208,65 @@ def test_tool_feedback_preserves_native_reasoning_and_resume(monkeypatch, api_mo
         assert history[1]["reasoning_content"] == "keep my plan"
 
 
-@pytest.mark.parametrize("api_mode,state_mode", [
-    ("chat", "full"), ("responses", "full"),
-    ("responses", "previous_id"), ("messages", "full"),
-])
+@pytest.mark.parametrize(
+    "api_mode,state_mode",
+    [
+        ("chat", "full"),
+        ("responses", "full"),
+        ("responses", "previous_id"),
+        ("messages", "full"),
+    ],
+)
 @pytest.mark.parametrize("with_calls", [True, False])
-def test_output_limit_recovery_preserves_provider_history(monkeypatch, api_mode, state_mode, with_calls):
+def test_output_limit_recovery_preserves_provider_history(
+    monkeypatch, api_mode, state_mode, with_calls
+):
     initial = [{"role": "user", "content": "plan"}]
     thinking = {"type": "thinking", "thinking": "keep my plan", "signature": "signed-unchanged"}
     opaque = {"type": "reasoning", "id": "rs1", "encrypted_content": "encrypted-unchanged"}
-    response_calls = [{"type": "function_call", "call_id": "partial", "name": "search_building_blocks",
-                       "arguments": '{"query":'}] if with_calls else []
-    native_reply = [thinking, *([
-        {"type": "tool_use", "id": "partial", "name": "search_building_blocks", "input": {}},
-    ] if with_calls else [])]
+    response_calls = (
+        [
+            {
+                "type": "function_call",
+                "call_id": "partial",
+                "name": "search_building_blocks",
+                "arguments": '{"query":',
+            }
+        ]
+        if with_calls
+        else []
+    )
+    native_reply = [
+        thinking,
+        *(
+            [
+                {
+                    "type": "tool_use",
+                    "id": "partial",
+                    "name": "search_building_blocks",
+                    "input": {},
+                },
+            ]
+            if with_calls
+            else []
+        ),
+    ]
     chat_reply = {"role": "assistant", "content": "", "reasoning_content": "keep my plan"}
     if with_calls:
-        chat_reply["tool_calls"] = [{"id": "partial", "type": "function", "function": {
-            "name": "search_building_blocks", "arguments": '{"query":'},
-        }]
+        chat_reply["tool_calls"] = [
+            {
+                "id": "partial",
+                "type": "function",
+                "function": {"name": "search_building_blocks", "arguments": '{"query":'},
+            }
+        ]
     truncated = {
-        "id": "r1", "status": "incomplete", "incomplete_details": {"reason": "max_output_tokens"},
-        "output": [opaque, *response_calls], "content": native_reply, "stop_reason": "max_tokens",
+        "id": "r1",
+        "status": "incomplete",
+        "incomplete_details": {"reason": "max_output_tokens"},
+        "output": [opaque, *response_calls],
+        "content": native_reply,
+        "stop_reason": "max_tokens",
         "choices": [{"message": chat_reply, "finish_reason": "length"}],
         "usage": {"input_tokens": 5000, "output_tokens": 32768},
     }
@@ -198,10 +278,16 @@ def test_output_limit_recovery_preserves_provider_history(monkeypatch, api_mode,
             return truncated
         return {"id": "r2", "status": "completed", "output": [], "content": [], "choices": []}
 
-    function = {"chat": "chat_completion", "responses": "responses_completion", "messages": "anthropic_completion"}[api_mode]
+    function = {
+        "chat": "chat_completion",
+        "responses": "responses_completion",
+        "messages": "anthropic_completion",
+    }[api_mode]
     monkeypatch.setattr(model_runner, function, complete)
     transport = _transport(
-        api_mode, state_mode, responses_input_history=copy.deepcopy(initial),
+        api_mode,
+        state_mode,
+        responses_input_history=copy.deepcopy(initial),
         responses_pending_input=copy.deepcopy(initial),
         anthropic_messages=[model_runner.anthropic_text_message("plan")],
     )
@@ -210,12 +296,16 @@ def test_output_limit_recovery_preserves_provider_history(monkeypatch, api_mode,
         async def execute(self, *args, **kwargs):
             raise AssertionError("Truncated calls must not execute")
 
-    result = asyncio.run(run_rollout(
-        task=RolloutTask("test", "CCO", tuple(initial)),
-        config=RolloutPolicyConfig(max_turns=2, turn_warning_remaining=0),
-        transport=transport, tool_executor=NoTools(), tool_schemas=[],
-        budget_provider=transport.budget_snapshot,
-    ))
+    result = asyncio.run(
+        run_rollout(
+            task=RolloutTask("test", "CCO", tuple(initial)),
+            config=RolloutPolicyConfig(max_turns=2, turn_warning_remaining=0),
+            transport=transport,
+            tool_executor=NoTools(),
+            tool_schemas=[],
+            budget_provider=transport.budget_snapshot,
+        )
+    )
     assert result.state.assistant_turns == 2
     assert result.state.policy.total_tool_calls == 0
     assert result.state.policy.output_limit_recovery_used
@@ -225,7 +315,7 @@ def test_output_limit_recovery_preserves_provider_history(monkeypatch, api_mode,
     if api_mode == "responses":
         history = request["input_items"]
         if state_mode == "full":
-            assert history[1:2 + len(response_calls)] == [opaque, *response_calls]
+            assert history[1 : 2 + len(response_calls)] == [opaque, *response_calls]
         else:
             assert request["previous_response_id"] == "r1"
         reply = history[-1]
@@ -235,7 +325,9 @@ def test_output_limit_recovery_preserves_provider_history(monkeypatch, api_mode,
             assert "only output-limit recovery attempt" in reply["output"]
         else:
             assert reply["role"] == "user"
-            assert any("only output-limit recovery attempt" in m.get("content", "") for m in history)
+            assert any(
+                "only output-limit recovery attempt" in m.get("content", "") for m in history
+            )
     elif api_mode == "messages":
         history = request["messages"]
         assert history[1]["content"] == native_reply
@@ -266,7 +358,9 @@ def test_recovery_request_is_clipped_to_the_context_it_leaves(monkeypatch):
         return {"choices": [{"message": {"content": "partial"}, "finish_reason": "length"}]}
 
     def budget(messages, tools):
-        recovering = any("only output-limit recovery attempt" in m.get("content", "") for m in messages)
+        recovering = any(
+            "only output-limit recovery attempt" in m.get("content", "") for m in messages
+        )
         return ContextBudgetSnapshot(262144, 240000 if recovering else 220000, 32768)
 
     monkeypatch.setattr(model_runner, "chat_completion", complete)
@@ -276,17 +370,24 @@ def test_recovery_request_is_clipped_to_the_context_it_leaves(monkeypatch):
         async def execute(self, *args, **kwargs):
             raise AssertionError("No tools expected")
 
-    result = asyncio.run(run_rollout(
-        task=RolloutTask("test", "CCO", ({"role": "user", "content": "plan"},)),
-        config=RolloutPolicyConfig(max_turns=4, turn_warning_remaining=0, max_model_len=262144),
-        transport=transport, tool_executor=NoTools(), tool_schemas=[], budget_provider=budget,
-    ))
+    result = asyncio.run(
+        run_rollout(
+            task=RolloutTask("test", "CCO", ({"role": "user", "content": "plan"},)),
+            config=RolloutPolicyConfig(max_turns=4, turn_warning_remaining=0, max_model_len=262144),
+            transport=transport,
+            tool_executor=NoTools(),
+            tool_schemas=[],
+            budget_provider=budget,
+        )
+    )
     # The cap is recalculated after the recovery note is appended.
     assert [r["max_tokens"] for r in requests] == [32768, 262144 - 240000 - 8192]
     # The recovery's cap was clipped to the context left, so hitting it means the context ran out.
     assert result.partial and result.reason == "context_window_exceeded"
     assert result.state.assistant_turns == 2
-    request_budgets = [e["payload"] for e in result.state.events if e["event_type"] == "request_budget"]
+    request_budgets = [
+        e["payload"] for e in result.state.events if e["event_type"] == "request_budget"
+    ]
     assert [b["request_output_tokens"] for b in request_budgets] == [32768, 13952]
     assert all(b["configured_output_tokens"] == 32768 for b in request_budgets)
 
@@ -380,15 +481,27 @@ def test_server_managed_history_without_usage_is_unknown():
 def test_full_replay_keeps_feedback_after_encrypted_reasoning_and_checkpoint(monkeypatch):
     initial = [{"role": "user", "content": "plan"}]
     transport = _transport(
-        "responses", "full", responses_pending_input=list(initial),
+        "responses",
+        "full",
+        responses_pending_input=list(initial),
         responses_input_history=list(initial),
     )
-    responses = iter([
-        {"id": "r1", "output": [{
-            "type": "reasoning", "id": "rs1", "encrypted_content": "ciphertext" * 1000,
-        }], "usage": {"input_tokens": 5000, "output_tokens": 1000}},
-        {"id": "r2", "output": [], "usage": {"input_tokens": 7000, "output_tokens": 100}},
-    ])
+    responses = iter(
+        [
+            {
+                "id": "r1",
+                "output": [
+                    {
+                        "type": "reasoning",
+                        "id": "rs1",
+                        "encrypted_content": "ciphertext" * 1000,
+                    }
+                ],
+                "usage": {"input_tokens": 5000, "output_tokens": 1000},
+            },
+            {"id": "r2", "output": [], "usage": {"input_tokens": 7000, "output_tokens": 100}},
+        ]
+    )
     monkeypatch.setattr(model_runner, "responses_completion", lambda **kwargs: next(responses))
     asyncio.run(transport.complete(initial, tools=[], tool_choice="auto", max_output_tokens=32768))
     transport.append_tool(argparse.Namespace(call_id="call1"), '{"result": "CCO"}')
@@ -396,7 +509,11 @@ def test_full_replay_keeps_feedback_after_encrypted_reasoning_and_checkpoint(mon
 
     pending = [{"role": "tool", "tool_call_id": "call1", "content": '{"result": "CCO"}'}]
     content, snapshot, status = prepare_budget_feedback(
-        transport.budget_snapshot, pending, [], BudgetFeedbackState(), turn_index=1,
+        transport.budget_snapshot,
+        pending,
+        [],
+        BudgetFeedbackState(),
+        turn_index=1,
     )
     assert status == "emitted"
     assert "~" in content and "context tokens." in content
@@ -407,7 +524,9 @@ def test_full_replay_keeps_feedback_after_encrypted_reasoning_and_checkpoint(mon
     attached = transport.budget_snapshot([], [])
     fields = json.loads(json.dumps(transport.checkpoint_fields(), sort_keys=True))
     resumed = _transport(
-        "responses", "full", responses_input_history=fields["responses_input_history"],
+        "responses",
+        "full",
+        responses_input_history=fields["responses_input_history"],
         responses_pending_input=fields["responses_pending_input"],
         budget_estimator=fields["token_budget_estimator"],
     )
@@ -479,10 +598,16 @@ def test_budget_cli_and_checkpoint_settings():
     assert model_runner.checkpoint_matches_run(checkpoint, args, task, config)
     # The restored prompt states these budgets, so a resume under others is refused.
     for field, value in (
-        ("max_model_len", 100000), ("budget_feedback", True), ("max_turns", 40),
-        ("max_tool_calls", 75), ("max_tokens", 16384), ("context_safety_margin_fraction", 0.0),
+        ("max_model_len", 100000),
+        ("budget_feedback", True),
+        ("max_turns", 40),
+        ("max_tool_calls", 75),
+        ("max_tokens", 16384),
+        ("context_safety_margin_fraction", 0.0),
     ):
-        assert not model_runner.checkpoint_matches_run({**checkpoint, field: value}, args, task, config)
+        assert not model_runner.checkpoint_matches_run(
+            {**checkpoint, field: value}, args, task, config
+        )
     checkpoint["stop_condition"] = 1.0
     assert not model_runner.checkpoint_matches_run(checkpoint, args, task, config)
 
@@ -490,23 +615,53 @@ def test_budget_cli_and_checkpoint_settings():
 @pytest.mark.parametrize("api_mode", ["chat", "responses", "messages"])
 @pytest.mark.parametrize("enabled", [True, False])
 @pytest.mark.parametrize("max_tool_calls", [0, 150])
-def test_hosted_initial_budget_is_system_content_and_resume_preserves_it(tmp_path, monkeypatch, api_mode, enabled, max_tool_calls):
+def test_hosted_initial_budget_is_system_content_and_resume_preserves_it(
+    tmp_path, monkeypatch, api_mode, enabled, max_tool_calls
+):
     taskset = tmp_path / "tasks.jsonl"
-    taskset.write_text(json.dumps({
-        "task_id": "fixture", "target_smiles": "CCO", "system_prompt": "Plan syntheses.",
-        "question": "Make CCO.", "prompt_fingerprint": PROMPT_FINGERPRINT,
-    }) + "\n")
+    taskset.write_text(
+        json.dumps(
+            {
+                "task_id": "fixture",
+                "target_smiles": "CCO",
+                "system_prompt": "Plan syntheses.",
+                "question": "Make CCO.",
+                "prompt_fingerprint": PROMPT_FINGERPRINT,
+            }
+        )
+        + "\n"
+    )
     parser = argparse.ArgumentParser()
     model_runner.add_arguments(parser)
     argv = [
-        "--model", "fixture", "--api-mode", api_mode, "--responses-state-mode", "full",
-        "--base-url", "https://example.test/v1",
-        "--responses-url", "https://example.test/v1/responses",
-        "--messages-url", "https://example.test/v1/messages",
-        "--taskset", str(taskset), "--db", str(tmp_path / "unused.sqlite"),
-        "--trace", str(tmp_path / "trace.jsonl"), "--checkpoint", str(tmp_path / "checkpoint.json"),
-        "--max-model-len", "50000", "--max-tokens", "2000",
-        "--max-turns", "37", "--max-tool-calls", str(max_tool_calls),
+        "--model",
+        "fixture",
+        "--api-mode",
+        api_mode,
+        "--responses-state-mode",
+        "full",
+        "--base-url",
+        "https://example.test/v1",
+        "--responses-url",
+        "https://example.test/v1/responses",
+        "--messages-url",
+        "https://example.test/v1/messages",
+        "--taskset",
+        str(taskset),
+        "--db",
+        str(tmp_path / "unused.sqlite"),
+        "--trace",
+        str(tmp_path / "trace.jsonl"),
+        "--checkpoint",
+        str(tmp_path / "checkpoint.json"),
+        "--max-model-len",
+        "50000",
+        "--max-tokens",
+        "2000",
+        "--max-turns",
+        "37",
+        "--max-tool-calls",
+        str(max_tool_calls),
     ]
     if not enabled:
         argv.append("--no-budget-feedback")
@@ -519,7 +674,11 @@ def test_hosted_initial_budget_is_system_content_and_resume_preserves_it(tmp_pat
         requests.append(copy.deepcopy(kwargs))
         raise RuntimeError("fixture interruption")
 
-    function = {"chat": "chat_completion", "responses": "responses_completion", "messages": "anthropic_completion"}[api_mode]
+    function = {
+        "chat": "chat_completion",
+        "responses": "responses_completion",
+        "messages": "anthropic_completion",
+    }[api_mode]
     monkeypatch.setattr(model_runner, function, fail_request)
     # The second invocation resumes the first failed request from its checkpoint.
     for _ in range(2):
@@ -549,19 +708,45 @@ def test_hosted_initial_budget_is_system_content_and_resume_preserves_it(tmp_pat
 
 def test_task_budgets_set_the_prompt_request_and_checkpoint(tmp_path, monkeypatch):
     taskset = tmp_path / "tasks.jsonl"
-    taskset.write_text(json.dumps({
-        "task_id": "fixture", "target_smiles": "CCO", "system_prompt": "Plan syntheses.",
-        "question": "Make CCO.", "prompt_fingerprint": PROMPT_FINGERPRINT,
-        "max_turns": 5, "max_tool_calls": 7, "max_model_len": 40000, "max_tokens": 1000,
-        "budget_feedback": False,
-    }) + "\n")
+    taskset.write_text(
+        json.dumps(
+            {
+                "task_id": "fixture",
+                "target_smiles": "CCO",
+                "system_prompt": "Plan syntheses.",
+                "question": "Make CCO.",
+                "prompt_fingerprint": PROMPT_FINGERPRINT,
+                "max_turns": 5,
+                "max_tool_calls": 7,
+                "max_model_len": 40000,
+                "max_tokens": 1000,
+                "budget_feedback": False,
+            }
+        )
+        + "\n"
+    )
     parser = argparse.ArgumentParser()
     model_runner.add_arguments(parser)
-    args = parser.parse_args([
-        "--model", "fixture", "--api-mode", "chat", "--taskset", str(taskset),
-        "--db", str(tmp_path / "unused.sqlite"), "--trace", str(tmp_path / "trace.jsonl"),
-        "--checkpoint", str(tmp_path / "checkpoint.json"), "--max-model-len", "50000", "--max-tokens", "2000",
-    ])
+    args = parser.parse_args(
+        [
+            "--model",
+            "fixture",
+            "--api-mode",
+            "chat",
+            "--taskset",
+            str(taskset),
+            "--db",
+            str(tmp_path / "unused.sqlite"),
+            "--trace",
+            str(tmp_path / "trace.jsonl"),
+            "--checkpoint",
+            str(tmp_path / "checkpoint.json"),
+            "--max-model-len",
+            "50000",
+            "--max-tokens",
+            "2000",
+        ]
+    )
     monkeypatch.setattr(model_runner, "resolve_api_key", lambda *args, **kwargs: "fixture-key")
     monkeypatch.setattr(prompts, "validate_model_run_database", lambda *args, **kwargs: None)
     requests = []
@@ -580,8 +765,14 @@ def test_task_budgets_set_the_prompt_request_and_checkpoint(tmp_path, monkeypatc
     assert "Each response is capped at 1000" in system
     assert requests[0]["max_tokens"] == 1000
     checkpoint = json.loads((tmp_path / "checkpoint.json").read_text())
-    assert {name: checkpoint[name] for name in ("max_turns", "max_tool_calls", "max_model_len", "max_tokens")} == {
-        "max_turns": 5, "max_tool_calls": 7, "max_model_len": 40000, "max_tokens": 1000,
+    assert {
+        name: checkpoint[name]
+        for name in ("max_turns", "max_tool_calls", "max_model_len", "max_tokens")
+    } == {
+        "max_turns": 5,
+        "max_tool_calls": 7,
+        "max_model_len": 40000,
+        "max_tokens": 1000,
     }
     assert checkpoint["budget_feedback"] is False
     # A task may not ask for more context than the runner allows.

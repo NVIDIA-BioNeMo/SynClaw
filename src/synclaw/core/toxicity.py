@@ -56,19 +56,25 @@ class ToxicityConfig:
 
     def __post_init__(self) -> None:
         if self.mode not in MODES:
-            raise ToxicityConfigError(f"toxicity screen mode must be one of {MODES}, got {self.mode!r}")
+            raise ToxicityConfigError(
+                f"toxicity screen mode must be one of {MODES}, got {self.mode!r}"
+            )
         if not 0.0 <= self.threshold <= 1.0:
             raise ToxicityConfigError("toxicity screen threshold must be between 0 and 1")
 
     @classmethod
-    def resolve(cls, mode: str | None = None, watchlist: str | Path | None = None) -> ToxicityConfig:
+    def resolve(
+        cls, mode: str | None = None, watchlist: str | Path | None = None
+    ) -> ToxicityConfig:
         """Build the config from explicit values, then the environment, then defaults."""
 
         raw_threshold = os.environ.get(ENV_THRESHOLD) or DEFAULT_THRESHOLD
         try:
             threshold = float(raw_threshold)
         except ValueError:
-            raise ToxicityConfigError(f"{ENV_THRESHOLD} must be a number, got {raw_threshold!r}") from None
+            raise ToxicityConfigError(
+                f"{ENV_THRESHOLD} must be a number, got {raw_threshold!r}"
+            ) from None
         return cls(
             mode=(mode or os.environ.get(ENV_MODE) or MODE_OFF).strip().lower(),
             watchlist=Path(watchlist or os.environ.get(ENV_WATCHLIST) or DEFAULT_WATCHLIST),
@@ -247,7 +253,9 @@ def _load_fingerprints(path: Path) -> tuple[Any, ...]:
         )
     lines = (line.strip() for line in path.read_text(encoding="utf-8").splitlines())
     mols = (Chem.MolFromSmiles(line) for line in lines if line)
-    fingerprints = tuple(chem.constitutional_morgan_fingerprint_from_mol(mol) for mol in mols if mol is not None)
+    fingerprints = tuple(
+        chem.constitutional_morgan_fingerprint_from_mol(mol) for mol in mols if mol is not None
+    )
     if not fingerprints:
         raise WatchlistUnavailable(f"Toxicity watchlist {path} holds no valid SMILES")
     return fingerprints

@@ -346,7 +346,8 @@ TOOL_NAMES = tuple(tool["function"]["name"] for tool in TOOL_SCHEMAS)
 REQUIRED_TOOL_NAMES = frozenset({"submit_pathway"})
 
 TOOL_ARGUMENT_SPECS: dict[str, dict[str, dict[str, Any]]] = {
-    tool["function"]["name"]: tool["function"]["parameters"].get("properties", {}) for tool in TOOL_SCHEMAS
+    tool["function"]["name"]: tool["function"]["parameters"].get("properties", {})
+    for tool in TOOL_SCHEMAS
 }
 TOOL_ARGUMENT_DEFAULTS: dict[str, dict[str, Any]] = {
     name: {key: spec["default"] for key, spec in specs.items() if "default" in spec}
@@ -388,8 +389,7 @@ def normalize_excluded_tools(
     if unknown:
         available = ", ".join(TOOL_NAMES)
         raise RuntimeError(
-            f"Unknown excluded tool(s): {', '.join(unknown)}. "
-            f"Available tools: {available}"
+            f"Unknown excluded tool(s): {', '.join(unknown)}. Available tools: {available}"
         )
     required = sorted(excluded & REQUIRED_TOOL_NAMES)
     if required:
@@ -420,12 +420,16 @@ def task_budget_overrides(task: dict[str, Any]) -> dict[str, int | bool | str]:
             if type(value) is not bool:
                 raise ValueError(f"Task {name} must be true or false, not {value!r}")
         elif value != UNLIMITED_BUDGET and (type(value) is not int or value <= 0):
-            raise ValueError(f"Task budget {name} must be a positive integer or 'inf', not {value!r}")
+            raise ValueError(
+                f"Task budget {name} must be a positive integer or 'inf', not {value!r}"
+            )
         overrides[name] = value
     return overrides
 
 
-def task_excluded_tools(task: dict[str, Any], excluded_tools: set[str] | frozenset[str]) -> set[str]:
+def task_excluded_tools(
+    task: dict[str, Any], excluded_tools: set[str] | frozenset[str]
+) -> set[str]:
     """Return the run's exclusions plus those the task row lists in ``excluded_tools``."""
 
     return normalize_excluded_tools(task.get("excluded_tools") or []) | set(excluded_tools)
@@ -435,28 +439,20 @@ def filter_chat_tool_schemas(excluded_tools: set[str]) -> list[dict[str, Any]]:
     """Return independent Chat schemas for the requested tool subset."""
 
     return deepcopy(
-        [
-            tool
-            for tool in TOOL_SCHEMAS
-            if tool["function"]["name"] not in excluded_tools
-        ]
+        [tool for tool in TOOL_SCHEMAS if tool["function"]["name"] not in excluded_tools]
     )
 
 
 def filter_responses_tool_schemas(excluded_tools: set[str]) -> list[dict[str, Any]]:
     """Return independent Responses schemas for the requested tool subset."""
 
-    return deepcopy(
-        [tool for tool in RESPONSES_TOOL_SCHEMAS if tool["name"] not in excluded_tools]
-    )
+    return deepcopy([tool for tool in RESPONSES_TOOL_SCHEMAS if tool["name"] not in excluded_tools])
 
 
 def filter_messages_tool_schemas(excluded_tools: set[str]) -> list[dict[str, Any]]:
     """Return independent Anthropic Messages schemas for the requested tool subset."""
 
-    return deepcopy(
-        [tool for tool in MESSAGES_TOOL_SCHEMAS if tool["name"] not in excluded_tools]
-    )
+    return deepcopy([tool for tool in MESSAGES_TOOL_SCHEMAS if tool["name"] not in excluded_tools])
 
 
 def normalize_dispatch_arguments(

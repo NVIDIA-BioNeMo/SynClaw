@@ -28,7 +28,9 @@ def main(dist_dir: Path = Path("dist")) -> int:
         print(f"no wheel in {dist_dir}; run `uv build` first", file=sys.stderr)
         return 1
     if len(wheels) != 1:
-        print(f"expected exactly one wheel in {dist_dir}; remove stale builds first", file=sys.stderr)
+        print(
+            f"expected exactly one wheel in {dist_dir}; remove stale builds first", file=sys.stderr
+        )
         return 1
     with zipfile.ZipFile(wheels[0]) as wheel:
         shipped = set(wheel.namelist())
@@ -67,8 +69,7 @@ def read_version(source: str) -> str:
 
     for node in ast.parse(source).body:
         if isinstance(node, ast.Assign) and any(
-            isinstance(target, ast.Name) and target.id == "__version__"
-            for target in node.targets
+            isinstance(target, ast.Name) and target.id == "__version__" for target in node.targets
         ):
             value = ast.literal_eval(node.value)
             if isinstance(value, str):

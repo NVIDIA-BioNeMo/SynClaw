@@ -77,7 +77,7 @@ def retry_delay_seconds(attempt: int, body: str = "", headers: Any = None) -> fl
         match = re.search(r"wait\s+(\d+(?:\.\d+)?)\s+seconds?", body, flags=re.IGNORECASE)
         if match:
             parsed_retry_after = token_usage.float_or_none(match.group(1))
-    exponential = 10.0 * (2 ** attempt)
+    exponential = 10.0 * (2**attempt)
     return min(max(exponential, parsed_retry_after or 0.0), 120.0)
 
 
@@ -99,9 +99,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         default=providers.default_provider(),
         help="Provider preset for API transport and endpoint defaults",
     )
-    parser.add_argument(
-        "--taskset", help=f"Task set JSONL. Defaults to {DEFAULT_TASKSET}."
-    )
+    parser.add_argument("--taskset", help=f"Task set JSONL. Defaults to {DEFAULT_TASKSET}.")
     parser.add_argument(
         "--task-index", type=int, help="Zero-based task to run from the task set. Defaults to 0."
     )
@@ -159,8 +157,12 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         "--resume-checkpoint",
         help="Resume from a checkpoint JSON file. Defaults to --checkpoint when that file already exists.",
     )
-    parser.add_argument("--summary-output", help="Optional one-row evaluated summary CSV to write after the run")
-    parser.add_argument("--prompt-version", help="Optional prompt or harness label stored in --summary-output")
+    parser.add_argument(
+        "--summary-output", help="Optional one-row evaluated summary CSV to write after the run"
+    )
+    parser.add_argument(
+        "--prompt-version", help="Optional prompt or harness label stored in --summary-output"
+    )
     parser.add_argument("--max-turns", type=int, default=policy.DEFAULT_MAX_TURNS)
     parser.add_argument(
         "--max-tool-calls",
@@ -193,11 +195,14 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
-        "--max-tokens", type=_positive_token_limit, default=policy.DEFAULT_MAX_TOKENS,
+        "--max-tokens",
+        type=_positive_token_limit,
+        default=policy.DEFAULT_MAX_TOKENS,
         help="Output cap per response; a task's max_tokens overrides it",
     )
     parser.add_argument(
-        "--max-model-len", type=_positive_token_limit,
+        "--max-model-len",
+        type=_positive_token_limit,
         help=(
             "Context limit; each response's output is clipped to the context left. A task's "
             "max_model_len may lower it. Omitted when unknown, which disables clipping"
@@ -230,7 +235,11 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
             "as xhigh to Chat Completions and Responses endpoints."
         ),
     )
-    parser.add_argument("--temperature", type=float, help="Optional temperature; omitted by default to use provider default")
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        help="Optional temperature; omitted by default to use provider default",
+    )
     parser.add_argument(
         "--top-p",
         type=float,
@@ -269,11 +278,15 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
-        "--hide-building-block-id", type=int, action="append", default=[],
+        "--hide-building-block-id",
+        type=int,
+        action="append",
+        default=[],
         help="Hide this catalog BB ID for every input; repeat to exclude multiple IDs.",
     )
     parser.add_argument(
-        "--hide-building-block-similarity", type=float,
+        "--hide-building-block-similarity",
+        type=float,
         help="Hide stock with constitutional Morgan/Tanimoto similarity >= this cutoff [0, 1].",
     )
     parser.add_argument(
@@ -403,12 +416,16 @@ def run_model_from_args(args: argparse.Namespace) -> dict[str, Any]:
             or not isinstance(anthropic_messages, list)
             or not isinstance(anthropic_tool_results, list)
         ):
-            raise RuntimeError(f"Checkpoint conversation state is malformed: {resume_checkpoint_path}")
+            raise RuntimeError(
+                f"Checkpoint conversation state is malformed: {resume_checkpoint_path}"
+            )
         responses_previous_id = checkpoint.get("responses_previous_id")
         policy_state = policy.RolloutPolicyState.from_checkpoint(checkpoint)
         start_turn_index = int(checkpoint.get("next_turn_index") or 0)
         session_started_at = float(checkpoint.get("session_started_at") or session_started_at)
-        session_started_monotonic = time.monotonic() - float(checkpoint.get("runtime_seconds") or 0.0)
+        session_started_monotonic = time.monotonic() - float(
+            checkpoint.get("runtime_seconds") or 0.0
+        )
         write_trace(trace_path, trace_events)
     else:
         trace_events: list[dict[str, Any]] = []
@@ -529,10 +546,13 @@ def run_model_from_args(args: argparse.Namespace) -> dict[str, Any]:
         )
         if _hide_target(args) or _hidden_ids(args):
             trace_events.insert(
-                0, hidden_target_event(
-                    task["target_smiles"], hidden_ids,
-                    hide_target=_hide_target(args), similarity_threshold=tools.hidden_similarity,
-                )
+                0,
+                hidden_target_event(
+                    task["target_smiles"],
+                    hidden_ids,
+                    hide_target=_hide_target(args),
+                    similarity_threshold=tools.hidden_similarity,
+                ),
             )
         if target_screen_event:
             trace_events.insert(0, target_screen_event)
@@ -551,9 +571,7 @@ def run_model_from_args(args: argparse.Namespace) -> dict[str, Any]:
                 config=policy_config,
                 transport=transport,
                 budget_provider=transport.budget_snapshot,
-                tool_executor=LocalToolExecutor(
-                    tools, reaction_library=args.reaction_library
-                ),
+                tool_executor=LocalToolExecutor(tools, reaction_library=args.reaction_library),
                 tool_schemas=transport.tool_schemas,
                 state=rollout_state,
                 start_turn_index=start_turn_index,
@@ -636,7 +654,8 @@ class _HostedTransport:
 
     def _responses_history(self) -> list[dict[str, Any]]:
         return (
-            self.responses_input_history if self.args.responses_state_mode == "full"
+            self.responses_input_history
+            if self.args.responses_state_mode == "full"
             else self.responses_pending_input
         )
 
@@ -656,7 +675,9 @@ class _HostedTransport:
         history = [{k: v for k, v in row.items() if k in allowed} for row in messages]
         return {"messages": history, "tools": list(tools)}
 
-    def _native_last_input(self, native: dict[str, Any], message: dict[str, Any]) -> dict[str, Any] | None:
+    def _native_last_input(
+        self, native: dict[str, Any], message: dict[str, Any]
+    ) -> dict[str, Any] | None:
         """Replace only pending text/output, leaving reasoning and signatures intact."""
         if self.args.api_mode == "responses":
             if (
@@ -670,15 +691,23 @@ class _HostedTransport:
         elif self.args.api_mode == "messages" and native.get("role") == "user":
             blocks = native.get("content") or []
             if (
-                blocks and message["role"] == "tool"
+                blocks
+                and message["role"] == "tool"
                 and blocks[-1].get("type") == "tool_result"
                 and blocks[-1].get("tool_use_id") == message.get("tool_call_id")
             ):
-                return {**native, "content": [
-                    *blocks[:-1], {**blocks[-1], "content": message["content"]},
-                ]}
+                return {
+                    **native,
+                    "content": [
+                        *blocks[:-1],
+                        {**blocks[-1], "content": message["content"]},
+                    ],
+                }
             if blocks and message["role"] == "user" and blocks[-1].get("type") == "text":
-                return {**native, "content": [*blocks[:-1], {**blocks[-1], "text": message["content"]}]}
+                return {
+                    **native,
+                    "content": [*blocks[:-1], {**blocks[-1], "text": message["content"]}],
+                }
         return None
 
     def replace_last_input(self, message: dict[str, Any]) -> None:
@@ -741,10 +770,13 @@ class _HostedTransport:
                 tools=list(tools),
             )
             self.budget_estimator.observe(
-                budget_payload, response.get("usage"), server_managed=server_managed,
+                budget_payload,
+                response.get("usage"),
+                server_managed=server_managed,
                 replay_output=(
                     response.get("output") or []
-                    if self.args.responses_state_mode == "full" else None
+                    if self.args.responses_state_mode == "full"
+                    else None
                 ),
             )
             if self.args.responses_state_mode == "previous_id":
@@ -777,7 +809,9 @@ class _HostedTransport:
                 tools=list(tools),
             )
             self.budget_estimator.observe(
-                budget_payload, response.get("usage"), separate_cache_usage=True,
+                budget_payload,
+                response.get("usage"),
+                separate_cache_usage=True,
             )
             self.anthropic_messages.append(
                 {"role": "assistant", "content": response.get("content") or []}
@@ -818,24 +852,28 @@ class _HostedTransport:
             self.responses_input_history.append(message)
         elif self.args.api_mode == "messages":
             self._flush_anthropic_tool_results()
-            self.anthropic_messages.append(anthropic_text_message(str(message.get("content") or "")))
+            self.anthropic_messages.append(
+                anthropic_text_message(str(message.get("content") or ""))
+            )
 
     def append_tool(self, call: Any, result_json: str) -> None:
         if self.args.api_mode == "responses":
-            output = {"type": "function_call_output", "call_id": call.call_id, "output": result_json}
+            output = {
+                "type": "function_call_output",
+                "call_id": call.call_id,
+                "output": result_json,
+            }
             self.responses_pending_input.append(output)
             self.responses_input_history.append(output)
         elif self.args.api_mode == "messages":
-            self._anthropic_tool_results.append({
-                "type": "tool_result", "tool_use_id": call.call_id, "content": result_json
-            })
+            self._anthropic_tool_results.append(
+                {"type": "tool_result", "tool_use_id": call.call_id, "content": result_json}
+            )
 
     def _flush_anthropic_tool_results(self) -> None:
         if not self._anthropic_tool_results:
             return
-        self.anthropic_messages.append(
-            anthropic_tool_result_message(self._anthropic_tool_results)
-        )
+        self.anthropic_messages.append(anthropic_tool_result_message(self._anthropic_tool_results))
         self._anthropic_tool_results = []
 
     def checkpoint_fields(self) -> dict[str, Any]:
@@ -909,7 +947,10 @@ def uses_preset_endpoint(args: argparse.Namespace) -> bool:
 def normalize_reasoning_effort(args: argparse.Namespace) -> None:
     """Map ``max`` onto the strongest value each API accepts."""
 
-    if getattr(args, "reasoning_effort", None) == "max" and getattr(args, "api_mode", None) != "messages":
+    if (
+        getattr(args, "reasoning_effort", None) == "max"
+        and getattr(args, "api_mode", None) != "messages"
+    ):
         args.reasoning_effort = "xhigh"
 
 
@@ -1272,7 +1313,9 @@ def anthropic_response_to_chat_message(response: dict[str, Any]) -> dict[str, An
         "response_model": response.get("model"),
         "anthropic_id": response.get("id"),
         "anthropic_stop_reason": response.get("stop_reason"),
-        "anthropic_content_types": [block.get("type") for block in content if isinstance(block, dict)],
+        "anthropic_content_types": [
+            block.get("type") for block in content if isinstance(block, dict)
+        ],
         "raw_response_output": content,
     }
     attach_response_usage(message, response)
@@ -1390,7 +1433,8 @@ def checkpoint_matches_run(
         and checkpoint.get("target_smiles") == task.get("target_smiles")
         and bool(checkpoint.get("hide_target_building_block", False)) == _hide_target(args)
         and frozenset(checkpoint.get("hide_building_block_ids", [])) == _hidden_ids(args)
-        and checkpoint.get("hide_building_block_similarity") == getattr(args, "hide_building_block_similarity", None)
+        and checkpoint.get("hide_building_block_similarity")
+        == getattr(args, "hide_building_block_similarity", None)
     )
 
 
@@ -1551,8 +1595,12 @@ def summarize(
         **submission_fields,
         "reaction_valid": reaction_valid,
         "issues": submission.get("issues") if submission else None,
-        "direct_building_block_ref": submission.get("direct_building_block_ref") if submission else None,
-        "referenced_building_block_ids": submission.get("referenced_building_block_ids") if submission else None,
+        "direct_building_block_ref": submission.get("direct_building_block_ref")
+        if submission
+        else None,
+        "referenced_building_block_ids": submission.get("referenced_building_block_ids")
+        if submission
+        else None,
     }
 
 

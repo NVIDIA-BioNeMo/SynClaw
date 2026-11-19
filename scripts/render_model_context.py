@@ -50,7 +50,9 @@ def main() -> int:
     parser.add_argument("--max-tool-calls", type=int, default=DEFAULT_MAX_TOOL_CALLS)
     parser.add_argument("--max-turns", type=int, default=DEFAULT_MAX_TURNS)
     parser.add_argument("--max-tokens", type=int, default=DEFAULT_MAX_TOKENS)
-    parser.add_argument("--max-model-len", type=int, help="Context limit to state; omitted when unknown")
+    parser.add_argument(
+        "--max-model-len", type=int, help="Context limit to state; omitted when unknown"
+    )
     parser.add_argument(
         "--api-mode",
         choices=("chat", "responses"),
@@ -109,9 +111,15 @@ def render_model_context(
     resolved_db = model_runner.resolve_task_db_path(db_path)
     excluded = task_excluded_tools(task, normalize_excluded_tools(exclude_tools))
     # The task's own budgets replace the runner's, as in a run.
-    budgets = task_budget_config(task, RolloutPolicyConfig(
-        max_turns=max_turns, max_tool_calls=max_tool_calls, max_tokens=max_tokens, max_model_len=max_model_len,
-    ))
+    budgets = task_budget_config(
+        task,
+        RolloutPolicyConfig(
+            max_turns=max_turns,
+            max_tool_calls=max_tool_calls,
+            max_tokens=max_tokens,
+            max_model_len=max_model_len,
+        ),
+    )
     max_turns, max_tool_calls = budgets.max_turns, budgets.max_tool_calls
     messages = build_initial_messages(task=task, config=budgets)
     tool_schemas = selected_tool_schemas(api_mode=api_mode, excluded_tools=excluded)
@@ -320,7 +328,9 @@ def markdown_cell(text: str) -> str:
 
 
 def slugify(value: str) -> str:
-    return "".join(character if character.isalnum() else "_" for character in value).strip("_").lower()
+    return (
+        "".join(character if character.isalnum() else "_" for character in value).strip("_").lower()
+    )
 
 
 if __name__ == "__main__":

@@ -98,7 +98,11 @@ def smarts_products_have_unmapped_atoms(products: str) -> bool | None:
         reaction = rdChemReactions.ReactionFromSmarts(f">>{products}")
     except ValueError:
         return None
-    return any(atom.GetAtomMapNum() == 0 for template in reaction.GetProducts() for atom in template.GetAtoms())
+    return any(
+        atom.GetAtomMapNum() == 0
+        for template in reaction.GetProducts()
+        for atom in template.GetAtoms()
+    )
 
 
 def strip_isotopes(smiles: str) -> str:
@@ -136,9 +140,7 @@ def _inchi_key(mol: Any) -> str | None:
         return None
 
 
-MolecularIdentityMode = Literal[
-    "standard_inchi", "canonical_isomeric", "canonical_nonisomeric"
-]
+MolecularIdentityMode = Literal["standard_inchi", "canonical_isomeric", "canonical_nonisomeric"]
 
 
 def compare_molecular_identity(
@@ -580,9 +582,7 @@ def _bond_match_pair_count(mol_a: Any, mol_b: Any) -> int:
 def _bond_match_label(bond: Any) -> tuple[Any, int, int]:
     begin_atomic_number = int(bond.GetBeginAtom().GetAtomicNum())
     end_atomic_number = int(bond.GetEndAtom().GetAtomicNum())
-    lower_atomic_number, upper_atomic_number = sorted(
-        (begin_atomic_number, end_atomic_number)
-    )
+    lower_atomic_number, upper_atomic_number = sorted((begin_atomic_number, end_atomic_number))
     return bond.GetBondType(), lower_atomic_number, upper_atomic_number
 
 

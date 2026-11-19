@@ -97,7 +97,9 @@ def test_load_matrix_dir_names_missing_files(tmp_path: Path) -> None:
         load_matrix_dir(tmp_path / "empty")
 
 
-def test_load_matrix_dir_rejects_a_matrix_that_does_not_match_its_templates(matrix_dir: Path) -> None:
+def test_load_matrix_dir_rejects_a_matrix_that_does_not_match_its_templates(
+    matrix_dir: Path,
+) -> None:
     # A matrix directory is built by a separate tool, so a stale file must fail loudly rather than
     # silently index the wrong reaction.
     (matrix_dir / REACTION_FILE).write_text(TEMPLATES[0][1] + "\n")
@@ -314,7 +316,9 @@ def test_block_sampling_starts_from_the_block_it_drew(matrix_dir: Path) -> None:
     builder.pools.close()
 
 
-def test_template_usage_counts_only_the_routes_that_were_kept(matrix_dir: Path, tmp_path: Path) -> None:
+def test_template_usage_counts_only_the_routes_that_were_kept(
+    matrix_dir: Path, tmp_path: Path
+) -> None:
     """Shard totals include routes the merge drops as duplicates; the report must not."""
     output = tmp_path / "targets.tsv"
     summary = generate_targets(
@@ -332,7 +336,9 @@ def test_template_usage_counts_only_the_routes_that_were_kept(matrix_dir: Path, 
     assert summary["distinct_templates_used"] == len(actual)
 
 
-def test_no_pathway_output_is_one_column_but_still_reports_usage(matrix_dir: Path, tmp_path: Path) -> None:
+def test_no_pathway_output_is_one_column_but_still_reports_usage(
+    matrix_dir: Path, tmp_path: Path
+) -> None:
     """Shards keep the route so usage stays countable; the output file still drops it."""
     output = tmp_path / "targets.txt"
     summary = generate_targets(
@@ -409,4 +415,6 @@ def test_replay_names_default_output_as_lacking_products(matrix_dir: Path, tmp_p
     product, pathway = output.read_text().splitlines()[0].split("\t")
     outcome = replay_route(pathway, product, dict(TEMPLATES))
     assert not outcome["ok"]
-    assert outcome["reasons"] == ["a reaction has no recorded product; regenerate with --with-intermediates"]
+    assert outcome["reasons"] == [
+        "a reaction has no recorded product; regenerate with --with-intermediates"
+    ]
