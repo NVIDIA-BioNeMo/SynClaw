@@ -14,11 +14,11 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         "function": {
             "name": "search_building_blocks",
             "description": (
-                "Search purchasable building blocks by exact and near-match SMILES. "
-                "Starting reactants of a pathway must be exact building-block matches; pass a "
-                "hit's submit_reference (BB:<id>) or its exact SMILES. A miss means the molecule "
-                "is not purchasable in this database, not that it cannot be used: it can still be "
-                "made as an intermediate in an earlier step."
+                "Search purchasable building blocks by exact and near-match SMILES. Starting "
+                "reactants of a pathway must be exact building-block matches; pass a hit's "
+                "submit_reference (BB:<id>) or its exact SMILES. A miss means the molecule is not "
+                "purchasable in this database, not that it cannot be used: it can still be made as "
+                "an intermediate in an earlier step."
             ),
             "parameters": {
                 "type": "object",
@@ -50,9 +50,10 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             "description": (
                 "Compute molecular fingerprint similarity between two SMILES strings, for example "
                 "a candidate product and the target. similarity is the Tanimoto similarity of "
-                "chirality-aware Morgan fingerprints (radius 2, 2048 bits); constitutional_similarity "
-                "is the same measure ignoring stereochemistry. When several candidate routes are possible, "
-                "compare their products with the target before submitting."
+                "chirality-aware Morgan fingerprints (radius 2, 2048 bits); "
+                "constitutional_similarity is the same measure ignoring stereochemistry. When "
+                "several candidate routes are possible, compare their products with the target "
+                "before submitting."
             ),
             "parameters": {
                 "type": "object",
@@ -72,9 +73,9 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             "description": (
                 "Find the full Maximum Common Edge Subgraph between two molecules, for example a "
                 "candidate product and the target, and compute its normalized common-bond overlap: "
-                "the matched bonds divided by the union of both molecules' bonds. "
-                "The MCES SMILES may contain dot-separated fragments. When several candidate routes "
-                "are possible, compare their products with the target before submitting."
+                "the matched bonds divided by the union of both molecules' bonds. The MCES SMILES "
+                "may contain dot-separated fragments. When several candidate routes are possible, "
+                "compare their products with the target before submitting."
             ),
             "parameters": {
                 "type": "object",
@@ -92,18 +93,18 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         "function": {
             "name": "search_reaction_templates",
             "description": (
-                "Search available reaction templates by text and/or structural molecule constraints, "
-                "or call it with no arguments to list the largest reaction families and their search terms. "
-                "Use query for IDs, names, descriptions, tags, or SMARTS. Use product_smiles and/or "
-                "reactant_smiles when you need templates whose SMARTS roles structurally match "
-                "molecules. When query and molecule fields are both supplied, they are searched "
-                "independently and returned as structural_results and text_results. "
-                "Product-side structural searches are ranked by shallow "
-                "reverse simulation and exact building-block grounding evidence. Search by "
-                "functional-group transformation and product motif rather than by the target's name. "
-                "Results list each template's template_id (its reaction_id), name, family, SMARTS "
-                "and reactant role names in reactant order; they omit the full description and "
-                "execution hints."
+                "Search available reaction templates by text and/or structural molecule "
+                "constraints, or call it with no arguments to list the largest reaction families "
+                "and their search terms. Use query for IDs, names, descriptions, tags, or SMARTS. "
+                "Use product_smiles and/or reactant_smiles when you need templates whose SMARTS "
+                "roles structurally match molecules. When query and molecule fields are both "
+                "supplied, they are searched independently and returned as structural_results and "
+                "text_results. Product-side structural searches are ranked by shallow reverse "
+                "simulation and exact building-block grounding evidence. Search by "
+                "functional-group transformation and product motif rather than by the target's "
+                "name. Results list each template's template_id (its reaction_id), name, family, "
+                "SMARTS and reactant role names in reactant order; they omit the full description "
+                "and execution hints."
             ),
             "parameters": {
                 "type": "object",
@@ -111,15 +112,16 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                     "query": {
                         "type": "string",
                         "description": (
-                            "Optional text, reaction family, template ID, search term, or SMARTS query."
+                            "Optional text, reaction family, template ID, search term, or SMARTS "
+                            "query."
                         ),
                     },
                     "reactant_smiles": {
                         "type": "array",
                         "items": {"type": "string"},
                         "description": (
-                            "Optional reactant or precursor SMILES to match against template reactant "
-                            "roles."
+                            "Optional reactant or precursor SMILES to match against template "
+                            "reactant roles."
                         ),
                     },
                     "product_smiles": {
@@ -141,8 +143,8 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                         "type": "boolean",
                         "default": False,
                         "description": (
-                            "If all template reactants are provided, run forward simulation and report "
-                            "whether requested products are generated."
+                            "If all template reactants are provided, run forward simulation and "
+                            "report whether requested products are generated."
                         ),
                     },
                 },
@@ -159,11 +161,12 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                 "SMILES. reaction_id is a library template ID or a reaction SMARTS; a SMARTS is "
                 "used only if a library template generates the same product from these reactants "
                 "(with no claimed product, every product the SMARTS generates), and that "
-                "template's ID is returned. Reactants follow the template's reactant-role order; if that order "
-                "generates nothing, alternate orders are tried. Pass product_smiles to "
-                "check a claimed product. A pathway step is valid only if this tool generates its "
-                "product_smiles from the same reaction_id and reactants. Returns the template's "
-                "description and execution hints unless the claimed product was generated."
+                "template's ID is returned. Reactants follow the template's reactant-role order; "
+                "if that order generates nothing, alternate orders are tried. Pass product_smiles "
+                "to check a claimed product. A pathway step is valid only if this tool generates "
+                "its product_smiles from the same reaction_id and reactants. Returns the "
+                "template's description and execution hints unless the claimed product was "
+                "generated."
             ),
             "parameters": {
                 "type": "object",
@@ -203,13 +206,12 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             "description": (
                 "Run a reaction template backwards from product SMILES to candidate reactant sets, "
                 "with each precursor checked against the building blocks (exact and near matches). "
-                "Once a template's product role matches the target or an intermediate, one call returns "
-                "candidate precursor sets for the template (up to max_outcomes) and shows which "
-                "precursors are purchasable, in place of guessing precursors and searching for each "
-                "one. Precursors without an "
-                "exact match may still be made in earlier steps, and a precursor set is not "
-                "guaranteed to work forward: the step is valid only if the template generates the "
-                "product from those reactants."
+                "Once a template's product role matches the target or an intermediate, one call "
+                "returns candidate precursor sets for the template (up to max_outcomes) and shows "
+                "which precursors are purchasable, in place of guessing precursors and searching "
+                "for each one. Precursors without an exact match may still be made in earlier "
+                "steps, and a precursor set is not guaranteed to work forward: the step is valid "
+                "only if the template generates the product from those reactants."
             ),
             "parameters": {
                 "type": "object",
@@ -267,13 +269,12 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                 "product_smiles that reaction generates from them. A reaction_id is a library "
                 "template ID or a reaction SMARTS; like a building block, a SMARTS must match the "
                 "library: it is accepted only if a library template generates the same product "
-                "from the same reactants. "
-                "Starting reactants must be purchasable building blocks, given as BB:<id> or exact "
-                "building-block SMILES; use INT:<step_number> for an earlier step's product. For "
-                "direct purchase, pass steps: [] and one exact building_block. The route is scored "
-                "on the RDKit-generated product of its final step. If you submit more than once, "
-                "the best accepted route is kept, so a later submission cannot replace a better "
-                "earlier one."
+                "from the same reactants. Starting reactants must be purchasable building blocks, "
+                "given as BB:<id> or exact building-block SMILES; use INT:<step_number> for an "
+                "earlier step's product. For direct purchase, pass steps: [] and one exact "
+                "building_block. The route is scored on the RDKit-generated product of its final "
+                "step. If you submit more than once, the best accepted route is kept, so a later "
+                "submission cannot replace a better earlier one."
             ),
             "parameters": {
                 "type": "object",
@@ -304,13 +305,16 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
                     "building_block": {
                         "type": "string",
                         "description": (
-                            "Use only for direct-purchase zero-step submissions; provide BB:<id> or "
-                            "exact building-block SMILES. Omit for reaction pathways."
+                            "Use only for direct-purchase zero-step submissions; provide BB:<id> "
+                            "or exact building-block SMILES. Omit for reaction pathways."
                         ),
                     },
                     "pathway_text": {
                         "type": "string",
-                        "description": "Natural-language explanation of the route: the overall strategy and what each step does.",
+                        "description": (
+                            "Natural-language explanation of the route: the overall strategy and "
+                            "what each step does."
+                        ),
                     },
                 },
                 "required": ["pathway_text"],
