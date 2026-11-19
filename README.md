@@ -418,10 +418,10 @@ context warnings. A task's own budgets override the matching options below.
 | `--max-turns` | Assistant-turn budget, default 80. The model is warned with 3 turns left and prompted to submit on the last. |
 | `--max-tool-calls` | Soft tool-call budget, default 150. When reached, the next turn is prompted to call `submit_pathway`, then the harness falls back to the best accepted route. |
 | `--max-tokens`, `--max-model-len` | Per-response output cap (default 32768) and context limit. Both are stated in the system prompt, and each response's output is clipped to the context left. Without `--max-model-len`, no clipping happens. |
-| `--stop-condition` | What ends a rollout. `exact` (default): an accepted submission whose product is the target under Standard InChI identity. A number from `0.0` to `1.0`: an accepted submission at or above that similarity, or an identity match (`0.0` ends on any accepted route). Below the condition the harness coaches the model to improve. `model`: the model's reply without a tool call ends the run with its best accepted route, with no coaching. |
+| `--stop-condition` | What ends a rollout. `exact` (default): an accepted submission whose product is the target under exact-match identity (see Results And Reports). A number from `0.0` to `1.0`: an accepted submission at or above that similarity, or an identity match (`0.0` ends on any accepted route). Below the condition the harness coaches the model to improve. `model`: the model's reply without a tool call ends the run with its best accepted route, with no coaching. |
 | `--no-budget-feedback` | Disables progress messages (see [Budget feedback](#budget-feedback)). The system prompt still states the limits and enforcement is unchanged. |
 | `--reasoning-effort` | Optional `low`, `medium`, `high`, `xhigh` or `max` hint, sent only when set. Leave unset unless the model supports it. |
-| `--hide-target-building-block` | Treats the target as out of stock, to benchmark exact-match synthesis without the shortcut of buying it. Every building block that Standard InChI identity counts as the target is hidden from search, reverse-step grounding and submission. The model is not told. Analogues, including stereoisomers, can still be bought and are scored by similarity. |
+| `--hide-target-building-block` | Treats the target as out of stock, to benchmark exact-match synthesis without the shortcut of buying it. Every building block scored as the target, including its tautomers and isomers of stereo it leaves open, is hidden from search, reverse-step grounding and submission. The model is not told. Other analogues, including stereoisomers that conflict with stereo the target specifies, can still be bought and are scored by similarity. |
 | `--hide-building-block-id ID` | Hides a catalog BB ID the same way. Repeatable, combines with target hiding, and IDs must exist in the database. |
 | `--hide-building-block-similarity CUTOFF` | Also hides every stock entry whose constitutional Morgan/Tanimoto similarity to the target is at or above the cutoff (0 to 1). Implies target hiding. |
 | `--reaction-library` | Restricts the template libraries the tools can use; see [Reaction Templates](#reaction-templates). |
@@ -519,7 +519,11 @@ fields.
 `run_success` means the run produced an accepted, RDKit-validated pathway. `meets_similarity_floor`
 records whether that product also met the `--stop-condition` (`model` scores like `exact`).
 Identity is judged by full Standard InChI, which preserves stereochemistry and isotopes and
-normalizes supported tautomers and some charge representations. Count exact reconstructions using
+normalizes supported tautomers and some charge representations, with two relaxations. Where the
+target leaves a stereocentre or double bond unspecified, a product that specifies it still matches;
+a product that leaves open stereo the target specifies does not. Tautomers that Standard InChI keeps
+apart, such as keto-enol forms, match after RDKit tautomer canonicalization that keeps stereo, unless
+the product is the target's own tautomer with different stereo. Count exact reconstructions using
 `accepted` and `identical_to_target`, not fingerprint similarity. To ignore isotope labels, pass
 targets through `synclaw.core.chem.strip_isotopes` before making tasks.
 

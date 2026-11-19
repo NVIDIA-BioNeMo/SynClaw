@@ -72,7 +72,7 @@ class SynthesisTools:
                 raise RuntimeError("Hidden building-block IDs must exist in this database.")
             target_ids = frozenset()
             if self.hidden_target_smiles:
-                target_ids = db.building_block_ids_identical_to(conn, self.hidden_target_smiles)
+                target_ids = db.building_block_ids_matching_target(conn, self.hidden_target_smiles)
             if self.hidden_similarity is not None:
                 db.require_prepared_building_block_search(self.db_path)
                 index = fingerprint_index.load_fingerprint_index(conn, self.db_path)
@@ -925,7 +925,7 @@ def score_pathway_against_target(
         "actual_final_smiles": final_smiles,
         "similarity_to_target": similarity.get("similarity"),
         "identical_to_target": (
-            chem.molecules_identical(target_smiles, final_smiles) if scorable else None
+            chem.matches_target(target_smiles, final_smiles) if scorable else None
         ),
         "constitutional_similarity_to_target": similarity.get("constitutional_similarity"),
         "stereo_aware_similarity_to_target": similarity.get("stereo_aware_similarity"),
@@ -945,11 +945,9 @@ def select_final_product(
     if not target_smiles:
         return preferred_smiles if preferred_smiles in candidates else candidates[0]
     # An exact generated product must outrank a fingerprint collision or a
-    # high-scoring analogue, including when InChI normalizes a tautomer.
+    # high-scoring analogue, including a tautomer or an isomer of open target stereo.
     exact_candidates = [
-        product
-        for product in candidates
-        if chem.compare_molecular_identity(target_smiles, product)["identical"]
+        product for product in candidates if chem.matches_target(target_smiles, product)
     ]
     if exact_candidates:
         candidates = exact_candidates

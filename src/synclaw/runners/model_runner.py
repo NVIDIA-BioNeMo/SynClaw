@@ -273,8 +273,8 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         help=(
             "Treat the target as out of stock, so it cannot be bought directly or used as a "
             "starting reactant and an exact match needs a real synthesis route. Building blocks "
-            "that Standard InChI identity counts as the target are hidden too; analogues can "
-            "still be bought."
+            "scored as the target, such as its tautomers or isomers of stereo it leaves open, "
+            "are hidden too; analogues can still be bought."
         ),
     )
     parser.add_argument(

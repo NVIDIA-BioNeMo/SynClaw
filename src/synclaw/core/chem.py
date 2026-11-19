@@ -191,13 +191,9 @@ def compare_molecular_identity(
             atom.SetAtomMapNum(0)
         try:
             if mode == "standard_inchi":
-                from rdkit.Chem import rdinchi
-
-                identity, status, message, _, _ = rdinchi.MolToInchi(mol)
-                if status not in (0, 1) or not identity.startswith("InChI=1S/"):
-                    raise ValueError(message or "Standard InChI conversion failed")
-                if status == 1:
-                    result["warnings"].append(f"{side}: {message or 'InChI conversion warning'}")
+                identity, warning = _standard_inchi(mol)
+                if warning is not None:
+                    result["warnings"].append(f"{side}: {warning}")
             else:
                 identity = Chem.MolToSmiles(
                     mol, canonical=True, isomericSmiles=mode == "canonical_isomeric"
@@ -218,6 +214,158 @@ def molecules_identical(smiles_a: str | None, smiles_b: str | None) -> bool | No
 
     result = compare_molecular_identity(smiles_a, smiles_b)
     return bool(result["identical"]) if result["valid"] else None
+
+
+def _standard_inchi(mol: Any) -> tuple[str, str | None]:
+    """Standard InChI of a molecule and its conversion warning, if any.
+
+    Raises:
+        ValueError: InChI conversion failed or did not produce a Standard InChI.
+    """
+
+    from rdkit.Chem import rdinchi
+
+    identity, status, message, _, _ = rdinchi.MolToInchi(mol)
+    if status not in (0, 1) or not identity.startswith("InChI=1S/"):
+        raise ValueError(message or "Standard InChI conversion failed")
+    return identity, (message or "InChI conversion warning") if status == 1 else None
+
+
+# Exact-match scoring starts from Standard InChI identity and relaxes it for stereo the
+# target leaves open and for tautomers Standard InChI does not merge; see matches_target.
+MAX_OPEN_STEREOISOMERS = 256
+_INCHI_STEREO_LAYERS = frozenset("btms")
+
+
+def _stereo_keeping_tautomer_enumerator() -> Any:
+    # By default RDKit drops stereo at atoms and bonds that tautomerism touches, which
+    # would let a product missing the target's stereo match after canonicalization.
+    params = rdMolStandardize.CleanupParameters()
+    params.tautomerRemoveSp3Stereo = False
+    params.tautomerRemoveBondStereo = False
+    return rdMolStandardize.TautomerEnumerator(params)
+
+
+_TAUTOMERS = _stereo_keeping_tautomer_enumerator()
+
+
+def _identity_mol(smiles: str | None) -> Any:
+    """Parse a SMILES for identity checks, without atom maps.
+
+    Raises:
+        ValueError: The SMILES is empty, invalid or contains a wildcard atom.
+    """
+
+    text = "" if smiles is None else str(smiles).strip()
+    mol = Chem.MolFromSmiles(text) if text else None
+    if mol is None or mol.GetNumAtoms() == 0:
+        raise ValueError("SMILES is empty or invalid")
+    if any(atom.GetAtomicNum() == 0 for atom in mol.GetAtoms()):
+        raise ValueError("SMILES contains a wildcard atom")
+    for atom in mol.GetAtoms():
+        atom.SetAtomMapNum(0)
+    return mol
+
+
+def _inchi_layers(inchi: str) -> list[str]:
+    return inchi.split("/")[1:]
+
+
+def _without_stereo_layers(inchi: str) -> tuple[str, ...]:
+    return tuple(layer for layer in _inchi_layers(inchi) if layer[:1] not in _INCHI_STEREO_LAYERS)
+
+
+def _open_stereoisomers(mol: Any) -> list[Any] | None:
+    """Every assignment of the stereo ``mol`` leaves open; None above MAX_OPEN_STEREOISOMERS."""
+
+    from rdkit.Chem.EnumerateStereoisomers import (
+        EnumerateStereoisomers,
+        StereoEnumerationOptions,
+    )
+
+    options = StereoEnumerationOptions(
+        onlyUnassigned=True, unique=True, maxIsomers=MAX_OPEN_STEREOISOMERS + 1
+    )
+    isomers = list(EnumerateStereoisomers(mol, options=options))
+    return isomers if len(isomers) <= MAX_OPEN_STEREOISOMERS else None
+
+
+def _open_stereoisomer_inchis(mol: Any) -> frozenset[str] | None:
+    isomers = _open_stereoisomers(mol)
+    return None if isomers is None else frozenset(_standard_inchi(iso)[0] for iso in isomers)
+
+
+def _satisfies_stereo(target: Any, target_inchi: str, product: Any, product_inchi: str) -> bool:
+    """Same constitution, and every stereoisomer the product denotes is one the target allows."""
+
+    if target_inchi == product_inchi:
+        return True
+    if _without_stereo_layers(target_inchi) != _without_stereo_layers(product_inchi):
+        return False
+    allowed = _open_stereoisomer_inchis(target)
+    if allowed is None:
+        return False
+    denoted = _open_stereoisomer_inchis(product)
+    return denoted is not None and denoted <= allowed
+
+
+def matches_target(target_smiles: str | None, product_smiles: str | None) -> bool | None:
+    """Whether a product counts as an exact reconstruction of the target.
+
+    Starts from Standard InChI identity (see :func:`compare_molecular_identity`) and
+    relaxes it in two ways:
+
+    - Stereo the target leaves open. The product matches when every stereoisomer it
+      denotes is one the target allows: a specific isomer at a centre or double bond the
+      target leaves open counts, while leaving open one the target specifies does not.
+      A side with more than ``MAX_OPEN_STEREOISOMERS`` open isomers is compared strictly.
+    - Tautomers Standard InChI does not merge, such as keto-enol forms. Both sides are
+      put in RDKit's canonical tautomer, keeping their stereo, and compared again as
+      above. This applies only when the Standard InChIs differ beyond their stereo
+      layers, so a product that is the target's own tautomer with wrong or missing
+      stereo cannot match by having tautomer handling erase that stereo.
+
+    The relation is not symmetric, so the target goes first. The canonical tautomer
+    depends on the RDKit version. Returns None when either side cannot be compared,
+    including when InChI conversion fails.
+    """
+
+    try:
+        target = _identity_mol(target_smiles)
+        product = _identity_mol(product_smiles)
+        target_inchi = _standard_inchi(target)[0]
+        product_inchi = _standard_inchi(product)[0]
+        if _satisfies_stereo(target, target_inchi, product, product_inchi):
+            return True
+        if _without_stereo_layers(target_inchi) == _without_stereo_layers(product_inchi):
+            return False
+        # Tautomers share a formula; skip canonicalization for every other analogue.
+        if _inchi_layers(target_inchi)[0] != _inchi_layers(product_inchi)[0]:
+            return False
+        target = _TAUTOMERS.Canonicalize(target)
+        product = _TAUTOMERS.Canonicalize(product)
+        return _satisfies_stereo(
+            target, _standard_inchi(target)[0], product, _standard_inchi(product)[0]
+        )
+    except Exception:
+        return None
+
+
+def target_match_inchi_key_prefixes(target_smiles: str) -> frozenset[str]:
+    """First InChIKey blocks under which a molecule that :func:`matches_target` may be stored.
+
+    The first 14 characters of a Standard InChIKey hash the skeleton and hydrogens but
+    not stereo, so one prefix per tautomer of the target covers every stereoisomer of
+    it, including ones that fix only part of the stereo. Candidates found by these
+    prefixes must still be checked with ``matches_target``.
+
+    Raises:
+        ValueError: ``target_smiles`` is invalid or contains a wildcard atom.
+    """
+
+    target = _identity_mol(target_smiles)
+    keys = (_inchi_key(tautomer) for tautomer in [target, *_TAUTOMERS.Enumerate(target)])
+    return frozenset(key[:14] for key in keys if key)
 
 
 def similarity(
