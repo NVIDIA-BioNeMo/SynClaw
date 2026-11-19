@@ -26,11 +26,11 @@ from synclaw.rollout.policy import (
     PreparedToolCall,
     RolloutPolicyConfig,
     RolloutPolicyState,
-    append_selected_submission_event,
     handle_no_tool_response,
     handle_tool_result,
     prepare_tool_call,
     response_or_chat_tool_choice,
+    selected_submission_event,
     tool_argument_error,
     tool_limit_finish_reason,
     turn_reminders,
@@ -39,7 +39,6 @@ from synclaw.tools.compaction import compact_json_size, compact_tool_result
 from synclaw.tools.contracts import TOOL_ARGUMENT_DEFAULTS, TOOL_NAMES
 
 EventCallback = Callable[[dict[str, Any], int | None], Awaitable[None] | None]
-SubmissionScorer = Callable[[dict[str, Any]], dict[str, Any]]
 _TOKEN_LIMITS = frozenset({"length", "max_tokens", "max_output_tokens"})
 
 
@@ -383,10 +382,11 @@ async def run_rollout(
     state: RolloutState | None = None,
     start_turn_index: int = 0,
     event_callback: EventCallback | None = None,
-    score_submission: SubmissionScorer | None = None,
     budget_provider: BudgetProvider | None = None,
 ) -> RolloutResult:
     """Run the canonical BioNeMo-SynClaw loop independently of model and tool transports."""
+    if config.max_turns is None and budget_provider is None:
+        raise ValueError("Unlimited turns need a budget_provider to end the rollout")
     state = state or RolloutState(
         messages=[dict(row) for row in task.initial_messages], events=[]
     )
@@ -406,6 +406,7 @@ async def run_rollout(
     reason, partial, termination_kind, termination_message = (
         "no_submission", False, None, None
     )
+    termination: ControlledTermination | None = None
     turn_indices = (
         itertools.count(start_turn_index)
         if config.max_turns is None
@@ -444,13 +445,7 @@ async def run_rollout(
                 max_output_tokens=request_budget.max_output_tokens,
             )
         except ControlledTermination as exc:
-            partial, termination_kind, termination_message, reason = (
-                True, exc.kind, str(exc), exc.kind
-            )
-            await record(
-                _termination_event(task, turn_index, exc.kind, str(exc), exc.provider_finish_reason),
-                turn_index,
-            )
+            termination = exc
             break
 
         message = {**turn.message, "role": "assistant"}
@@ -517,19 +512,7 @@ async def run_rollout(
                 assistant_turn=turn_index + 1,
             )
         except ControlledTermination as exc:
-            partial, termination_kind, termination_message, reason = (
-                True, exc.kind, str(exc), exc.kind
-            )
-            await record(
-                _termination_event(
-                    task,
-                    turn_index,
-                    exc.kind,
-                    str(exc),
-                    exc.provider_finish_reason,
-                ),
-                turn_index,
-            )
+            termination = exc
             break
         repairs: list[str] = []
         terminal = None
@@ -537,8 +520,6 @@ async def run_rollout(
         terminal_meets_floor = False
         for item, execution in zip(prepared, executions, strict=True):
             result = execution.result
-            if item.name == "submit_pathway" and score_submission is not None:
-                result = score_submission(result)
             model_result = compact_tool_result(item.name, result)
             result_json = json.dumps(model_result, sort_keys=True, separators=(",", ":"))
             state.messages.append({"role": "tool", "tool_call_id": item.call_id, "content": result_json})
@@ -591,17 +572,26 @@ async def run_rollout(
             if state.policy.best_accepted_submission
             else "no_accepted_submission"
         )
+    if termination is not None:
+        partial, termination_kind, termination_message, reason = (
+            True, termination.kind, str(termination), termination.kind
+        )
+        await record(
+            _termination_event(
+                task, turn_index, termination.kind, str(termination), termination.provider_finish_reason,
+            ),
+            turn_index,
+        )
 
     submission, arguments = state.policy.selected_submission()
-    append_selected_submission_event(
-        state.events,
+    selected_event = selected_submission_event(
         task={"task_id": task.task_id, "target_smiles": task.target_smiles},
         submission=submission,
         submission_arguments=arguments,
         reason=reason,
     )
-    if submission is not None:
-        await record(None, config.max_turns)
+    if selected_event is not None:
+        await record(selected_event, config.max_turns)
     return RolloutResult(
         state, reason, submission, arguments, partial,
         termination_kind, termination_message,
