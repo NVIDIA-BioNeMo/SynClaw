@@ -48,7 +48,7 @@ ANNOTATION_METADATA_KEYS = (
 
 
 def ingest_reaction_libraries(
-    db_path: str | Path = db.DEFAULT_DB_PATH,
+    db_path: str | Path,
 ) -> dict[str, Any]:
     """Install all bundled sources once; choose a source union when searching.
 
@@ -102,7 +102,7 @@ def _verified_bundled_file(template_dir: Path, entry: dict[str, Any]) -> Path:
 
 def ingest_reaction_templates(
     source_path: str | Path,
-    db_path: str | Path = db.DEFAULT_DB_PATH,
+    db_path: str | Path,
     library: str = "default",
     annotations_path: str | Path | None = None,
 ) -> dict[str, Any]:

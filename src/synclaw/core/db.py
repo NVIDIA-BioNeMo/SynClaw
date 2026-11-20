@@ -29,7 +29,10 @@ from synclaw.core.libraries import (
     normalize_libraries,
 )
 
-DEFAULT_DB_PATH = Path("var/synclaw.sqlite")
+# Search tuning.
+# Constitutional near-match hits that the stereo-aware score re-ranks.
+STEREO_RERANK_POOL = 200
+# Score shift for a matched search term (+) or exclusion (-), as a fraction of the best text match.
 REACTION_TEXT_SEARCH_CURATED_BONUS = 0.2
 # English function words that appear in most template descriptions and would otherwise
 # let any conversational query match nearly the whole catalog.
@@ -65,16 +68,12 @@ REACTION_TEXT_SEARCH_STOPWORDS = frozenset(
         "without",
     }
 )
-BUILDING_BLOCK_SEARCH_INDEX_VERSION = 3
 BUILDING_BLOCK_FINGERPRINT_TABLE = fingerprint_index.FINGERPRINT_CHUNK_TABLE
 BUILDING_BLOCK_SEARCH_METADATA_TABLE = "building_block_search_metadata"
-# Constitutional top hits that the stereo-aware score re-ranks.
-STEREO_RERANK_POOL = 200
 
 BUILDING_BLOCK_SEARCH_SCHEMA = f"""
 CREATE TABLE IF NOT EXISTS {BUILDING_BLOCK_SEARCH_METADATA_TABLE} (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
-    index_version INTEGER NOT NULL,
     building_block_count INTEGER NOT NULL,
     maximum_building_block_id INTEGER NOT NULL,
     fingerprint_radius INTEGER NOT NULL,
@@ -167,7 +166,7 @@ def now_iso() -> str:
     return datetime.now(UTC).isoformat()
 
 
-def connect(db_path: str | Path = DEFAULT_DB_PATH) -> sqlite3.Connection:
+def connect(db_path: str | Path) -> sqlite3.Connection:
     path = Path(db_path)
     if path.parent:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -178,7 +177,7 @@ def connect(db_path: str | Path = DEFAULT_DB_PATH) -> sqlite3.Connection:
 
 
 @contextmanager
-def session(db_path: str | Path = DEFAULT_DB_PATH) -> Iterator[sqlite3.Connection]:
+def session(db_path: str | Path) -> Iterator[sqlite3.Connection]:
     conn = connect(db_path)
     try:
         yield conn
@@ -190,13 +189,13 @@ def session(db_path: str | Path = DEFAULT_DB_PATH) -> Iterator[sqlite3.Connectio
         conn.close()
 
 
-def init_db(db_path: str | Path = DEFAULT_DB_PATH) -> None:
+def init_db(db_path: str | Path) -> None:
     with session(db_path) as conn:
         conn.executescript(SCHEMA)
 
 
 def prepare_building_block_search(
-    db_path: str | Path = DEFAULT_DB_PATH,
+    db_path: str | Path,
     *,
     output_path: str | Path | None = None,
 ) -> dict[str, Any]:
@@ -251,7 +250,6 @@ def prepare_building_block_search(
     return {
         "database": str(destination),
         "source_database": str(source),
-        "index_version": BUILDING_BLOCK_SEARCH_INDEX_VERSION,
         "building_block_count": metadata["building_block_count"],
         "fingerprint_count": metadata["fingerprint_count"],
         "prepared_at": metadata["prepared_at"],
@@ -280,12 +278,11 @@ def _prepare_building_block_search_in_place(db_path: Path) -> None:
         conn.execute(
             f"""
             INSERT INTO {BUILDING_BLOCK_SEARCH_METADATA_TABLE}(
-                singleton, index_version, building_block_count,
+                singleton, building_block_count,
                 maximum_building_block_id, fingerprint_radius,
                 fingerprint_bits, rdkit_version, prepared, prepared_at
-            ) VALUES (1, ?, ?, ?, ?, ?, ?, 1, ?)
+            ) VALUES (1, ?, ?, ?, ?, ?, 1, ?)
             ON CONFLICT(singleton) DO UPDATE SET
-                index_version=excluded.index_version,
                 building_block_count=excluded.building_block_count,
                 maximum_building_block_id=excluded.maximum_building_block_id,
                 fingerprint_radius=excluded.fingerprint_radius,
@@ -295,7 +292,6 @@ def _prepare_building_block_search_in_place(db_path: Path) -> None:
                 prepared_at=excluded.prepared_at
             """,
             (
-                BUILDING_BLOCK_SEARCH_INDEX_VERSION,
                 int(count),
                 int(maximum_id),
                 chem.MORGAN_RADIUS,
@@ -434,7 +430,7 @@ def remove_reaction_libraries(conn: sqlite3.Connection, libraries: LibrarySelect
 
 
 def require_prepared_building_block_search(
-    db_path: str | Path = DEFAULT_DB_PATH,
+    db_path: str | Path,
 ) -> dict[str, Any]:
     """Fail clearly unless a current, complete prepared BB search index exists."""
 
@@ -463,8 +459,7 @@ def _require_prepared_building_block_search(
     except sqlite3.OperationalError as exc:
         raise RuntimeError(_prepared_search_error(display_path)) from exc
     if (
-        metadata["index_version"] != BUILDING_BLOCK_SEARCH_INDEX_VERSION
-        or not metadata["prepared"]
+        not metadata["prepared"]
         or metadata["fingerprint_radius"] != chem.MORGAN_RADIUS
         or metadata["fingerprint_bits"] != chem.MORGAN_N_BITS
         or metadata["rdkit_version"] != chem.RDKIT_VERSION
@@ -578,7 +573,7 @@ def _prepared_search_error(db_path: str | Path) -> str:
 
 def ingest_building_blocks(
     source_path: str | Path,
-    db_path: str | Path = DEFAULT_DB_PATH,
+    db_path: str | Path,
     batch_size: int = 1000,
 ) -> dict[str, int | str]:
     """Load a SMILES text file into SQLite.
@@ -1145,7 +1140,7 @@ def list_reaction_templates(
     return [_reaction_template_row(row) for row in cursor.fetchall()]
 
 
-def table_counts(db_path: str | Path = DEFAULT_DB_PATH) -> dict[str, int]:
+def table_counts(db_path: str | Path) -> dict[str, int]:
     init_db(db_path)
     tables = [
         "building_blocks",
@@ -1284,14 +1279,6 @@ def file_revision(path: Path) -> tuple[str, int, int]:
     except OSError:
         return str(resolved), 0, 0
     return str(resolved), stat.st_mtime_ns, stat.st_size
-
-
-def _reaction_template_metadata(row: sqlite3.Row) -> dict[str, Any]:
-    try:
-        metadata = json.loads(row["metadata_json"])
-    except (TypeError, json.JSONDecodeError):
-        return {}
-    return metadata if isinstance(metadata, dict) else {}
 
 
 def _split_reaction_smarts(smarts: str) -> tuple[str, str]:

@@ -15,7 +15,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-from synclaw import providers, token_usage
+from synclaw import paths, providers, token_usage
 from synclaw.core import db, toxicity
 from synclaw.rollout import policy, prompts
 from synclaw.rollout.budget import (
@@ -40,7 +40,6 @@ from synclaw.tools.synthesis import (
     hidden_target_summary_fields,
 )
 
-DEFAULT_MODEL_RUN_DB = Path("var/synclaw.sqlite")
 DEFAULT_TASKSET = "artifacts/tasksets/chembl_llm_tasks.jsonl"
 RETRYABLE_HTTP_CODES = {429, 500, 502, 503, 504}
 ANTHROPIC_VERSION = "2023-06-01"
@@ -981,7 +980,7 @@ def load_task(path: str, index: int) -> dict[str, Any]:
 
 
 def resolve_task_db_path(db_arg: str | Path | None) -> Path:
-    return Path(db_arg) if db_arg else DEFAULT_MODEL_RUN_DB
+    return Path(db_arg) if db_arg else paths.DEFAULT_DB_PATH
 
 
 def chat_completion(

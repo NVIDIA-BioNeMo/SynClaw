@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from synclaw import __version__
+from synclaw import __version__, paths
 from synclaw.core import chem, db, toxicity
 from synclaw.core.libraries import DEFAULT_REACTION_LIBRARIES
 from synclaw.core.reactions import ingest_reaction_libraries, ingest_reaction_templates
@@ -61,23 +61,23 @@ def build_parser() -> argparse.ArgumentParser:
     db_parser = sub.add_parser("db", help="Database operations")
     db_sub = db_parser.add_subparsers(dest="db_command")
     db_init = db_sub.add_parser("init", help="Initialize the SQLite database")
-    db_init.add_argument("--db", default=str(db.DEFAULT_DB_PATH))
+    db_init.add_argument("--db", default=str(paths.DEFAULT_DB_PATH))
     db_init.set_defaults(func=_cmd_db_init)
     db_stats = db_sub.add_parser("stats", help="Show table counts")
-    db_stats.add_argument("--db", default=str(db.DEFAULT_DB_PATH))
+    db_stats.add_argument("--db", default=str(paths.DEFAULT_DB_PATH))
     db_stats.set_defaults(func=_cmd_db_stats)
     db_remove_reactions = db_sub.add_parser(
         "remove-reactions",
         help="Delete reaction-template libraries and their import records",
     )
     db_remove_reactions.add_argument("library", nargs="+")
-    db_remove_reactions.add_argument("--db", default=str(db.DEFAULT_DB_PATH))
+    db_remove_reactions.add_argument("--db", default=str(paths.DEFAULT_DB_PATH))
     db_remove_reactions.set_defaults(func=_cmd_db_remove_reactions)
     db_prepare_search = db_sub.add_parser(
         "prepare-search",
         help="Build the required indexed building-block search database",
     )
-    db_prepare_search.add_argument("--db", default=str(db.DEFAULT_DB_PATH))
+    db_prepare_search.add_argument("--db", default=str(paths.DEFAULT_DB_PATH))
     db_prepare_search.add_argument(
         "--output",
         help="Atomically create a lean indexed chemistry DB at this path",
@@ -86,14 +86,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     ingest = sub.add_parser("ingest-bbs", help="Import building-block SMILES into SQLite")
     ingest.add_argument("source")
-    ingest.add_argument("--db", default=str(db.DEFAULT_DB_PATH))
+    ingest.add_argument("--db", default=str(paths.DEFAULT_DB_PATH))
     ingest.set_defaults(func=_cmd_ingest_bbs)
 
     ingest_reactions = sub.add_parser("ingest-reactions", help="Import reaction templates")
     ingest_reactions.add_argument(
         "source", nargs="?", help="Custom template file; omit to import bundled source libraries"
     )
-    ingest_reactions.add_argument("--db", default=str(db.DEFAULT_DB_PATH))
+    ingest_reactions.add_argument("--db", default=str(paths.DEFAULT_DB_PATH))
     ingest_reactions.add_argument("--library", help="Library name for a custom template file")
     ingest_reactions.add_argument(
         "--annotations",
@@ -293,11 +293,11 @@ def build_parser() -> argparse.ArgumentParser:
     search.add_argument(
         "--min-similarity", type=float, default=0.15, help="Minimum near-match similarity to return"
     )
-    search.add_argument("--db", default=str(db.DEFAULT_DB_PATH))
+    search.add_argument("--db", default=str(paths.DEFAULT_DB_PATH))
     search.set_defaults(func=_cmd_tool_search)
     get = tools_sub.add_parser("get-bb", help="Fetch one building block")
     get.add_argument("bb_id", type=int)
-    get.add_argument("--db", default=str(db.DEFAULT_DB_PATH))
+    get.add_argument("--db", default=str(paths.DEFAULT_DB_PATH))
     get.set_defaults(func=_cmd_tool_get_bb)
     validate = tools_sub.add_parser("validate", help="Validate SMILES")
     validate.add_argument("smiles")
@@ -331,11 +331,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Product SMILES to match; repeat for multi-product templates",
     )
     rxn_search.add_argument("--run-forward", action="store_true")
-    rxn_search.add_argument("--db", default=str(db.DEFAULT_DB_PATH))
+    rxn_search.add_argument("--db", default=str(paths.DEFAULT_DB_PATH))
     rxn_search.set_defaults(func=_cmd_tool_search_reaction_templates)
     rxn_get = tools_sub.add_parser("get-reaction", help="Fetch one reaction template")
     rxn_get.add_argument("reaction_id")
-    rxn_get.add_argument("--db", default=str(db.DEFAULT_DB_PATH))
+    rxn_get.add_argument("--db", default=str(paths.DEFAULT_DB_PATH))
     rxn_get.set_defaults(func=_cmd_tool_get_reaction)
     rxn_sim = tools_sub.add_parser(
         "simulate-reaction", help="Run one reaction template and optionally check a claimed product"
@@ -348,7 +348,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--product-smiles", help="Optional claimed product to check against generated products"
     )
     rxn_sim.add_argument("--max-products", type=int, default=100)
-    rxn_sim.add_argument("--db", default=str(db.DEFAULT_DB_PATH))
+    rxn_sim.add_argument("--db", default=str(paths.DEFAULT_DB_PATH))
     rxn_sim.set_defaults(func=_cmd_tool_simulate_reaction)
     rxn_reverse = tools_sub.add_parser(
         "simulate-reverse-reaction",
@@ -369,7 +369,7 @@ def build_parser() -> argparse.ArgumentParser:
     rxn_reverse.add_argument(
         "--top-near-matches", type=int, default=3, help="Near BB matches returned per precursor"
     )
-    rxn_reverse.add_argument("--db", default=str(db.DEFAULT_DB_PATH))
+    rxn_reverse.add_argument("--db", default=str(paths.DEFAULT_DB_PATH))
     rxn_reverse.set_defaults(func=_cmd_tool_simulate_reverse_reaction)
     submit = tools_sub.add_parser("submit-pathway", help="Validate a template-grounded pathway")
     submit.add_argument(
@@ -382,14 +382,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--building-block", help="BB:<id> or exact BB SMILES for zero-step direct purchase"
     )
     submit.add_argument("--pathway-text")
-    submit.add_argument("--db", default=str(db.DEFAULT_DB_PATH))
+    submit.add_argument("--db", default=str(paths.DEFAULT_DB_PATH))
     toxicity.add_toxicity_argument(submit)
     submit.set_defaults(func=_cmd_tool_submit)
 
     mcp = sub.add_parser("mcp", help="MCP server operations")
     mcp_sub = mcp.add_subparsers(dest="mcp_command")
     serve = mcp_sub.add_parser("serve", help="Serve MCP tools over stdio")
-    serve.add_argument("--db", default=str(db.DEFAULT_DB_PATH))
+    serve.add_argument("--db", default=str(paths.DEFAULT_DB_PATH))
     serve.add_argument(
         "--stage-db-to-node-local",
         action="store_true",
@@ -414,7 +414,7 @@ def build_parser() -> argparse.ArgumentParser:
         "eval-trace", help="Import and score one or more trace JSONL files"
     )
     eval_parser.add_argument("traces", nargs="+")
-    eval_parser.add_argument("--db", default=str(db.DEFAULT_DB_PATH))
+    eval_parser.add_argument("--db", default=str(paths.DEFAULT_DB_PATH))
     eval_parser.add_argument("--model", default="unknown")
     eval_parser.add_argument("--prompt-version")
     eval_parser.add_argument("--target-smiles")

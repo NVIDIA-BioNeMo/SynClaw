@@ -35,7 +35,7 @@ SEARCH_TOOLS = {"search_building_blocks", "search_reaction_templates"}
 
 def evaluate_trace_file(
     trace_path: str | Path,
-    db_path: str | Path = db.DEFAULT_DB_PATH,
+    db_path: str | Path,
     model: str = "unknown",
     prompt_version: str | None = None,
     target_smiles: str | None = None,

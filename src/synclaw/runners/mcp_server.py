@@ -306,7 +306,7 @@ class AsyncToolExecutor:
 
 
 def create_server(
-    db_path: str | Path = db.DEFAULT_DB_PATH,
+    db_path: str | Path,
     *,
     reaction_library: LibrarySelection = DEFAULT_REACTION_LIBRARY,
     max_concurrent_executions: int = 64,
@@ -455,7 +455,7 @@ def create_server(
 
 
 def serve(
-    db_path: str | Path = db.DEFAULT_DB_PATH,
+    db_path: str | Path,
     *,
     reaction_library: LibrarySelection = DEFAULT_REACTION_LIBRARY,
     max_concurrent_executions: int = 64,

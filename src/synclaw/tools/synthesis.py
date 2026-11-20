@@ -25,7 +25,7 @@ class SynthesisTools:
 
     def __init__(
         self,
-        db_path: str | Path = db.DEFAULT_DB_PATH,
+        db_path: str | Path,
         *,
         reaction_libraries: LibrarySelection = None,
         toxicity: ToxicityConfig | None = None,
