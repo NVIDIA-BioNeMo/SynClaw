@@ -62,7 +62,6 @@ def _initialize_tool_worker(
             config.db_path,
             reaction_libraries=config.reaction_libraries,
             toxicity=config.toxicity,
-            _initialize_database=False,
         )
         _WORKER_TOOLS.screen  # Load the watchlist now so a missing one fails at startup.
     except BaseException as exc:

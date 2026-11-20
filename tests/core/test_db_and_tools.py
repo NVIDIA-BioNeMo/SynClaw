@@ -17,6 +17,7 @@ class DbAndToolsTests(unittest.TestCase):
     def test_reverse_grounding_reuses_identical_precursor_searches(self):
         with tempfile.TemporaryDirectory() as tmp:
             database = Path(tmp) / "synclaw.sqlite"
+            db.init_db(database)
             tools = SynthesisTools(database)
             result = {
                 "candidate_reactant_sets": [

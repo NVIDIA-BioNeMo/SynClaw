@@ -207,10 +207,14 @@ def test_a_staged_copy_is_searchable_on_its_own(tmp_path: Path) -> None:
     )
 
 
-def test_tools_for_a_missing_database_do_not_create_it(tmp_path: Path) -> None:
+def test_a_missing_database_is_reported_not_created(tmp_path: Path) -> None:
     missing = tmp_path / "missing" / "catalog.sqlite"
 
-    SynthesisTools(missing, _initialize_database=False)
+    tools = SynthesisTools(missing)
+    with pytest.raises(FileNotFoundError, match="synclaw db init"):
+        tools.search_building_blocks("CCO")
+    with pytest.raises(FileNotFoundError):
+        db.table_counts(missing)
 
     assert not missing.parent.exists()
 

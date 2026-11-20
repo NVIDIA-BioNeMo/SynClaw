@@ -8,6 +8,7 @@ import json
 
 import pytest
 
+from synclaw.core import db
 from synclaw.rollout import prompts
 from synclaw.runners import model_runner
 from synclaw.tasks.datasets import PROMPT_FINGERPRINT, build_adhoc_task
@@ -123,6 +124,7 @@ def test_missing_api_key_is_reported_for_a_valid_target(monkeypatch) -> None:
 
 
 def test_run_sends_the_smiles_target_to_the_model(tmp_path, monkeypatch) -> None:
+    db.init_db(tmp_path / "empty.sqlite")
     args = _args(
         "--api-mode",
         "chat",
@@ -131,7 +133,7 @@ def test_run_sends_the_smiles_target_to_the_model(tmp_path, monkeypatch) -> None
         "--smiles",
         "CCO",
         "--db",
-        str(tmp_path / "unused.sqlite"),
+        str(tmp_path / "empty.sqlite"),
         "--trace",
         str(tmp_path / "trace.jsonl"),
     )

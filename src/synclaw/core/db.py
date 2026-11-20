@@ -167,9 +167,14 @@ def now_iso() -> str:
 
 
 def connect(db_path: str | Path) -> sqlite3.Connection:
+    """Open an existing database; only ``init_db`` creates one."""
+
     path = Path(db_path)
-    if path.parent:
-        path.parent.mkdir(parents=True, exist_ok=True)
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"SQLite database does not exist: {path}. Create it with `synclaw db init --db {path}` "
+            "or an ingest command."
+        )
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
@@ -190,7 +195,11 @@ def session(db_path: str | Path) -> Iterator[sqlite3.Connection]:
 
 
 def init_db(db_path: str | Path) -> None:
-    with session(db_path) as conn:
+    """Create the database file if it is missing and apply the schema."""
+
+    path = Path(db_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with closing(sqlite3.connect(path)) as conn:
         conn.executescript(SCHEMA)
 
 
@@ -1141,7 +1150,6 @@ def list_reaction_templates(
 
 
 def table_counts(db_path: str | Path) -> dict[str, int]:
-    init_db(db_path)
     tables = [
         "building_blocks",
         "import_errors",

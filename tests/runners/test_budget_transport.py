@@ -8,6 +8,7 @@ import json
 
 import pytest
 
+from synclaw.core import db
 from synclaw.rollout import prompts
 from synclaw.rollout.budget import (
     BudgetFeedbackState,
@@ -631,6 +632,7 @@ def test_hosted_initial_budget_is_system_content_and_resume_preserves_it(
         )
         + "\n"
     )
+    db.init_db(tmp_path / "empty.sqlite")
     parser = argparse.ArgumentParser()
     model_runner.add_arguments(parser)
     argv = [
@@ -649,7 +651,7 @@ def test_hosted_initial_budget_is_system_content_and_resume_preserves_it(
         "--taskset",
         str(taskset),
         "--db",
-        str(tmp_path / "unused.sqlite"),
+        str(tmp_path / "empty.sqlite"),
         "--trace",
         str(tmp_path / "trace.jsonl"),
         "--checkpoint",
@@ -725,6 +727,7 @@ def test_task_budgets_set_the_prompt_request_and_checkpoint(tmp_path, monkeypatc
         )
         + "\n"
     )
+    db.init_db(tmp_path / "empty.sqlite")
     parser = argparse.ArgumentParser()
     model_runner.add_arguments(parser)
     args = parser.parse_args(
@@ -736,7 +739,7 @@ def test_task_budgets_set_the_prompt_request_and_checkpoint(tmp_path, monkeypatc
             "--taskset",
             str(taskset),
             "--db",
-            str(tmp_path / "unused.sqlite"),
+            str(tmp_path / "empty.sqlite"),
             "--trace",
             str(tmp_path / "trace.jsonl"),
             "--checkpoint",

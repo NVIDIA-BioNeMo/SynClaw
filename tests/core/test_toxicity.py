@@ -160,6 +160,7 @@ def test_hosted_target_screening_is_opt_in_and_preserves_trace_results(
         )
         + "\n"
     )
+    db.init_db(tmp_path / "test.sqlite")
     parser = argparse.ArgumentParser()
     model_runner.add_arguments(parser)
     args = parser.parse_args(
@@ -263,6 +264,7 @@ def test_enabled_screen_keeps_the_initial_messages_in_the_trace(
         )
         + "\n"
     )
+    db.init_db(tmp_path / "test.sqlite")
     parser = argparse.ArgumentParser()
     model_runner.add_arguments(parser)
     args = parser.parse_args(

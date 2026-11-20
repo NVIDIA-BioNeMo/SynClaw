@@ -32,7 +32,6 @@ class SynthesisTools:
         hidden_target_smiles: str | None = None,
         hidden_building_block_ids: frozenset[int] = frozenset(),
         hidden_similarity: float | None = None,
-        _initialize_database: bool = True,
     ):
         """Create tool handlers.
 
@@ -62,8 +61,6 @@ class SynthesisTools:
         ):
             raise RuntimeError("Stock similarity cutoff requires a target and a value in [0, 1].")
         self.hidden_similarity = hidden_similarity
-        if _initialize_database:
-            db.init_db(self.db_path)
 
     @cached_property
     def hidden_building_block_ids(self) -> frozenset[int]:

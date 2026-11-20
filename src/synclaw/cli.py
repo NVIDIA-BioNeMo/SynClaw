@@ -444,7 +444,6 @@ def _cmd_db_prepare_search(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def _cmd_db_remove_reactions(args: argparse.Namespace) -> dict[str, Any]:
-    db.init_db(args.db)
     with db.session(args.db) as conn:
         removed = db.remove_reaction_libraries(conn, args.library)
     return {"db": args.db, "libraries": args.library, "removed_templates": removed}
