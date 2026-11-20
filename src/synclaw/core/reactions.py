@@ -39,7 +39,6 @@ ANNOTATION_METADATA_KEYS = (
     "family_metadata",
     "search_terms",
     "search_exclusions",
-    "token_aliases",
     "reactant_roles",
     "retro_planning_notes",
     "execution_caveats",
@@ -236,15 +235,6 @@ def _validate_template_annotation(annotation: dict[str, Any], *, source: str) ->
                 field="family_metadata.search_terms",
             )
 
-    token_aliases = annotation.get("token_aliases")
-    if token_aliases is not None:
-        if not isinstance(token_aliases, dict):
-            raise ValueError(f"{source}: token_aliases must be an object")
-        for pattern, aliases in token_aliases.items():
-            if not isinstance(pattern, str) or not pattern.strip():
-                raise ValueError(f"{source}: token_aliases keys must be non-empty strings")
-            _validate_text_list(aliases, source=source, field=f"token_aliases.{pattern}")
-
     reactant_roles = annotation.get("reactant_roles")
     if reactant_roles is not None:
         if not isinstance(reactant_roles, list):
@@ -375,7 +365,7 @@ def _decode_inline_annotation_value(key: str, value: Any, *, source: str) -> Any
             except json.JSONDecodeError:
                 pass
         return _normalize_tags(text) if key in {"search_terms", "search_exclusions"} else text
-    if key in {"family_metadata", "token_aliases", "reactant_roles", "overview"}:
+    if key in {"family_metadata", "reactant_roles", "overview"}:
         try:
             return json.loads(text)
         except json.JSONDecodeError as exc:

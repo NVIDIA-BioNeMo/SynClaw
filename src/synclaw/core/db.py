@@ -976,35 +976,25 @@ def search_reaction_templates(
     normalized_query = _normalize_reaction_search_phrase(text)
     scored = []
     for position, row in enumerate(index.rows):
-        alias_terms = {
-            term
-            for pattern, values in (row.get("token_aliases") or {}).items()
-            if _search_phrase_is_contained(normalized_query, pattern)
-            for term in _text_terms(" ".join(_metadata_text_list(values)))
-        }
-        curated = (
-            bool(alias_terms)
-            + any(
-                _search_phrase_is_contained(normalized_query, hint)
-                for hint in row.get("query_hints") or []
-            )
-            - any(
-                _search_phrase_is_contained(normalized_query, term)
-                for term in row.get("search_exclusions") or []
-            )
+        curated = any(
+            _search_phrase_is_contained(normalized_query, hint)
+            for hint in row.get("query_hints") or []
+        ) - any(
+            _search_phrase_is_contained(normalized_query, term)
+            for term in row.get("search_exclusions") or []
         )
         scored.append(
             (
                 row,
-                index.text.cosine(query_terms | alias_terms, position)
+                index.text.cosine(query_terms, position)
                 + index.smarts.cosine(query_smarts_terms, position),
                 curated,
                 row["reaction_id"].lower() == text.lower() or row["smarts"] == text,
                 len(query_terms & index.text.documents[position].keys()) / max(1, len(query_terms)),
             )
         )
-    # Cosine scores are scaled to the best match so curated aliases, hints and exclusions
-    # shift a template by a fixed fraction of it.
+    # Cosine scores are scaled to the best match so curated hints and exclusions shift a
+    # template by a fixed fraction of it.
     top = max((cosine for _, cosine, _, _, _ in scored), default=0.0) or 1.0
     matches = []
     for row, cosine, curated, exact_id, coverage in scored:
@@ -1233,11 +1223,6 @@ def _reaction_template_row(row: sqlite3.Row) -> dict[str, Any]:
         )
         value["query_hints"] = _metadata_text_list(annotation.get("search_terms"))
         value["search_exclusions"] = _metadata_text_list(annotation.get("search_exclusions"))
-        value["token_aliases"] = (
-            dict(annotation["token_aliases"])
-            if isinstance(annotation.get("token_aliases"), dict)
-            else {}
-        )
         value["reactant_roles"] = _metadata_dict_list(annotation.get("reactant_roles"))
         value["family_metadata"] = (
             dict(annotation["family_metadata"])
@@ -1255,7 +1240,6 @@ def _reaction_template_row(row: sqlite3.Row) -> dict[str, Any]:
     value["reaction_family"] = ""
     value["query_hints"] = list(value.get("tags") or [])
     value["search_exclusions"] = []
-    value["token_aliases"] = {}
     value["reactant_roles"] = []
     value["family_metadata"] = {}
     value["overview"] = {}

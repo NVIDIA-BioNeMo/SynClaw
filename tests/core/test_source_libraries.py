@@ -206,7 +206,7 @@ def test_union_text_and_structural_search_covers_only_selected_libraries(tmp_pat
             "library": "paroutes",
             "smarts": "[C:1][O:2]>>[C:1]=[O:2]",
             "name": "Alcohol oxidation",
-            "token_aliases": {"dehydrogenation": ["oxidation"]},
+            "search_terms": ["dehydrogenation"],
         },
         {
             "reaction_id": "O",

@@ -267,7 +267,6 @@ class ReactionTemplateTests(unittest.TestCase):
     def test_annotation_validation_rejects_malformed_new_fields(self):
         invalid_values = (
             ({"search_exclusions": "not-a-list"}, "search_exclusions"),
-            ({"token_aliases": {"x=y": "not-a-list"}}, "token_aliases.x=y"),
             ({"reactant_roles": [{"position": 0, "role": "invalid"}]}, "position"),
             ({"overview": {"priority": 1}}, "require a category"),
             ({"replace_tags": "yes"}, "replace_tags must be a boolean"),
@@ -572,7 +571,7 @@ class ReactionTemplateTests(unittest.TestCase):
             self.assertEqual(result["results"][0]["reaction_id"], "demo:R003")
             self.assertEqual(result["results"][1]["reaction_id"], "demo:R000")
 
-    def test_runtime_token_aliases_are_scoped_to_the_annotated_template(self):
+    def test_text_search_caches_its_index_and_ignores_noise_terms(self):
         with tempfile.TemporaryDirectory() as tmp:
             source = Path(tmp) / "templates.jsonl"
             db_path = Path(tmp) / "test.sqlite"
@@ -583,7 +582,6 @@ class ReactionTemplateTests(unittest.TestCase):
                         "reaction_smarts": "[C:1]-[N:2]>>[C:1]-[N:2]",
                         "name": "Curated imine-like transformation",
                         "search_terms": ["imine conversion"],
-                        "token_aliases": {"c=n": ["imine"]},
                         "confidence": "medium",
                     }
                 )
@@ -592,7 +590,7 @@ class ReactionTemplateTests(unittest.TestCase):
                     {
                         "reaction_id": "R002",
                         "reaction_smarts": "[C:1]-[N:2]>>[C:1]-[N:2]",
-                        "name": "Unaliased transformation",
+                        "name": "Plain transformation",
                         "search_terms": ["imine conversion"],
                     }
                 )
@@ -602,15 +600,10 @@ class ReactionTemplateTests(unittest.TestCase):
 
             ingest_reaction_templates(source, db_path=db_path, library="demo")
             tools = SynthesisTools(db_path)
-            result = tools.search_reaction_templates("C=N installation")
-
-            self.assertEqual(result["results"][0]["reaction_id"], "demo:R001")
-            self.assertEqual(result["results"][0]["token_aliases"], {"c=n": ["imine"]})
+            tools.search_reaction_templates("imine conversion")
             before = db._cached_reaction_text_index.cache_info()
-            tools.search_reaction_templates("C=N installation")
+            tools.search_reaction_templates("imine conversion")
             self.assertEqual(db._cached_reaction_text_index.cache_info().hits, before.hits + 1)
-            # Only R001's alias matches; single letters and SMARTS never count as text matches.
-            self.assertEqual([item["reaction_id"] for item in result["results"]], ["demo:R001"])
             self.assertEqual(tools.search_reaction_templates("medium")["count"], 0)
             # Atom-map digits, element letters and stopwords must not match every template.
             self.assertEqual(tools.search_reaction_templates("zzz 1")["count"], 0)
