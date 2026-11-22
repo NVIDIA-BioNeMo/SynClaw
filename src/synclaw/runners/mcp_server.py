@@ -26,6 +26,7 @@ from typing import Any
 from synclaw.core import db
 from synclaw.core.toxicity import ToxicityConfig
 from synclaw.rollout.loop import call_local_tool
+from synclaw.tools.compaction import compact_tool_result
 from synclaw.tools.contracts import TOOL_NAMES, TOOL_SCHEMAS
 from synclaw.tools.synthesis import SynthesisTools
 
@@ -244,7 +245,8 @@ class AsyncToolExecutor:
                 self._evict_completed_overflow()
             else:
                 self._inflight.move_to_end(call_key)
-        return await asyncio.shield(task)
+        # Clients pass results straight to their model, so serve the view rollouts give it.
+        return compact_tool_result(tool_name, await asyncio.shield(task))
 
     def _schedule_expiry(self, call_key: str, task: asyncio.Task[dict[str, Any]]) -> None:
         if not task.cancelled() and isinstance(task.exception(), ToolWorkerPoolBroken):

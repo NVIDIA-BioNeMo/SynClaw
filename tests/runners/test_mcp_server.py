@@ -26,6 +26,7 @@ from synclaw.runners.mcp_server import (
     ToolWorkerPoolBroken,
     create_server,
 )
+from synclaw.tools.compaction import compact_tool_result
 from synclaw.tools.contracts import TOOL_ARGUMENT_DEFAULTS, TOOL_SCHEMAS
 
 
@@ -73,6 +74,29 @@ def test_async_tool_executor_caps_concurrency_and_releases_waiters() -> None:
 
     assert peak_active == 16
     assert sorted(result["value"] for result in results) == list(range(20))
+
+
+def test_mcp_serves_the_compacted_result_rollouts_show_the_model() -> None:
+    result = {
+        "query": "OCC",
+        "results": [
+            {
+                "id": 7,
+                "smiles": "OCC",
+                "canonical_smiles": "CCO",
+                "match_type": "exact",
+                "similarity": 1.0,
+                "submit_reference": "BB:7",
+                "submission_note": "Exact purchasable building-block match.",
+            }
+        ],
+    }
+    executor = AsyncToolExecutor(1, use_process_pool=False)
+
+    served = asyncio.run(executor.execute("search_building_blocks", lambda: result))
+
+    assert served == compact_tool_result("search_building_blocks", result)
+    assert "submission_note" not in served["results"][0]
 
 
 def test_mcp_tool_schemas_remain_public_and_wrappers_are_async(
