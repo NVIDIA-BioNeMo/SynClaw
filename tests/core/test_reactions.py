@@ -898,7 +898,6 @@ class ReactionTemplateTests(unittest.TestCase):
 
             self.assertTrue(result["valid"])
             self.assertTrue(result["product_matched"])
-            self.assertEqual(result["execution_backend"], "rdkit")
             self.assertIn("C=O", result["generated_products"])
 
     def test_simulate_reaction_canonicalizes_generated_products_before_matching(self):
@@ -995,7 +994,6 @@ class ReactionTemplateTests(unittest.TestCase):
             )
 
             self.assertTrue(result["valid"])
-            self.assertEqual(result["execution_backend"], "rdkit")
             self.assertEqual(result["expected_reactant_count"], 1)
             self.assertEqual(result["provided_reactant_count"], 1)
             self.assertEqual(result["generated_products"], ["C=O"])
@@ -1077,7 +1075,6 @@ class ReactionTemplateTests(unittest.TestCase):
             )
 
             self.assertTrue(result["valid"])
-            self.assertEqual(result["execution_backend"], "rdkit")
             self.assertEqual(result["candidate_reactant_sets"][0]["reactants"], ["CO"])
             self.assertFalse(
                 result["candidate_reactant_sets"][0][

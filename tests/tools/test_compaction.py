@@ -322,7 +322,6 @@ def test_compaction_drops_echoed_settings_and_derivable_counts():
             "count": 0,
             "exact_match_count": 0,
             "near_match_count": 0,
-            "chem_backend": "rdkit",
             "results": [],
         },
     )
@@ -345,7 +344,7 @@ def test_compaction_drops_echoed_settings_and_derivable_counts():
         {
             "similarity": 0.5,
             "method": "rdkit_morgan_tanimoto",
-            "left": {"backend": "rdkit", "canonical_smiles": "CCO"},
+            "left": {"input": "OCC", "canonical_smiles": "CCO"},
         },
     )
 

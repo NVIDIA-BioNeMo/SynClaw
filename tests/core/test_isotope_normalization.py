@@ -4,7 +4,7 @@
 import pytest
 from rdkit import Chem
 
-from synclaw.core.chem import compare_molecular_identity, strip_isotopes
+from synclaw.core.chem import matches_target, strip_isotopes
 
 
 @pytest.mark.parametrize(
@@ -32,9 +32,7 @@ def test_strip_isotopes_chembl_targets(smiles, expected):
     assert strip_isotopes(result) == result
     assert all(atom.GetIsotope() == 0 for atom in Chem.MolFromSmiles(result).GetAtoms())
     # Preprocessing is explicit; exact identity itself still distinguishes isotopes.
-    identity = compare_molecular_identity(smiles, result)
-    assert identity["valid"]
-    assert not identity["identical"]
+    assert matches_target(smiles, result) is False
 
 
 @pytest.mark.parametrize("smiles", ["OCC", "C(C)O", "Cl.C[C@@H](O)F", " CCO "])

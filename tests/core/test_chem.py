@@ -26,7 +26,6 @@ class ChemTests(unittest.TestCase):
     def test_validate_smiles_rejects_plain_words(self):
         result = chem.validate_smiles("product")
 
-        self.assertEqual(result["backend"], "rdkit")
         self.assertFalse(result["valid"])
 
     def test_unmapped_product_atoms_include_unbracketed_atoms(self):

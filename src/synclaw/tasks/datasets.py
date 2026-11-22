@@ -56,11 +56,11 @@ def build_llm_task(
             f"{validation.get('error') or target_smiles!r}"
         )
     canonical = validation["canonical_smiles"]
-    identity = chem.compare_molecular_identity(canonical, canonical)
-    if not identity["valid"]:
+    unscoreable = chem.unscoreable_reason(canonical)
+    if unscoreable:
         raise ValueError(
             f"Target SMILES for task {task_id!r} can never be matched exactly "
-            f"({identity['error']}): {target_smiles!r}"
+            f"({unscoreable}): {target_smiles!r}"
         )
     return {
         "task_id": task_id,
@@ -199,7 +199,6 @@ def generate_llm_taskset(
         "read": 0,
         "written": 0,
         "invalid": 0,
-        "chem_backend": chem.backend_name(),
     }
 
     records = read_smiles_file(source)

@@ -16,8 +16,8 @@ MAX_RETURNED_PRODUCTS = 20
 MAX_RETURNED_PRODUCT_SETS = 10
 MAX_ISSUES = 8
 MAX_ERROR_MESSAGE_CHARS = 1600
-# Which chemistry backend and method produced a result is fixed for a run; the model can't act on it.
-BACKEND_KEYS = frozenset({"backend", "chem_backend", "execution_backend", "method"})
+# Which method produced a result is fixed for a run; the model can't act on it.
+METHOD_KEY = "method"
 
 
 def compact_tool_result(tool_name: str | None, result: Any) -> Any:
@@ -109,9 +109,7 @@ def _compact_mces(result: dict[str, Any]) -> dict[str, Any]:
 
 def _compact_similarity(result: dict[str, Any]) -> dict[str, Any]:
     output = {
-        key: value
-        for key, value in result.items()
-        if key not in BACKEND_KEYS and key not in ("left", "right")
+        key: value for key, value in result.items() if key not in (METHOD_KEY, "left", "right")
     }
     output["left"] = _compact_validation(result.get("left"))
     output["right"] = _compact_validation(result.get("right"))
@@ -229,7 +227,7 @@ def _compact_simulate_reverse_reaction(result: dict[str, Any]) -> dict[str, Any]
 
 
 def _compact_generic_result(result: dict[str, Any]) -> dict[str, Any]:
-    output = {key: value for key, value in result.items() if key not in BACKEND_KEYS}
+    output = {key: value for key, value in result.items() if key != METHOD_KEY}
     if isinstance(output.get("template"), dict):
         output["template"] = _compact_template(output["template"])
     if isinstance(output.get("results"), list):

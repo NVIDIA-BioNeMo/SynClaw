@@ -810,7 +810,6 @@ def _simulate_template(
             "generated_product_sets": [],
             "generated_product_count": 0,
             "generated_product_set_count": 0,
-            "execution_backend": "rdkit",
             "reaction_executed": False,
             "reactants_valid": all(validation["valid"] for validation in reactant_validations),
         }
@@ -840,7 +839,6 @@ def _simulate_template(
                 "generated_product_sets": [],
                 "generated_product_count": 0,
                 "generated_product_set_count": 0,
-                "execution_backend": "rdkit",
                 "reaction_executed": False,
                 "reactants_valid": True,
                 "expected_reactant_count": expected_reactants,
@@ -872,7 +870,6 @@ def _simulate_template(
             "generated_product_sets": [],
             "generated_product_count": 0,
             "generated_product_set_count": 0,
-            "execution_backend": "rdkit",
             "reaction_executed": False,
             "reactants_valid": True,
             "expected_reactant_count": template.get("reactant_count"),
@@ -912,7 +909,6 @@ def _simulate_template(
         "generated_product_count": len(generated),
         "generated_product_set_count": len(generated_product_sets),
         "skipped_invalid_product_set_count": skipped_invalid_product_sets,
-        "execution_backend": "rdkit",
         "reaction_executed": True,
         "reactants_valid": True,
         "expected_reactant_count": reaction.GetNumReactantTemplates(),
@@ -952,7 +948,6 @@ def simulate_reverse_reaction(
             "candidate_reactant_sets": [],
             "candidate_count": 0,
             "returned_candidate_count": 0,
-            "execution_backend": "rdkit",
             "reaction_executed": False,
         }
 
@@ -975,7 +970,6 @@ def simulate_reverse_reaction(
             "candidate_reactant_sets": [],
             "candidate_count": 0,
             "returned_candidate_count": 0,
-            "execution_backend": "rdkit",
             "reaction_executed": False,
             "product_template_count": expected_products,
             "provided_product_count": len(product_inputs),
@@ -1015,7 +1009,6 @@ def simulate_reverse_reaction(
             "candidate_reactant_sets": [],
             "candidate_count": 0,
             "returned_candidate_count": 0,
-            "execution_backend": "rdkit",
             "reaction_executed": False,
             "reverse_smarts": reverse_smarts,
         }
@@ -1039,7 +1032,6 @@ def simulate_reverse_reaction(
         "candidate_count": len(candidate_sets),
         "returned_candidate_count": len(candidate_sets),
         "skipped_invalid_candidate_set_count": skipped_invalid_sets,
-        "execution_backend": "rdkit",
         "reaction_executed": True,
         "reverse_smarts": reverse_smarts,
         "expected_product_count": expected_products,

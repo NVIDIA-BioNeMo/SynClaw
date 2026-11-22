@@ -131,7 +131,6 @@ class SynthesisTools:
                 "Near matches are purchasable alternatives, not proof that the original query SMILES is in the library."
             ),
             "results": results,
-            "chem_backend": chem.backend_name(),
         }
 
     def get_building_block(self, bb_id: int) -> dict[str, Any]:
@@ -304,7 +303,6 @@ class SynthesisTools:
                     "generated_product_sets": [],
                     "generated_product_count": 0,
                     "generated_product_set_count": 0,
-                    "execution_backend": "rdkit",
                 }
             result = reactions.simulate_reaction(
                 conn,
@@ -709,7 +707,6 @@ class SynthesisTools:
             "building_block_grounded": grounding["grounded"],
             "referenced_building_block_ids": grounding["building_block_ids"],
             "ungrounded_reactants": grounding["ungrounded_reactants"],
-            "chem_backend": chem.backend_name(),
         }
 
 
@@ -845,7 +842,6 @@ def _direct_purchase_submission(
         "building_block_grounded": grounding["grounded"],
         "referenced_building_block_ids": grounding["building_block_ids"],
         "ungrounded_reactants": grounding["ungrounded_reactants"],
-        "chem_backend": chem.backend_name(),
     }
 
 
