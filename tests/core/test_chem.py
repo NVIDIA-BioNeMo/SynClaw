@@ -23,6 +23,10 @@ class ChemTests(unittest.TestCase):
         self.assertFalse(result["valid"])
         self.assertIn("empty", result["error"])
 
+    def test_unconvertible_molecule_has_no_inchi_key(self):
+        ferrocene = "CN(C)C[c]12->[Fe+2]3456789(<-[cH]%10[cH]->3[cH]->4[cH-]->5[cH]->6%10)<-[cH]([cH]->71)[cH]->8[cH-]->92"
+        self.assertIsNone(chem.validate_smiles(ferrocene)["properties"]["inchi_key"])
+
     def test_validate_smiles_rejects_plain_words(self):
         result = chem.validate_smiles("product")
 
@@ -41,7 +45,6 @@ class ChemTests(unittest.TestCase):
         self.assertEqual(result["similarity"], 1.0)
         self.assertEqual(result["constitutional_similarity"], 1.0)
         self.assertEqual(result["stereo_aware_similarity"], 1.0)
-        self.assertEqual(result["method"], "rdkit_morgan_tanimoto")
 
     def test_similarity_reports_constitutional_and_stereo_aware_scores(self):
         result = chem.similarity("F[C@H](Cl)Br", "F[C@@H](Cl)Br")
@@ -59,7 +62,6 @@ class ChemTests(unittest.TestCase):
         self.assertEqual(result["union_bonds"], 3)
         self.assertAlmostEqual(result["similarity"], 1 / 3)
         self.assertIsNotNone(Chem.MolFromSmiles(result["mces_smiles"]))
-        self.assertEqual(result["method"], chem.MCES_METHOD)
 
     def test_mces_returns_full_disconnected_match(self):
         result = chem.mces("CCOc1ccccc1", "CCNc1ccccc1")
@@ -197,7 +199,6 @@ class ChemTests(unittest.TestCase):
         self.assertFalse(result["valid"])
         self.assertTrue(result["timed_out"])
         self.assertIsNone(result["similarity"])
-        self.assertEqual(result["timeout_seconds"], 20)
         self.assertIn("20-second", result["error"])
 
 

@@ -16,7 +16,8 @@ from typing import Any
 
 try:
     from rdkit import Chem, DataStructs, RDLogger, rdBase
-    from rdkit.Chem import rdChemReactions, rdFingerprintGenerator, rdRascalMCES
+    from rdkit.Chem import rdChemReactions, rdFingerprintGenerator, rdinchi, rdRascalMCES
+    from rdkit.Chem.EnumerateStereoisomers import EnumerateStereoisomers, StereoEnumerationOptions
     from rdkit.Chem.MolStandardize import rdMolStandardize
 except ImportError as exc:  # pragma: no cover - exercised only in broken environments.
     raise RuntimeError(
@@ -26,7 +27,6 @@ except ImportError as exc:  # pragma: no cover - exercised only in broken enviro
 
 RDLogger.DisableLog("rdApp.*")
 
-MCES_METHOD = "rdkit_rascal_mces_bond_tanimoto"
 MCES_TIMEOUT_SECONDS = 20
 MCES_CACHE_SIZE = 2048
 MCES_MAX_BOND_MATCH_PAIRS = 10_000
@@ -124,10 +124,8 @@ def strip_isotopes(smiles: str) -> str:
 
 
 def _inchi_key(mol: Any) -> str | None:
-    try:
-        return Chem.MolToInchiKey(mol)
-    except Exception:
-        return None
+    # RDKit reports a failed conversion as an empty key, not an exception.
+    return Chem.MolToInchiKey(mol) or None
 
 
 def _standard_inchi(mol: Any) -> str:
@@ -136,8 +134,6 @@ def _standard_inchi(mol: Any) -> str:
     Raises:
         ValueError: InChI conversion failed or did not produce a Standard InChI.
     """
-
-    from rdkit.Chem import rdinchi
 
     identity, status, message, _, _ = rdinchi.MolToInchi(mol)
     if status not in (0, 1) or not identity.startswith("InChI=1S/"):
@@ -186,7 +182,7 @@ def unscoreable_reason(smiles: str | None) -> str | None:
 
     try:
         _standard_inchi(_identity_mol(smiles))
-    except ValueError as exc:
+    except (ValueError, RuntimeError) as exc:
         return str(exc)
     return None
 
@@ -201,11 +197,6 @@ def _without_stereo_layers(inchi: str) -> tuple[str, ...]:
 
 def _open_stereoisomers(mol: Any) -> list[Any] | None:
     """Every assignment of the stereo ``mol`` leaves open; None above MAX_OPEN_STEREOISOMERS."""
-
-    from rdkit.Chem.EnumerateStereoisomers import (
-        EnumerateStereoisomers,
-        StereoEnumerationOptions,
-    )
 
     options = StereoEnumerationOptions(
         onlyUnassigned=True, unique=True, maxIsomers=MAX_OPEN_STEREOISOMERS + 1
@@ -272,7 +263,7 @@ def matches_target(target_smiles: str | None, product_smiles: str | None) -> boo
         target = _TAUTOMERS.Canonicalize(target)
         product = _TAUTOMERS.Canonicalize(product)
         return _satisfies_stereo(target, _standard_inchi(target), product, _standard_inchi(product))
-    except ValueError:
+    except (ValueError, RuntimeError):
         return None
 
 
@@ -308,7 +299,6 @@ def similarity(smiles_a: str, smiles_b: str) -> dict[str, Any]:
             "similarity": None,
             "constitutional_similarity": None,
             "stereo_aware_similarity": None,
-            "method": "rdkit_morgan_tanimoto",
             "left": left,
             "right": right,
             "error": "Both SMILES must be valid to compute similarity",
@@ -323,7 +313,6 @@ def similarity(smiles_a: str, smiles_b: str) -> dict[str, Any]:
         "similarity": stereo_score,
         "constitutional_similarity": constitutional_score,
         "stereo_aware_similarity": stereo_score,
-        "method": "rdkit_morgan_tanimoto",
         "left": left,
         "right": right,
         "error": None,
@@ -381,8 +370,6 @@ def mces(smiles_a: str, smiles_b: str) -> dict[str, Any]:
             "right_bonds": None,
             "union_bonds": None,
             "timed_out": False,
-            "timeout_seconds": MCES_TIMEOUT_SECONDS,
-            "method": MCES_METHOD,
             "left": left,
             "right": right,
             "error": "Both SMILES must be valid to compute an MCES",
@@ -408,8 +395,18 @@ def _cached_mces(canonical_a: str, canonical_b: str) -> dict[str, Any]:
     left_bonds = int(mol_a.GetNumBonds())
     right_bonds = int(mol_b.GetNumBonds())
 
-    graph_a = _mces_molecule_smiles(mol_a)
-    if canonical_a == canonical_b or graph_a == _mces_molecule_smiles(mol_b):
+    graph_a = _mces_graph_smiles(mol_a)
+    if canonical_a == canonical_b or graph_a == _mces_graph_smiles(mol_b):
+        if Chem.MolFromSmiles(graph_a) is None:
+            return _mces_result(
+                mces_smiles=None,
+                similarity=None,
+                matched_bonds=left_bonds,
+                left_bonds=left_bonds,
+                right_bonds=right_bonds,
+                union_bonds=left_bonds,
+                error="Could not convert the identical-graph MCES to SMILES",
+            )
         return _mces_result(
             mces_smiles=graph_a,
             similarity=1.0,
@@ -568,15 +565,8 @@ def _mces_fragment_smiles(
     return smiles
 
 
-def _mces_molecule_smiles(mol: Any) -> str:
-    smiles = Chem.MolToSmiles(
-        _mces_output_mol(mol),
-        canonical=True,
-        isomericSmiles=False,
-    )
-    if not smiles or Chem.MolFromSmiles(smiles) is None:
-        raise ValueError("generated MCES is not a valid SMILES string")
-    return smiles
+def _mces_graph_smiles(mol: Any) -> str:
+    return Chem.MolToSmiles(_mces_output_mol(mol), canonical=True, isomericSmiles=False)
 
 
 def _mces_output_mol(mol: Any) -> Any:
@@ -607,8 +597,6 @@ def _mces_result(
         "right_bonds": right_bonds,
         "union_bonds": union_bonds,
         "timed_out": timed_out,
-        "timeout_seconds": MCES_TIMEOUT_SECONDS,
-        "method": MCES_METHOD,
         "error": error,
     }
 

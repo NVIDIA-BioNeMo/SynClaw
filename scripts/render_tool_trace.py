@@ -629,8 +629,6 @@ def render_result(name: str, result: dict[str, Any], max_results: int) -> list[s
             f"**Result:** valid `{str(bool(result.get('valid'))).lower()}`, "
             f"similarity `{result.get('similarity')}`"
         ]
-        if result.get("method"):
-            lines.append(f"- Method: `{result.get('method')}`")
         left = result.get("left") if isinstance(result.get("left"), dict) else {}
         right = result.get("right") if isinstance(result.get("right"), dict) else {}
         if left.get("canonical_smiles"):

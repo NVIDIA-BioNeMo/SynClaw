@@ -28,11 +28,11 @@ def block_live_http(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture
 def inchi_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Make every Standard InChI conversion report an error status."""
+    """Make every Standard InChI conversion raise, as RDKit does on an internal error."""
 
     from rdkit.Chem import rdinchi
 
-    def failed_conversion(mol: Any) -> tuple[str, int, str, str, str]:
-        return "", 2, "InChI conversion error", "", ""
+    def failed_conversion(mol: Any) -> None:
+        raise RuntimeError("InChI unavailable")
 
     monkeypatch.setattr(rdinchi, "MolToInchi", failed_conversion)

@@ -5,6 +5,7 @@
 
 import pytest
 from rdkit import Chem
+from rdkit.Chem import rdinchi
 
 from synclaw.core import chem
 
@@ -140,7 +141,13 @@ def test_invalid_inputs_cannot_be_compared(invalid: str | None) -> None:
 
 def test_failed_inchi_conversion_cannot_be_compared(inchi_unavailable: None) -> None:
     assert chem.matches_target("CCO", "CCO") is None
-    assert chem.unscoreable_reason("CCO") == "InChI conversion error"
+    assert chem.unscoreable_reason("CCO") == "InChI unavailable"
+
+
+def test_inchi_error_status_cannot_be_compared(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(rdinchi, "MolToInchi", lambda mol: ("", 2, "conversion error", "", ""))
+    assert chem.matches_target("CCO", "CCO") is None
+    assert chem.unscoreable_reason("CCO") == "conversion error"
 
 
 def test_lookup_prefixes_cover_tautomers_and_every_stereoisomer() -> None:
