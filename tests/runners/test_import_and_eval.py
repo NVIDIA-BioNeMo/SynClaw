@@ -203,9 +203,7 @@ class ImportAndEvalTests(unittest.TestCase):
             self._prepare_minimal_model_db(db_path)
             # Oxidizing methanol cannot make ethanol, so the run rejects this route.
             arguments = {
-                "steps": [
-                    {"reaction_id": "demo:R000", "reactants": ["BB:1"], "product_smiles": "CCO"}
-                ],
+                "steps": [{"reaction_id": "R001", "reactants": ["BB:1"], "product_smiles": "CCO"}],
                 "pathway_text": "Claim an invalid route to ethanol.",
             }
             result = SynthesisTools(db_path).submit_pathway(**arguments, target_smiles="CCO")
@@ -288,15 +286,11 @@ class ImportAndEvalTests(unittest.TestCase):
             reactions.ingest_reaction_templates(templates, db_path=db_path, library="demo")
             db.ingest_building_blocks(bbs, db_path)
             first = {
-                "steps": [
-                    {"reaction_id": "demo:R000", "reactants": ["CO"], "product_smiles": "C=O"}
-                ],
+                "steps": [{"reaction_id": "R001", "reactants": ["CO"], "product_smiles": "C=O"}],
                 "pathway_text": "First candidate.",
             }
             second = {
-                "steps": [
-                    {"reaction_id": "demo:R000", "reactants": ["CCO"], "product_smiles": "CC=O"}
-                ],
+                "steps": [{"reaction_id": "R001", "reactants": ["CCO"], "product_smiles": "CC=O"}],
                 "pathway_text": "Second candidate.",
             }
             events = [
@@ -319,18 +313,10 @@ class ImportAndEvalTests(unittest.TestCase):
             self.assertEqual(summary["final_smiles"], "CC=O")
             self.assertEqual(summary["similarity_to_target"], 1.0)
 
-            restricted = evaluate_trace_file(
-                trace,
-                db_path,
-                model="mock-model",
-                tool_config={"reaction_library": ["other"]},
-            )
-            self.assertIsNone(restricted["accepted"])
-
-            # IDs from older catalogs resolve through the SMARTS recorded in each call's result.
+            # IDs numbered by another database resolve through the SMARTS recorded in each call's result.
             retired = {
                 **second,
-                "steps": [{**second["steps"][0], "reaction_id": "retired:R033"}],
+                "steps": [{**second["steps"][0], "reaction_id": "R033"}],
             }
             recorded = {
                 "steps": [{"step_index": 1, "template": {"smarts": "[C:1][O:2]>>[C:1]=[O:2]"}}]
@@ -397,9 +383,7 @@ class ImportAndEvalTests(unittest.TestCase):
             self._prepare_minimal_model_db(db_path)
             exact = {"steps": [], "building_block": "BB:1", "pathway_text": "Buy methanol."}
             analogue = {
-                "steps": [
-                    {"reaction_id": "demo:R000", "reactants": ["BB:1"], "product_smiles": "C=O"}
-                ],
+                "steps": [{"reaction_id": "R001", "reactants": ["BB:1"], "product_smiles": "C=O"}],
                 "pathway_text": "Oxidize methanol.",
             }
             events = [
@@ -865,7 +849,6 @@ class ImportAndEvalTests(unittest.TestCase):
         self.assertEqual(args.max_turns, 80)
         self.assertEqual(args.max_tool_calls, 150)
         self.assertEqual(args.turn_warning_remaining, 3)
-        self.assertEqual(args.reaction_library, ("synformer", "paroutes", "ord", "nvidia"))
         self.assertEqual(args.force_submit_after_non_tool_turns, 2)
         self.assertEqual(args.same_pathway_finish_after, 5)
 
@@ -974,7 +957,7 @@ class ImportAndEvalTests(unittest.TestCase):
 
             reactions.ingest_reaction_templates(source, db_path, library="synformer")
             with db.session(db_path) as conn:
-                result = db.get_reaction_template(conn, "synformer:R000")
+                result = db.get_reaction_template(conn, "R001")
 
             self.assertTrue(result["introduces_unmapped_product_atoms"])
             self.assertNotIn("reagent-supplied", result["description"])
@@ -1199,8 +1182,6 @@ class ImportAndEvalTests(unittest.TestCase):
                     "1",
                     "--max-tokens",
                     "16",
-                    "--reaction-library",
-                    "",
                     "--exclude-tool",
                     "simulate_reverse_reaction",
                 ]
@@ -1416,8 +1397,6 @@ class ImportAndEvalTests(unittest.TestCase):
                     "4",
                     "--max-tokens",
                     "1024",
-                    "--reaction-library",
-                    "",
                 ]
             )
             seen_kwargs: list[dict] = []
@@ -1455,7 +1434,7 @@ class ImportAndEvalTests(unittest.TestCase):
                             "input": {
                                 "steps": [
                                     {
-                                        "reaction_id": "demo:R000",
+                                        "reaction_id": "R001",
                                         "reactants": ["BB:1"],
                                         "product_smiles": "C=O",
                                     }
@@ -1578,8 +1557,6 @@ class ImportAndEvalTests(unittest.TestCase):
                     "1",
                     "--max-tokens",
                     "1024",
-                    "--reaction-library",
-                    "",
                 ]
             )
             seen_kwargs: list[dict] = []
@@ -1603,7 +1580,7 @@ class ImportAndEvalTests(unittest.TestCase):
                             "input": {
                                 "steps": [
                                     {
-                                        "reaction_id": "demo:R000",
+                                        "reaction_id": "R001",
                                         "reactants": ["BB:1"],
                                         "product_smiles": "C=O",
                                     }
@@ -1684,8 +1661,6 @@ class ImportAndEvalTests(unittest.TestCase):
                     "3",
                     "--max-tokens",
                     "16",
-                    "--reaction-library",
-                    "",
                 ]
             )
             calls = 0
@@ -1777,7 +1752,7 @@ class ImportAndEvalTests(unittest.TestCase):
                                                 {
                                                     "steps": [
                                                         {
-                                                            "reaction_id": "demo:R000",
+                                                            "reaction_id": "R001",
                                                             "reactants": ["BB:1"],
                                                             "product_smiles": "C=O",
                                                         }
@@ -1821,7 +1796,7 @@ class ImportAndEvalTests(unittest.TestCase):
         arguments, coercions = coerce_tool_arguments(
             "simulate_reaction",
             {
-                "reaction_id": "synformer:R036",
+                "reaction_id": "R036",
                 "reactants": '["Nc1nccc2occc12", "N#CC1CC12CNC2"]',
             },
         )
@@ -1848,7 +1823,7 @@ class ImportAndEvalTests(unittest.TestCase):
     def test_model_runner_does_not_coerce_non_json_reactant_text(self):
         arguments, coercions = coerce_tool_arguments(
             "simulate_reaction",
-            {"reaction_id": "synformer:R036", "reactants": "Nc1nccc2occc12, N#CC1CC12CNC2"},
+            {"reaction_id": "R036", "reactants": "Nc1nccc2occc12, N#CC1CC12CNC2"},
         )
 
         self.assertEqual(arguments["reactants"], "Nc1nccc2occc12, N#CC1CC12CNC2")
@@ -1860,7 +1835,7 @@ class ImportAndEvalTests(unittest.TestCase):
             {
                 "steps": [
                     {
-                        "reaction_id": "synformer:R036",
+                        "reaction_id": "R036",
                         "reactants": '["BB:82779", "BB:203506"]',
                         "product_smiles": "product",
                     }
@@ -1879,7 +1854,7 @@ class ImportAndEvalTests(unittest.TestCase):
                 "steps": json.dumps(
                     [
                         {
-                            "reaction_id": "synformer:R036",
+                            "reaction_id": "R036",
                             "reactants": '["BB:82779", "BB:203506"]',
                             "product_smiles": "product",
                         }
@@ -1929,9 +1904,7 @@ class ImportAndEvalTests(unittest.TestCase):
                 annotations_path=annotations,
             )
 
-            overview = call_local_tool(
-                SynthesisTools(db_path, reaction_libraries="demo"), "search_reaction_templates", {}
-            )
+            overview = call_local_tool(SynthesisTools(db_path), "search_reaction_templates", {})
 
             self.assertEqual(overview["families"][0]["family"], "amide formation")
             self.assertIn("carboxylic acid plus amine", overview["families"][0]["search_terms"])
@@ -2110,8 +2083,6 @@ class ImportAndEvalTests(unittest.TestCase):
                     "2",
                     "--max-tokens",
                     "16",
-                    "--reaction-library",
-                    "",
                 ]
             )
             first_message = {

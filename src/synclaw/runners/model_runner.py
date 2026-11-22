@@ -289,12 +289,6 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         help="Hide stock with constitutional Morgan/Tanimoto similarity >= this cutoff [0, 1].",
     )
     parser.add_argument(
-        "--reaction-library",
-        nargs="+",
-        default=policy.DEFAULT_REACTION_LIBRARY,
-        help="Reaction-template libraries the tools may use; others are excluded from search and overview",
-    )
-    parser.add_argument(
         "--exclude-tool",
         action="append",
         default=[],
@@ -332,14 +326,13 @@ def run_model_from_args(args: argparse.Namespace) -> dict[str, Any]:
         raise RuntimeError(providers.missing_api_key_message(args.provider, args.api_key_env))
 
     args.db = str(resolve_task_db_path(getattr(args, "db", None)))
-    prompts.validate_model_run_database(args.db, library=args.reaction_library or None)
+    prompts.validate_model_run_database(args.db)
     excluded_tools = run_excluded_tools(args, task)
     chat_tool_schemas = contracts.filter_chat_tool_schemas(excluded_tools)
     responses_tool_schemas = contracts.filter_responses_tool_schemas(excluded_tools)
     messages_tool_schemas = contracts.filter_messages_tool_schemas(excluded_tools)
     tools = SynthesisTools(
         args.db,
-        reaction_libraries=args.reaction_library,
         toxicity=toxicity.config_from_args(args),
         hidden_target_smiles=task["target_smiles"] if _hide_target(args) else None,
         hidden_building_block_ids=_hidden_ids(args),
@@ -570,7 +563,7 @@ def run_model_from_args(args: argparse.Namespace) -> dict[str, Any]:
                 config=policy_config,
                 transport=transport,
                 budget_provider=transport.budget_snapshot,
-                tool_executor=LocalToolExecutor(tools, reaction_library=args.reaction_library),
+                tool_executor=LocalToolExecutor(tools),
                 tool_schemas=transport.tool_schemas,
                 state=rollout_state,
                 start_turn_index=start_turn_index,

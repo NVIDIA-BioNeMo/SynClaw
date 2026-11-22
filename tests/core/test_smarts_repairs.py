@@ -12,7 +12,6 @@ import pytest
 from rdkit import Chem
 from rdkit.Chem import rdChemReactions
 
-from synclaw.core.reactions import ingest_reaction_libraries
 from synclaw.tools.synthesis import SynthesisTools
 
 ARYL_BROMIDE = "CCCc1nc(CC)c(Br)c(=O)n1Cc1ccc(-c2ccccc2C#N)cc1"
@@ -22,10 +21,8 @@ PHOSPHONIUM = "C[P+](c1ccccc1)(c1ccccc1)c1ccccc1"
 
 
 @pytest.fixture(scope="module")
-def tools(tmp_path_factory):
-    database = tmp_path_factory.mktemp("smarts-repairs") / "catalog.sqlite"
-    ingest_reaction_libraries(database)
-    return SynthesisTools(database)
+def tools(bundled_db):
+    return SynthesisTools(bundled_db)
 
 
 def _canonical(smiles):
@@ -66,8 +63,8 @@ CASES = [
 
 
 @pytest.mark.parametrize(("reaction_id", "reactants", "expected"), CASES)
-def test_repaired_rule_products(tools, reaction_id, reactants, expected):
-    result = tools.simulate_reaction(reaction_id, reactants)
+def test_repaired_rule_products(tools, bundled_ids, reaction_id, reactants, expected):
+    result = tools.simulate_reaction(bundled_ids[reaction_id], reactants)
     assert set(result["generated_products"]) == {_canonical(s) for s in expected}
 
 
@@ -81,10 +78,10 @@ def test_repaired_rule_products(tools, reaction_id, reactants, expected):
         ("synformer:R077", ["CC(=O)NN", "CC(=N)OC"], "Cc1nnc(C)[nH]1"),
     ],
 )
-def test_hydrogen_queries_recover_precursors(tools, reaction_id, reactants, product):
-    forward = tools.simulate_reaction(reaction_id, reactants)
+def test_hydrogen_queries_recover_precursors(tools, bundled_ids, reaction_id, reactants, product):
+    forward = tools.simulate_reaction(bundled_ids[reaction_id], reactants)
     assert set(forward["generated_products"]) == {_canonical(product)}
-    reverse = tools.simulate_reverse_reaction(reaction_id, product, include_near=False)
+    reverse = tools.simulate_reverse_reaction(bundled_ids[reaction_id], product, include_near=False)
     assert {tuple(c["reactants"]) for c in reverse["candidate_reactant_sets"]} == {
         tuple(_canonical(smiles) for smiles in reactants)
     }
@@ -117,9 +114,9 @@ LABELS = [
 
 
 @pytest.mark.parametrize(("reaction_id", "reactants", "expected"), LABELS)
-def test_repaired_rule_atom_correspondence(tools, reaction_id, reactants, expected):
+def test_repaired_rule_atom_correspondence(tools, bundled_ids, reaction_id, reactants, expected):
     reaction = rdChemReactions.ReactionFromSmarts(
-        tools.get_reaction_template(reaction_id)["template"]["smarts"]
+        tools.get_reaction_template(bundled_ids[reaction_id])["template"]["smarts"]
     )
     products = set()
     for output in reaction.RunReactants(tuple(Chem.MolFromSmiles(s) for s in reactants)):
@@ -128,10 +125,10 @@ def test_repaired_rule_atom_correspondence(tools, reaction_id, reactants, expect
     assert products == {_canonical(expected)}
 
 
-def test_triazole_rule_matches_its_product_in_reverse(tools):
+def test_triazole_rule_matches_its_product_in_reverse(tools, bundled_ids):
     # R065 once read [nHo+0] (holmium), so the reversed rule matched nothing.
-    reactants, products = tools.get_reaction_template("synformer:R065")["template"]["smarts"].split(
-        ">>"
-    )
+    reactants, products = tools.get_reaction_template(bundled_ids["synformer:R065"])["template"][
+        "smarts"
+    ].split(">>")
     reverse = rdChemReactions.ReactionFromSmarts(f"{products}>>{reactants}")
     assert reverse.RunReactants((Chem.MolFromSmiles("Cc1nc(-c2cn(-c3ccccc3)nn2)c(C)s1"),))
