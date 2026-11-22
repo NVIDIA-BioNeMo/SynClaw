@@ -151,7 +151,7 @@ def _benchmark_database(
     warmup: int,
 ) -> dict[str, Any]:
     db.require_prepared_building_block_search(path)
-    tools = SynthesisTools(path, _initialize_database=False)
+    tools = SynthesisTools(path)
     for query in queries[:warmup]:
         tools.search_building_blocks(query, limit=limit, include_near=False)
     return {

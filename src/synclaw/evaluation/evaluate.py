@@ -10,8 +10,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from synclaw.core import chem, db, reactions
-from synclaw.core.libraries import LibrarySelection
+from synclaw.core import chem, db
 from synclaw.core.toxicity import MODE_OFF, ToxicityConfig, toxicity_summary_fields
 from synclaw.rollout.loop import call_local_tool
 from synclaw.rollout.policy import (
@@ -35,7 +34,7 @@ SEARCH_TOOLS = {"search_building_blocks", "search_reaction_templates"}
 
 def evaluate_trace_file(
     trace_path: str | Path,
-    db_path: str | Path = db.DEFAULT_DB_PATH,
+    db_path: str | Path,
     model: str = "unknown",
     prompt_version: str | None = None,
     target_smiles: str | None = None,
@@ -48,8 +47,7 @@ def evaluate_trace_file(
     ``db_path`` and selected as the run selects; if the run's choice cannot be replayed,
     the last recorded ``submit_pathway`` result is used. Only an accepted submission's
     ``actual_final_smiles`` is scored. ``target_smiles`` overrides the target recorded in
-    the trace. ``tool_config`` supplies the run's reaction library, stop condition and
-    toxicity screen.
+    the trace. ``tool_config`` supplies the run's stop condition and toxicity screen.
     """
 
     path = Path(trace_path)
@@ -68,9 +66,6 @@ def evaluate_trace_file(
             executed_events,
             db_path=db_path,
             target_smiles=inferred_target,
-            # Partial traces have no run_summary, so re-scoring them needs the selection passed in.
-            library=(tool_config or {}).get("reaction_library")
-            or (run_summary or {}).get("reaction_library"),
             hide_target=hidden_target["target_hidden_from_stock"],
         )
     if final is None:
@@ -146,7 +141,6 @@ def replay_selected_submission(
     db_path: str | Path,
     target_smiles: str | None,
     *,
-    library: LibrarySelection = None,
     hide_target: bool = False,
 ) -> dict[str, Any] | None:
     """Replay every submit_pathway call and select one as the runners do.
@@ -174,7 +168,6 @@ def replay_selected_submission(
     recorded_results = _recorded_submit_results(events)
     tools = SynthesisTools(
         db_path,
-        reaction_libraries=library,
         # Replay re-scores a recorded trace without the screen; recorded refusals are kept below.
         toxicity=ToxicityConfig(mode=MODE_OFF),
         hidden_target_smiles=target_smiles if hide_target else None,
@@ -223,7 +216,6 @@ def _replay_submission(
         tools,
         "submit_pathway",
         arguments,
-        reaction_library=tools.reaction_libraries,
         target_smiles=target_smiles,
     )
 
@@ -235,34 +227,25 @@ def _resolve_reaction_ids(
 ) -> list[Any] | None:
     """Resolve each step's template ID, or return None when one cannot be resolved.
 
-    Template IDs change between catalog versions, but each step's result records the
-    SMARTS it ran, so an unknown ID is resolved to the current template with that SMARTS.
-    A step without a usable ``reaction_id`` is left for ``submit_pathway`` to reject.
+    Template IDs are numbered per database, so an ID alone may name a different template
+    here than in the run, and a reaction SMARTS could ground to a template the run lacked.
+    A step is resolved only through the template SMARTS its recorded result ran; a step
+    that recorded none cannot be replayed. A step without a usable
+    ``reaction_id`` is left for ``submit_pathway`` to reject.
     """
 
     resolved = []
-    library = tools.reaction_libraries
     with db.session(tools.db_path) as conn:
         for index, step in enumerate(steps):
             reaction_id = step.get("reaction_id") if isinstance(step, dict) else None
-            # submit_pathway grounds a reaction SMARTS to a library template itself.
-            if (
-                not reaction_id
-                or not isinstance(reaction_id, str)
-                or reactions.is_reaction_smarts(reaction_id)
-            ):
+            if not reaction_id or not isinstance(reaction_id, str):
                 resolved.append(step)
                 continue
-            template = db.get_reaction_template(conn, reaction_id, library=library)
-            if template is None and index in recorded_smarts:
-                template = db.get_reaction_template_by_smarts(
-                    conn, recorded_smarts[index], library=library
-                )
-                if template is not None:
-                    step = {**step, "reaction_id": template["reaction_id"]}
+            smarts = recorded_smarts.get(index)
+            template = db.get_reaction_template_by_smarts(conn, smarts) if smarts else None
             if template is None:
                 return None
-            resolved.append(step)
+            resolved.append({**step, "reaction_id": template["reaction_id"]})
     return resolved
 
 

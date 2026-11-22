@@ -24,10 +24,9 @@ from pathlib import Path
 from typing import Any
 
 from synclaw.core import db
-from synclaw.core.libraries import LibrarySelection, normalize_libraries
 from synclaw.core.toxicity import ToxicityConfig
 from synclaw.rollout.loop import call_local_tool
-from synclaw.rollout.policy import DEFAULT_REACTION_LIBRARY
+from synclaw.tools.compaction import compact_tool_result
 from synclaw.tools.contracts import TOOL_NAMES, TOOL_SCHEMAS
 from synclaw.tools.synthesis import SynthesisTools
 
@@ -46,7 +45,6 @@ class ToolWorkerPoolBroken(RuntimeError):
 @dataclass(frozen=True, slots=True)
 class ToolWorkerConfig:
     db_path: str
-    reaction_libraries: tuple[str, ...] = ()
     toxicity: ToxicityConfig = field(default_factory=ToxicityConfig.resolve)
 
 
@@ -58,12 +56,7 @@ def _initialize_tool_worker(
 
     global _WORKER_TOOLS
     try:
-        _WORKER_TOOLS = SynthesisTools(
-            config.db_path,
-            reaction_libraries=config.reaction_libraries,
-            toxicity=config.toxicity,
-            _initialize_database=False,
-        )
+        _WORKER_TOOLS = SynthesisTools(config.db_path, toxicity=config.toxicity)
         _WORKER_TOOLS.screen  # Load the watchlist now so a missing one fails at startup.
     except BaseException as exc:
         if ready_queue is not None:
@@ -88,7 +81,6 @@ def _invoke_tool_process(
         _WORKER_TOOLS,
         tool_name,
         kwargs,
-        reaction_library=kwargs.get("library", DEFAULT_REACTION_LIBRARY),
         target_smiles=kwargs.get("target_smiles"),
     )
 
@@ -253,7 +245,8 @@ class AsyncToolExecutor:
                 self._evict_completed_overflow()
             else:
                 self._inflight.move_to_end(call_key)
-        return await asyncio.shield(task)
+        # Clients pass results straight to their model, so serve the view rollouts give it.
+        return compact_tool_result(tool_name, await asyncio.shield(task))
 
     def _schedule_expiry(self, call_key: str, task: asyncio.Task[dict[str, Any]]) -> None:
         if not task.cancelled() and isinstance(task.exception(), ToolWorkerPoolBroken):
@@ -306,18 +299,17 @@ class AsyncToolExecutor:
 
 
 def create_server(
-    db_path: str | Path = db.DEFAULT_DB_PATH,
+    db_path: str | Path,
     *,
-    reaction_library: LibrarySelection = DEFAULT_REACTION_LIBRARY,
     max_concurrent_executions: int = 64,
     use_process_pool: bool = True,
     toxicity: ToxicityConfig | None = None,
 ):
     toxicity = toxicity or ToxicityConfig.resolve()
     with db.session(db_path) as conn:
-        db.require_reaction_library(conn, reaction_library)
+        db.require_reaction_templates(conn)
         # Fail at startup rather than at the model's first query-less template search.
-        db.reaction_template_library_overview(conn, library=reaction_library)
+        db.reaction_template_library_overview(conn)
     try:
         from mcp.server.mcpserver import MCPServer
     except ImportError as exc:
@@ -330,14 +322,13 @@ def create_server(
     # Forked tool workers inherit the loaded index and share its memory.
     with db.session(db_path) as conn:
         db.preload_building_block_search(conn)
-    tools = SynthesisTools(db_path, reaction_libraries=reaction_library, toxicity=toxicity)
+    tools = SynthesisTools(db_path, toxicity=toxicity)
     tools.screen  # Fail at startup, not on the first submission, if the watchlist is missing.
     executor = AsyncToolExecutor(
         max_concurrent_executions,
         use_process_pool=use_process_pool,
         tool_worker_config=ToolWorkerConfig(
             db_path=str(Path(db_path).resolve()),
-            reaction_libraries=normalize_libraries(reaction_library),
             toxicity=toxicity,
         ),
     )
@@ -397,7 +388,6 @@ def create_server(
             reactant_smiles=reactant_smiles,
             product_smiles=product_smiles,
             limit=limit,
-            library=reaction_library or None,
             run_forward=run_forward,
         )
 
@@ -455,15 +445,13 @@ def create_server(
 
 
 def serve(
-    db_path: str | Path = db.DEFAULT_DB_PATH,
+    db_path: str | Path,
     *,
-    reaction_library: LibrarySelection = DEFAULT_REACTION_LIBRARY,
     max_concurrent_executions: int = 64,
     toxicity: ToxicityConfig | None = None,
 ) -> None:
     create_server(
         db_path,
-        reaction_library=reaction_library,
         max_concurrent_executions=max_concurrent_executions,
         toxicity=toxicity,
     ).run()

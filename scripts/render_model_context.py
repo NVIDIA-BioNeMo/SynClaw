@@ -11,12 +11,10 @@ import json
 from pathlib import Path
 from typing import Any
 
-from synclaw.core.libraries import LibrarySelection
 from synclaw.rollout.policy import (
     DEFAULT_MAX_TOKENS,
     DEFAULT_MAX_TOOL_CALLS,
     DEFAULT_MAX_TURNS,
-    DEFAULT_REACTION_LIBRARY,
     RolloutPolicyConfig,
     task_budget_config,
 )
@@ -41,11 +39,6 @@ def main() -> int:
         "--db",
         type=Path,
         help="SQLite database. Defaults to var/synclaw.sqlite, as in synclaw run-model.",
-    )
-    parser.add_argument(
-        "--reaction-library",
-        nargs="+",
-        default=DEFAULT_REACTION_LIBRARY,
     )
     parser.add_argument("--max-tool-calls", type=int, default=DEFAULT_MAX_TOOL_CALLS)
     parser.add_argument("--max-turns", type=int, default=DEFAULT_MAX_TURNS)
@@ -78,7 +71,6 @@ def main() -> int:
             taskset=args.taskset,
             task_index=args.task_index,
             db_path=args.db,
-            reaction_library=args.reaction_library,
             max_tool_calls=args.max_tool_calls,
             max_turns=args.max_turns,
             max_tokens=args.max_tokens,
@@ -99,7 +91,6 @@ def render_model_context(
     taskset: Path,
     task_index: int,
     db_path: Path | None,
-    reaction_library: LibrarySelection,
     max_tool_calls: int,
     api_mode: str,
     exclude_tools: list[str],
@@ -130,7 +121,6 @@ def render_model_context(
         taskset=taskset,
         task_index=task_index,
         db_path=resolved_db,
-        reaction_library=reaction_library,
         max_tool_calls=max_tool_calls,
         max_turns=max_turns,
         api_mode=api_mode,
@@ -152,7 +142,6 @@ def render_markdown(
     taskset: Path,
     task_index: int,
     db_path: Path,
-    reaction_library: LibrarySelection,
     max_tool_calls: int,
     api_mode: str,
     excluded_tools: set[str],
@@ -175,7 +164,6 @@ def render_markdown(
         f"- Database: `{db_path}`",
         f"- Target SMILES: `{task.get('target_smiles', '')}`",
         f"- API mode rendered: `{api_mode}`",
-        f"- Reaction library: `{reaction_library or 'none'}`",
         f"- Max tool calls instruction: `{max_tool_calls}`",
         f"- Max assistant turns instruction: `{max_turns}`",
         f"- Excluded tools: `{', '.join(sorted(excluded_tools)) if excluded_tools else 'none'}`",

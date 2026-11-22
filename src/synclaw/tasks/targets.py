@@ -8,7 +8,8 @@ produces routes this package cannot necessarily reproduce. This module generates
 directly: pick a reaction template, pick building blocks that fit its reactant positions, run
 the reaction through `core.reactions`, and repeat on the product. Because every step is executed
 by the same engine that backs `simulate_reaction`, each route replays exactly through the tools
-an agent is given.
+an agent is given. Routes name templates by their source IDs (e.g. `synformer:R044`), not the
+R001… IDs a database numbers them with for the tools.
 
 One product is carried forward per step. Keeping the full product set and crossing it with the
 next one -- as a stack-based enumerator does -- is combinatorially unbounded on the broader ORD

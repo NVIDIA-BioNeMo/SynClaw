@@ -146,7 +146,7 @@ def tool_turn(name: str, arguments: dict[str, Any]) -> AssistantTurn:
 @pytest.mark.parametrize(
     ("name", "arguments", "expected_issue"),
     [
-        ("get_reaction_template", {"reaction_id": "demo:R000"}, "Unknown tool name"),
+        ("get_reaction_template", {"reaction_id": "R001"}, "Unknown tool name"),
         ("search_building_blocks", {"query": ""}, "missing required argument 'query'"),
     ],
 )
@@ -183,14 +183,13 @@ def test_local_tool_executor_rejects_undeclared_or_invalid_calls(
     assert tools.calls == []
 
 
-def test_local_tool_dispatcher_defaults_to_canonical_reaction_library() -> None:
-    class LibraryTools:
+def test_local_tool_dispatcher_defaults_the_template_search_limit() -> None:
+    class SearchTools:
         def search_reaction_templates(self, **arguments: Any) -> dict[str, Any]:
             return arguments
 
-    result = call_local_tool(LibraryTools(), "search_reaction_templates", {})
+    result = call_local_tool(SearchTools(), "search_reaction_templates", {})
 
-    assert result["library"] == ("synformer", "paroutes", "ord", "nvidia")
     assert result["limit"] == 10
 
 
@@ -221,14 +220,14 @@ def test_local_tool_dispatcher_returns_an_error_for_a_non_finite_limit(tmp_path:
     [
         (
             "simulate_reaction",
-            {"reaction_id": "demo:R000", "reactants": ["BB:99999999999999999999"]},
+            {"reaction_id": "R001", "reactants": ["BB:99999999999999999999"]},
         ),
         (
             "submit_pathway",
             {
                 "steps": [
                     {
-                        "reaction_id": "demo:R000",
+                        "reaction_id": "R001",
                         "reactants": ["BB:99999999999999999999"],
                         "product_smiles": "CC=O",
                     }

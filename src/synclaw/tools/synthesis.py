@@ -11,9 +11,8 @@ from pathlib import Path
 from typing import Any
 
 from synclaw.core import chem, db, fingerprint_index, reactions
-from synclaw.core.libraries import LibrarySelection, normalize_libraries
 from synclaw.core.toxicity import BLOCK_KEY, ToxicityConfig, ToxicityScreen, refusal_message
-from synclaw.tools.contracts import clamp_to_contract
+from synclaw.tools.contracts import TOOL_ARGUMENT_DEFAULTS, clamp_to_contract
 
 REVERSE_RANK_LIMIT = 25
 REVERSE_RANK_MAX_OUTCOMES = 10
@@ -25,20 +24,14 @@ class SynthesisTools:
 
     def __init__(
         self,
-        db_path: str | Path = db.DEFAULT_DB_PATH,
+        db_path: str | Path,
         *,
-        reaction_libraries: LibrarySelection = None,
         toxicity: ToxicityConfig | None = None,
         hidden_target_smiles: str | None = None,
         hidden_building_block_ids: frozenset[int] = frozenset(),
         hidden_similarity: float | None = None,
-        _initialize_database: bool = True,
     ):
-        """Create tool handlers.
-
-        ``reaction_libraries`` is a hard boundary: when set, template search,
-        lookup, simulation, and pathway submission only accept templates in
-        those libraries. Leave it empty to allow every imported library.
+        """Create tool handlers over every reaction template in the database.
 
         ``toxicity`` configures the optional watchlist screen, which is off unless
         the config (or ``SYNCLAW_TOXICITY_SCREEN=on``) enables it. The screen is built on
@@ -53,7 +46,6 @@ class SynthesisTools:
         The combined set is computed once and cached for the lifetime of this task's tools.
         """
         self.db_path = Path(db_path)
-        self.reaction_libraries = normalize_libraries(reaction_libraries)
         self._toxicity = toxicity
         self.hidden_target_smiles = hidden_target_smiles
         self._hidden_ids = frozenset(hidden_building_block_ids)
@@ -62,8 +54,6 @@ class SynthesisTools:
         ):
             raise RuntimeError("Stock similarity cutoff requires a target and a value in [0, 1].")
         self.hidden_similarity = hidden_similarity
-        if _initialize_database:
-            db.init_db(self.db_path)
 
     @cached_property
     def hidden_building_block_ids(self) -> frozenset[int]:
@@ -153,7 +143,6 @@ class SynthesisTools:
         self,
         query: str | None = None,
         limit: int = 10,
-        library: LibrarySelection = None,
         reactant_smiles: list[str] | None = None,
         product_smiles: str | list[str] | None = None,
         run_forward: bool = False,
@@ -161,10 +150,8 @@ class SynthesisTools:
         """Search templates by text, by reactant/product structure, or both.
 
         With neither, return an overview of the reaction families. Given both, the two
-        searches run independently and return side by side. A configured library
-        selection overrides ``library``, so a caller cannot widen it.
+        searches run independently and return side by side.
         """
-        library = self.reaction_libraries or library
         text_query = (query or "").strip()
         has_text_query = bool(text_query and text_query != "*")
         has_molecule_query = bool(reactant_smiles or product_smiles)
@@ -172,13 +159,12 @@ class SynthesisTools:
         if not has_text_query and not has_molecule_query:
             # With nothing to search for, list the reaction families to search by.
             with db.session(self.db_path) as conn:
-                overview = db.reaction_template_library_overview(conn, library=library)
+                overview = db.reaction_template_library_overview(conn)
             families = overview.get("families") or []
             return {
                 "valid": True,
                 "issues": [],
                 "search_mode": "overview",
-                "library": library,
                 "template_count": overview["template_count"],
                 "family_count": overview["family_count"],
                 **(
@@ -216,9 +202,7 @@ class SynthesisTools:
             }
         with db.session(self.db_path) as conn:
             text_results = (
-                db.search_reaction_templates(
-                    conn, query=text_query, limit=result_limit, library=library
-                )
+                db.search_reaction_templates(conn, query=text_query, limit=result_limit)
                 if has_text_query
                 else []
             )
@@ -229,7 +213,6 @@ class SynthesisTools:
                     "query": query,
                     "search_mode": "text",
                     "limit": result_limit,
-                    "library": library,
                     "count": len(text_results),
                     "results": text_results,
                 }
@@ -238,7 +221,6 @@ class SynthesisTools:
                 conn,
                 reactant_smiles=reactant_smiles,
                 product_smiles=product_smiles,
-                library=library,
                 run_forward=run_forward,
             )
             if product_smiles and molecule_results.get("valid"):
@@ -267,9 +249,7 @@ class SynthesisTools:
 
     def get_reaction_template(self, reaction_id: str) -> dict[str, Any]:
         with db.session(self.db_path) as conn:
-            template, issue = reactions.lookup_reaction_template(
-                conn, reaction_id, library=self.reaction_libraries
-            )
+            template, issue = reactions.lookup_reaction_template(conn, reaction_id)
         if template is None:
             return {"found": False, "reaction_id": reaction_id, "template": None, "issues": [issue]}
         return {"found": True, "reaction_id": reaction_id, "template": template}
@@ -312,7 +292,6 @@ class SynthesisTools:
                 reactant_smiles=[item["smiles"] for item in resolved],
                 product_smiles=product_smiles,
                 max_products=clamp_to_contract("simulate_reaction", "max_products", max_products),
-                library=self.reaction_libraries,
             )
             result["resolved_reactants"] = resolved
             return result
@@ -342,7 +321,6 @@ class SynthesisTools:
                 max_outcomes=clamp_to_contract(
                     "simulate_reverse_reaction", "max_outcomes", max_outcomes
                 ),
-                library=self.reaction_libraries,
             )
             if result.get("reaction_executed"):
                 self._add_reverse_building_block_matches(
@@ -375,7 +353,6 @@ class SynthesisTools:
                 reaction_id=str(match.get("reaction_id") or ""),
                 product_smiles=product_smiles,
                 max_outcomes=REVERSE_RANK_MAX_OUTCOMES,
-                library=match["library"],
             )
             if reverse_result.get("reaction_executed"):
                 # Ranking only counts exact stock matches.
@@ -610,7 +587,9 @@ class SynthesisTools:
                             reaction_id=reaction_id,
                             reactant_smiles=[item["smiles"] for item in resolved],
                             product_smiles=product,
-                            library=self.reaction_libraries,
+                            max_products=TOOL_ARGUMENT_DEFAULTS["simulate_reaction"][
+                                "max_products"
+                            ],
                         )
                         result["resolved_reactants"] = resolved
                 result["step_index"] = index

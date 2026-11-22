@@ -11,15 +11,12 @@ basic amines do not react.
 import pytest
 from rdkit import Chem
 
-from synclaw.core.reactions import ingest_reaction_libraries
 from synclaw.tools.synthesis import SynthesisTools
 
 
 @pytest.fixture(scope="module")
-def tools(tmp_path_factory):
-    database = tmp_path_factory.mktemp("nvidia-templates") / "catalog.sqlite"
-    ingest_reaction_libraries(database)
-    return SynthesisTools(database)
+def tools(bundled_db):
+    return SynthesisTools(bundled_db)
 
 
 def _canonical(smiles):
@@ -57,8 +54,8 @@ CASES = [
 
 
 @pytest.mark.parametrize(("reaction_id", "reactants", "expected"), CASES)
-def test_nvidia_rule_products(tools, reaction_id, reactants, expected):
-    result = tools.simulate_reaction(reaction_id, reactants)
+def test_nvidia_rule_products(tools, bundled_ids, reaction_id, reactants, expected):
+    result = tools.simulate_reaction(bundled_ids[reaction_id], reactants)
     assert set(result["generated_products"]) == {_canonical(s) for s in expected}
     assert bool(result["issues"]) == (not expected)
 
@@ -71,25 +68,25 @@ def test_nvidia_rule_products(tools, reaction_id, reactants, expected):
         ("nvidia:R003", "O=C1c2ccccc2C(=O)N1Cc1ccccc1", ("OCc1ccccc1", "O=C1NC(=O)c2ccccc21")),
     ],
 )
-def test_reverse_precursors_are_exact(tools, reaction_id, product, precursors):
-    reverse = tools.simulate_reverse_reaction(reaction_id, product, include_near=False)
+def test_reverse_precursors_are_exact(tools, bundled_ids, reaction_id, product, precursors):
+    reverse = tools.simulate_reverse_reaction(bundled_ids[reaction_id], product, include_near=False)
     assert {tuple(c["reactants"]) for c in reverse["candidate_reactant_sets"]} == {
         tuple(_canonical(s) for s in precursors)
     }
 
 
-def test_aniline_rule_recovers_a_primary_aniline_in_reverse(tools):
+def test_aniline_rule_recovers_a_primary_aniline_in_reverse(tools, bundled_ids):
     reverse = tools.simulate_reverse_reaction(
-        "nvidia:R001", "c1ccc(NCc2ccccc2)cc1", include_near=False
+        bundled_ids["nvidia:R001"], "c1ccc(NCc2ccccc2)cc1", include_near=False
     )
     anilines = {c["reactants"][0] for c in reverse["candidate_reactant_sets"]}
     assert _canonical("Nc1ccccc1") in anilines
 
 
-def test_mitsunobu_rule_inverts_the_alcohol_carbon_in_reverse(tools):
+def test_mitsunobu_rule_inverts_the_alcohol_carbon_in_reverse(tools, bundled_ids):
     # (S)-2-phenoxybutane comes from (R)-butan-2-ol under Mitsunobu inversion.
     reverse = tools.simulate_reverse_reaction(
-        "nvidia:R003", "CC[C@H](C)Oc1ccccc1", include_near=False
+        bundled_ids["nvidia:R003"], "CC[C@H](C)Oc1ccccc1", include_near=False
     )
     assert {tuple(c["reactants"]) for c in reverse["candidate_reactant_sets"]} == {
         (_canonical("C[C@@H](O)CC"), _canonical("Oc1ccccc1"))

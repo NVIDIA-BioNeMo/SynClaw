@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 import numpy as np
@@ -207,12 +209,24 @@ def test_a_staged_copy_is_searchable_on_its_own(tmp_path: Path) -> None:
     )
 
 
-def test_tools_for_a_missing_database_do_not_create_it(tmp_path: Path) -> None:
+def test_a_missing_database_is_reported_not_created(tmp_path: Path) -> None:
     missing = tmp_path / "missing" / "catalog.sqlite"
 
-    SynthesisTools(missing, _initialize_database=False)
+    tools = SynthesisTools(missing)
+    with pytest.raises(FileNotFoundError, match="synclaw db init"):
+        tools.search_building_blocks("CCO")
+    with pytest.raises(FileNotFoundError):
+        db.table_counts(missing)
 
     assert not missing.parent.exists()
+
+
+def test_table_counts_skip_tables_an_older_database_lacks(tmp_path: Path) -> None:
+    old = tmp_path / "old.sqlite"
+    with closing(sqlite3.connect(old)) as conn:
+        conn.execute("CREATE TABLE building_blocks (id INTEGER PRIMARY KEY)")
+
+    assert db.table_counts(old) == {"building_blocks": 0}
 
 
 def test_preloading_an_unprepared_catalog_fails(tmp_path: Path) -> None:
