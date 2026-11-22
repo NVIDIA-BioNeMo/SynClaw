@@ -950,16 +950,26 @@ def select_final_product(
     target_validation = chem.validate_smiles(target_smiles)
     if not target_validation["valid"]:
         return candidates[0]
-    return max(candidates, key=lambda product: _final_product_rank(product, target_smiles))
+    canonical_target = target_validation["canonical_smiles"]
+    target_fingerprints = (
+        chem.stereo_aware_morgan_fingerprint(canonical_target),
+        chem.constitutional_morgan_fingerprint(canonical_target),
+    )
+    return max(candidates, key=lambda product: _final_product_rank(product, target_fingerprints))
 
 
-def _final_product_rank(product_smiles: str, target_smiles: str) -> tuple[float, float, str]:
-    result = chem.similarity(target_smiles, product_smiles)
-    stereo = result.get("stereo_aware_similarity")
-    constitutional = result.get("constitutional_similarity")
+def _final_product_rank(
+    product_smiles: str, target_fingerprints: tuple[Any, Any]
+) -> tuple[float, float, str]:
+    stereo_target, constitutional_target = target_fingerprints
+    try:
+        stereo = chem.stereo_aware_morgan_fingerprint(product_smiles)
+        constitutional = chem.constitutional_morgan_fingerprint(product_smiles)
+    except ValueError:
+        return -1.0, -1.0, product_smiles
     return (
-        float(stereo) if stereo is not None else -1.0,
-        float(constitutional) if constitutional is not None else -1.0,
+        chem.bulk_tanimoto(stereo_target, [stereo])[0],
+        chem.bulk_tanimoto(constitutional_target, [constitutional])[0],
         product_smiles,
     )
 
