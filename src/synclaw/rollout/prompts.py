@@ -1,14 +1,12 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Canonical prompts and task preparation for every BioNeMo-SynClaw rollout transport."""
+"""Canonical prompts for every BioNeMo-SynClaw rollout transport."""
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
-from synclaw.core import db
 from synclaw.rollout.budget import limit_sentences
 from synclaw.rollout.policy import RolloutPolicyConfig
 from synclaw.tasks.datasets import PROMPT_FINGERPRINT
@@ -30,6 +28,10 @@ def require_current_prompt_text(task: dict[str, Any]) -> dict[str, Any]:
     )
 
 
+def _plural(count: int) -> str:
+    return "" if count == 1 else "s"
+
+
 def build_initial_messages(
     *,
     task: dict[str, Any],
@@ -42,14 +44,11 @@ def build_initial_messages(
     """
 
     config = config or RolloutPolicyConfig()
-    limits = [
-        *(
-            [f"{config.max_tool_calls} total tool call{'' if config.max_tool_calls == 1 else 's'}"]
-            if config.max_tool_calls > 0
-            else []
-        ),
-        *([f"{config.max_turns} assistant turns"] if config.max_turns is not None else []),
-    ]
+    limits = []
+    if config.max_tool_calls > 0:
+        limits.append(f"{config.max_tool_calls} total tool call{_plural(config.max_tool_calls)}")
+    if config.max_turns is not None:
+        limits.append(f"{config.max_turns} assistant turn{_plural(config.max_turns)}")
     budget = [
         *([f"Use no more than {' or '.join(limits)}."] if limits else []),
         *limit_sentences(config.stated_max_model_len, config.max_tokens),
@@ -62,25 +61,7 @@ def build_initial_messages(
     ]
 
 
-def validate_model_run_database(db_path: str | Path) -> None:
-    with db.session(db_path) as conn:
-        building_blocks = conn.execute("SELECT COUNT(*) FROM building_blocks").fetchone()[0]
-        reaction_templates = conn.execute("SELECT COUNT(*) FROM reaction_templates").fetchone()[0]
-    if building_blocks <= 0 or reaction_templates <= 0:
-        raise RuntimeError(
-            f"Model-run database is not ready: {db_path} has "
-            f"{building_blocks} building block(s) and {reaction_templates} reaction template(s). "
-            "Run setup/ingestion first or pass --db pointing to a populated database."
-        )
-    db.require_prepared_building_block_search(db_path)
-    with db.session(db_path) as conn:
-        db.require_reaction_templates(conn)
-        # Fail once here rather than at the first query-less template search.
-        db.reaction_template_library_overview(conn)
-
-
 __all__ = [
     "build_initial_messages",
     "require_current_prompt_text",
-    "validate_model_run_database",
 ]

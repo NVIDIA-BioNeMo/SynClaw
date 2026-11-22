@@ -830,24 +830,19 @@ async def _emit_budget_feedback(
     )
     if snapshot is None:
         return
-    feedback.last_turn = turn_index
+    feedback.mark_reported(
+        snapshot,
+        content,
+        turn_index=turn_index,
+        context_warning_remaining_fraction=config.context_warning_remaining_fraction,
+    )
     if content:
-        feedback.announced_context_limit = snapshot.context_window_tokens
-        feedback.announced_output_limit = snapshot.max_output_tokens
         updated = with_harness_feedback(state.messages, content)
         assert updated is not None
         if len(updated) > len(state.messages):
             await _append_harness_feedback(state, transport, task, content, record)
         else:
             _commit_input_update(state, transport, updated[-1])
-        remaining_tokens = snapshot.remaining_tokens
-        if (
-            remaining_tokens is not None
-            and snapshot.context_window_tokens is not None
-            and remaining_tokens
-            <= snapshot.context_window_tokens * config.context_warning_remaining_fraction
-        ):
-            feedback.context_warning_sent = True
     await record(
         {
             "event_type": "token_budget",

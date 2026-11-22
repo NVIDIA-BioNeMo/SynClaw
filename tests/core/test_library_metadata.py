@@ -9,7 +9,6 @@ import pytest
 
 from synclaw.core import db
 from synclaw.core.reactions import ingest_reaction_templates
-from synclaw.rollout.prompts import validate_model_run_database
 from synclaw.tools.synthesis import SynthesisTools
 
 
@@ -119,4 +118,4 @@ def test_incomplete_library_metadata_fails_before_the_run_starts(tmp_path):
     db.prepare_building_block_search(database)
 
     with pytest.raises(ValueError, match="family 'fam'.*missing family_metadata"):
-        validate_model_run_database(database)
+        db.validate_model_run_database(database)

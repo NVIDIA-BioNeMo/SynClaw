@@ -73,21 +73,26 @@ def serialized_input_bytes(payload: Any) -> int:
     return len(json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
 
 
+_OPAQUE_INPUT_TYPES = frozenset(
+    {
+        "image_url",
+        "input_image",
+        "input_audio",
+        "image",
+        "document",
+        "item_reference",
+        "redacted_thinking",
+    }
+)
+
+
 def _opaque_input(value: Any) -> bool:
+    """Whether input holds content whose token cost cannot be estimated from its JSON bytes."""
+
     if isinstance(value, dict):
         kind = value.get("type")
         if value.get("encrypted_content") or (
-            isinstance(kind, str)
-            and kind
-            in {
-                "image_url",
-                "input_image",
-                "input_audio",
-                "image",
-                "document",
-                "item_reference",
-                "redacted_thinking",
-            }
+            isinstance(kind, str) and kind in _OPAQUE_INPUT_TYPES
         ):
             return True
         # A Responses reasoning summary is not the hidden reasoning it references.
@@ -190,11 +195,10 @@ class ContextTokenEstimator:
             if occupied is not None:
                 source = "provider_usage_plus_replay_delta"
         return ContextBudgetSnapshot(
-            context_window_tokens,
-            occupied,
-            max_output_tokens,
-            source,
-            estimated=True,
+            context_window_tokens=context_window_tokens,
+            input_tokens=occupied,
+            max_output_tokens=max_output_tokens,
+            source=source,
         )
 
     def _replay_input_tokens(self, payload: Any) -> int | None:
@@ -245,12 +249,35 @@ class BudgetFeedbackState:
     last_turn: int | None = None
     context_warning_sent: bool = False
 
+    def mark_reported(
+        self,
+        snapshot: ContextBudgetSnapshot,
+        content: str | None,
+        *,
+        turn_index: int,
+        context_warning_remaining_fraction: float,
+    ) -> None:
+        """Record a turn's assessment and, if ``content`` was sent, the limits and warning it carried."""
+
+        self.last_turn = turn_index
+        if content:
+            self.announced_context_limit = snapshot.context_window_tokens
+            self.announced_output_limit = snapshot.max_output_tokens
+            if _remaining_at_most(snapshot, context_warning_remaining_fraction):
+                self.context_warning_sent = True
+
     def checkpoint_fields(self) -> dict[str, Any]:
         return asdict(self)
 
     @classmethod
     def from_checkpoint(cls, value: dict[str, Any] | None) -> BudgetFeedbackState:
         return cls(**(value or {}))
+
+
+def _remaining_at_most(snapshot: ContextBudgetSnapshot, fraction: float) -> bool:
+    remaining = snapshot.remaining_tokens
+    limit = snapshot.context_window_tokens
+    return remaining is not None and limit is not None and remaining <= limit * fraction
 
 
 def limit_sentences(context_window_tokens: int | None, max_output_tokens: int | None) -> list[str]:
@@ -301,23 +328,21 @@ def _feedback_text(
         remaining.append(f"{count} context tokens")
     if remaining:
         parts.append("Remaining: " + ", ".join(remaining) + ".")
-    limit = snapshot.context_window_tokens
-    if remaining_tokens is not None and limit is not None:
-        if remaining_tokens <= limit * context_critical_remaining_fraction:
-            parts.append(
-                "Your context window is nearly exhausted. You must call submit_pathway now "
-                "with your best verified route, even if it is an analogue, so it can be scored. "
-                "Avoid further exploration; use the evidence already gathered."
-            )
-        elif (
-            remaining_tokens <= limit * context_warning_remaining_fraction
-            and not state.context_warning_sent
-        ):
-            parts.append(
-                "Context is running low. Call submit_pathway now with your best verified route, "
-                "even if it is an analogue, so it can be scored. Use any remaining tools only "
-                "to verify a clearly better candidate."
-            )
+    if _remaining_at_most(snapshot, context_critical_remaining_fraction):
+        parts.append(
+            "Your context window is nearly exhausted. You must call submit_pathway now "
+            "with your best verified route, even if it is an analogue, so it can be scored. "
+            "Avoid further exploration; use the evidence already gathered."
+        )
+    elif (
+        _remaining_at_most(snapshot, context_warning_remaining_fraction)
+        and not state.context_warning_sent
+    ):
+        parts.append(
+            "Context is running low. Call submit_pathway now with your best verified route, "
+            "even if it is an analogue, so it can be scored. Use any remaining tools only "
+            "to verify a clearly better candidate."
+        )
     return " ".join(parts)
 
 
@@ -351,7 +376,7 @@ def with_harness_feedback(
         result = json.loads(original)
         if not isinstance(result, dict):
             raise ValueError("Expected a JSON object for a BioNeMo-SynClaw tool result")
-        previous = result.get(field) if field != "budget" else None
+        previous = result.get(field)
         result[field] = f"{previous}\n\n{content}" if previous else content
         updated = json.dumps(result, sort_keys=True, separators=(",", ":"))
     else:
@@ -425,8 +450,6 @@ def budget_summary_fields(events: Sequence[dict[str, Any]]) -> dict[str, Any]:
                     "last_context_remaining_tokens": payload["remaining_tokens"],
                     "context_budget_source": payload["source"],
                     "context_budget_estimated": payload["estimated"],
-                    "last_request_output_tokens": payload.get(
-                        "request_output_tokens", payload.get("max_output_tokens")
-                    ),
+                    "last_request_output_tokens": payload["request_output_tokens"],
                 }
     return {}

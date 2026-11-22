@@ -12,7 +12,6 @@ import pytest
 
 from synclaw.core import db, toxicity
 from synclaw.core.reactions import ingest_reaction_templates
-from synclaw.rollout import prompts
 from synclaw.runners import model_runner
 from synclaw.tasks.datasets import PROMPT_FINGERPRINT
 from synclaw.tools.synthesis import SynthesisTools
@@ -184,7 +183,7 @@ def test_hosted_target_screening_is_opt_in_and_preserves_trace_results(
         ]
     )
     monkeypatch.setattr(model_runner, "resolve_api_key", lambda *args, **kwargs: "fixture-key")
-    monkeypatch.setattr(prompts, "validate_model_run_database", lambda *args, **kwargs: None)
+    monkeypatch.setattr(db, "validate_model_run_database", lambda *args, **kwargs: None)
     requests = []
 
     def complete(**kwargs):
@@ -284,7 +283,7 @@ def test_enabled_screen_keeps_the_initial_messages_in_the_trace(
         ]
     )
     monkeypatch.setattr(model_runner, "resolve_api_key", lambda *args, **kwargs: "fixture-key")
-    monkeypatch.setattr(prompts, "validate_model_run_database", lambda *args, **kwargs: None)
+    monkeypatch.setattr(db, "validate_model_run_database", lambda *args, **kwargs: None)
     monkeypatch.setattr(
         model_runner,
         "chat_completion",

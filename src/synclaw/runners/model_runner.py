@@ -326,7 +326,7 @@ def run_model_from_args(args: argparse.Namespace) -> dict[str, Any]:
         raise RuntimeError(providers.missing_api_key_message(args.provider, args.api_key_env))
 
     args.db = str(resolve_task_db_path(getattr(args, "db", None)))
-    prompts.validate_model_run_database(args.db)
+    db.validate_model_run_database(args.db)
     excluded_tools = run_excluded_tools(args, task)
     chat_tool_schemas = contracts.filter_chat_tool_schemas(excluded_tools)
     responses_tool_schemas = contracts.filter_responses_tool_schemas(excluded_tools)

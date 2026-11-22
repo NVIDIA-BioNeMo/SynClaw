@@ -202,7 +202,7 @@ def test_hosted_run_records_the_hidden_target(
     )
     monkeypatch.setattr(model_runner, "resolve_api_key", lambda *args, **kwargs: "fixture-key")
     monkeypatch.setattr(
-        model_runner.prompts, "validate_model_run_database", lambda *args, **kwargs: None
+        model_runner.db, "validate_model_run_database", lambda *args, **kwargs: None
     )
     requests = []
     scans = []
