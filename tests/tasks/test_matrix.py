@@ -259,3 +259,8 @@ def test_a_limit_drops_common_reagents_before_catalog_rows(catalog: Path, tmp_pa
     limited = build(catalog, tmp_path / "limited", common_reagents=True, limit=from_source + 1)
     assert limited["building_blocks"]["written"] == from_source + 1
     assert limited["building_blocks"]["reagents_added"] == 1
+
+
+def test_load_template_records_rejects_an_unknown_library() -> None:
+    with pytest.raises(ValueError, match="unknown reaction library 'nope'"):
+        load_template_records(["nope"])

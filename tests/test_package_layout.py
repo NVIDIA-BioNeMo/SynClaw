@@ -22,7 +22,6 @@ from synclaw import paths
 from synclaw.core import libraries
 from synclaw.paths import REPO_ROOT
 
-REPO_ROOT = REPO_ROOT
 SRC = REPO_ROOT / "src"
 
 

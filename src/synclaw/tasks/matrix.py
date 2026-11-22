@@ -43,7 +43,12 @@ from typing import Any
 import numpy as np
 
 from synclaw import paths
-from synclaw.core.libraries import DEFAULT_REACTION_LIBRARIES, normalize_libraries
+from synclaw.core.libraries import (
+    LibrarySelection,
+    bundled_reaction_catalog,
+    bundled_reaction_template_dir,
+    normalize_libraries,
+)
 from synclaw.core.reactions import _rdkit_reaction_modules
 from synclaw.tasks.targets import (
     BUILDING_BLOCK_FILE,
@@ -99,13 +104,14 @@ def load_template_records(libraries: Sequence[str]) -> list[dict[str, Any]]:
     A template is stored once in its owning library's file and records cross-library membership
     in `libraries`, so a union reads whole files and drops any id already seen.
     """
-    root = paths.DATA_DIR / "reaction_templates"
+    sources = bundled_reaction_catalog()["sources"]
+    root = bundled_reaction_template_dir()
     records: list[dict[str, Any]] = []
     seen: set[str] = set()
     for library in libraries:
-        path = root / library / "templates.jsonl"
-        if not path.exists():
-            raise FileNotFoundError(f"no template file for library {library!r} at {path}")
+        if library not in sources:
+            raise ValueError(f"unknown reaction library {library!r}; bundled: {', '.join(sources)}")
+        path = root / sources[library]["file"]
         with open(path) as handle:
             for line in handle:
                 line = line.strip()
@@ -456,7 +462,7 @@ def fill_matrix(
 def build_matrix_directory(
     building_blocks: str | Path,
     output: str | Path,
-    libraries: Sequence[str] = DEFAULT_REACTION_LIBRARIES,
+    libraries: LibrarySelection = None,
     workers: int | None = None,
     chunk_size: int = DEFAULT_CHUNK_SIZE,
     limit: int | None = None,
@@ -470,7 +476,7 @@ def build_matrix_directory(
     if atom_maps not in ATOM_MAP_POLICIES:
         raise ValueError(f"atom_maps must be one of {ATOM_MAP_POLICIES}")
 
-    selected = normalize_libraries(list(libraries)) or DEFAULT_REACTION_LIBRARIES
+    selected = normalize_libraries(libraries) or tuple(bundled_reaction_catalog()["sources"])
     building_blocks = Path(building_blocks)
     directory = Path(output)
     directory.mkdir(parents=True, exist_ok=True)

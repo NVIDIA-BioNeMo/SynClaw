@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Source-library selections shared by import, search, and rollout configuration."""
+"""The bundled reaction-template catalog and the library-name lists that select from it."""
 
 from __future__ import annotations
 
@@ -14,12 +14,16 @@ from typing import Any, TypeAlias
 
 from synclaw import paths
 
-DEFAULT_REACTION_LIBRARIES = ("synformer", "paroutes", "ord", "nvidia")
+BUNDLED_REACTION_SOURCE = "bundled"
 LibrarySelection: TypeAlias = str | list[str] | tuple[str, ...] | None
 
 
 def normalize_libraries(value: LibrarySelection) -> tuple[str, ...]:
-    """Normalize a source union; an empty selection means all imported libraries."""
+    """Return the unique library names in a name, comma-separated string or list of them, in order.
+
+    An empty selection gives ``()``; each caller decides what that means.
+    """
+
     if value is None:
         return ()
     values = [value] if isinstance(value, str) else value
@@ -30,12 +34,6 @@ def normalize_libraries(value: LibrarySelection) -> tuple[str, ...]:
     )
 
 
-BUNDLED_REACTION_SOURCE = "bundled"
-# Package data, so installed wheels, which ship no template files, can still tell
-# when a prepared database was built from different templates.
-REACTION_CATALOG_RESOURCE = "reaction_libraries.json"
-
-
 def bundled_reaction_template_dir() -> Path:
     """Directory the catalog's source ``file`` entries are relative to (source checkouts only)."""
     return paths.DATA_DIR / "reaction_templates"
@@ -43,7 +41,9 @@ def bundled_reaction_template_dir() -> Path:
 
 @cache
 def _bundled_reaction_catalog_text() -> str:
-    return resources.files("synclaw").joinpath(REACTION_CATALOG_RESOURCE).read_text()
+    # Package data, so installed wheels, which ship no template files, can still tell
+    # when a prepared database was built from different templates.
+    return resources.files("synclaw").joinpath("reaction_libraries.json").read_text()
 
 
 def bundled_reaction_catalog() -> dict[str, Any]:

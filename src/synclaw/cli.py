@@ -14,7 +14,7 @@ from typing import Any
 
 from synclaw import __version__, paths
 from synclaw.core import chem, db, toxicity
-from synclaw.core.libraries import DEFAULT_REACTION_LIBRARIES
+from synclaw.core.libraries import normalize_libraries
 from synclaw.core.reactions import ingest_reaction_libraries, ingest_reaction_templates
 from synclaw.evaluation.evaluate import evaluate_trace_file, write_summary_csv
 from synclaw.evaluation.results import combine_summary_csvs
@@ -193,8 +193,7 @@ def build_parser() -> argparse.ArgumentParser:
     build_matrix.add_argument("--output", required=True, help="Matrix directory to write")
     build_matrix.add_argument(
         "--libraries",
-        default=",".join(DEFAULT_REACTION_LIBRARIES),
-        help="Template libraries to union",
+        help="Template libraries to union, comma-separated (default: every bundled library)",
     )
     build_matrix.add_argument("--workers", type=int, default=os.cpu_count() or 8)
     build_matrix.add_argument(
@@ -488,7 +487,7 @@ def _cmd_build_matrix(args: argparse.Namespace) -> dict[str, Any]:
     return build_matrix_directory(
         building_blocks=args.building_blocks,
         output=args.output,
-        libraries=[name for name in args.libraries.split(",") if name.strip()],
+        libraries=args.libraries,
         workers=args.workers,
         chunk_size=args.chunk_size,
         limit=args.limit,
@@ -499,7 +498,7 @@ def _cmd_build_matrix(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def _cmd_generate_targets(args: argparse.Namespace) -> dict[str, Any]:
-    libraries = tuple(name.strip() for name in (args.libraries or "").split(",") if name.strip())
+    libraries = normalize_libraries(args.libraries)
     options = GenerationOptions(
         count=args.count,
         workers=args.workers,
