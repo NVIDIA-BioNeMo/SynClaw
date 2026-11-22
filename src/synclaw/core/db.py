@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""SQLite persistence for building blocks, traces, and evaluations."""
+"""SQLite storage for building blocks, reaction templates and prepared building-block search."""
 
 from __future__ import annotations
 
@@ -120,9 +120,7 @@ CREATE TABLE IF NOT EXISTS building_blocks (
     created_at TEXT NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_building_blocks_smiles ON building_blocks(smiles);
 CREATE INDEX IF NOT EXISTS idx_building_blocks_inchi_key ON building_blocks(inchi_key);
-CREATE INDEX IF NOT EXISTS idx_building_blocks_heavy_atoms ON building_blocks(heavy_atom_count);
 
 CREATE TABLE IF NOT EXISTS import_errors (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -156,7 +154,6 @@ CREATE TABLE IF NOT EXISTS reaction_library_catalog (
     template_count INTEGER NOT NULL,
     installed_at TEXT NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_reaction_templates_name ON reaction_templates(name);
 """
 
 
@@ -401,12 +398,9 @@ def _require_current_reaction_libraries(
 
 
 def reaction_library_catalog(conn: sqlite3.Connection) -> dict[str, dict[str, Any]]:
-    """Return import records by library; databases built before tracking have none."""
+    """Return import records by library."""
 
-    try:
-        rows = conn.execute("SELECT * FROM reaction_library_catalog").fetchall()
-    except sqlite3.OperationalError:
-        return {}
+    rows = conn.execute("SELECT * FROM reaction_library_catalog").fetchall()
     return {str(row["library"]): dict(row) for row in rows}
 
 
@@ -442,12 +436,7 @@ def remove_reaction_libraries(conn: sqlite3.Connection, libraries: LibrarySelect
     removed = conn.execute(
         f"DELETE FROM reaction_templates WHERE library IN ({placeholders})", names
     ).rowcount
-    try:
-        conn.execute(
-            f"DELETE FROM reaction_library_catalog WHERE library IN ({placeholders})", names
-        )
-    except sqlite3.OperationalError:
-        pass
+    conn.execute(f"DELETE FROM reaction_library_catalog WHERE library IN ({placeholders})", names)
     number_reaction_templates(conn)
     return removed
 
@@ -573,7 +562,7 @@ def _building_block_search_metadata(
     ).fetchone()
     if row is None:
         raise sqlite3.OperationalError("prepared building-block search metadata is absent")
-    metadata = _row_dict(row)
+    metadata = dict(row)
     if not include_catalog_state:
         return metadata
     current_count, current_maximum_id = conn.execute(
@@ -724,7 +713,7 @@ def search_building_blocks(
             """,
             (json.dumps(sorted(hidden_ids)), limit),
         )
-        return [_with_match_metadata(_row_dict(row), "browse", None) for row in cursor.fetchall()]
+        return [_with_match_metadata(dict(row), "browse", None) for row in cursor.fetchall()]
 
     validation = chem.validate_smiles(text)
     if not validation["valid"]:
@@ -749,7 +738,7 @@ def search_building_blocks(
         return results
     constitutional_scores = dict(hits)
     rows = [
-        _row_dict(row)
+        dict(row)
         for row in conn.execute(
             """
             SELECT id, smiles, canonical_smiles, inchi_key, heavy_atom_count, source_file
@@ -821,7 +810,7 @@ def get_building_block(
         (bb_id,),
     )
     row = cursor.fetchone()
-    return _row_dict(row) if row is not None else None
+    return dict(row) if row is not None else None
 
 
 def exact_building_block_matches(
@@ -852,7 +841,7 @@ def get_building_block_by_canonical_smiles(
         (canonical_smiles,),
     )
     row = cursor.fetchone()
-    return _row_dict(row) if row is not None and row["id"] not in hidden_ids else None
+    return dict(row) if row is not None and row["id"] not in hidden_ids else None
 
 
 def building_block_ids_matching_target(conn: sqlite3.Connection, smiles: str) -> frozenset[int]:
@@ -1164,16 +1153,6 @@ def iter_jsonl(path: str | Path) -> Iterator[dict[str, Any]]:
             yield value
 
 
-def _row_dict(row: sqlite3.Row) -> dict[str, Any]:
-    value = dict(row)
-    if "metadata_json" in value and isinstance(value["metadata_json"], str):
-        try:
-            value["metadata"] = json.loads(value["metadata_json"])
-        except json.JSONDecodeError:
-            value["metadata"] = {}
-    return value
-
-
 def _metadata_text_list(value: Any) -> list[str]:
     if value in (None, ""):
         return []
@@ -1233,11 +1212,6 @@ def _reaction_template_row(row: sqlite3.Row) -> dict[str, Any]:
     value["family_metadata"] = {}
     value["overview"] = {}
     value["execution_hints"] = []
-    value["description"] = _enhance_reaction_description(
-        str(value.get("description") or ""),
-        reactant_count=reactant_count,
-        product_count=product_count,
-    )
     return value
 
 
@@ -1256,17 +1230,6 @@ def _main_database_path(conn: sqlite3.Connection) -> str:
     return ""
 
 
-def file_revision(path: Path) -> tuple[str, int, int]:
-    """Identity of a file for cache keys: any write changes mtime or size."""
-
-    resolved = path.resolve()
-    try:
-        stat = resolved.stat()
-    except OSError:
-        return str(resolved), 0, 0
-    return str(resolved), stat.st_mtime_ns, stat.st_size
-
-
 def _split_reaction_smarts(smarts: str) -> tuple[str, str]:
     if ">>" not in smarts:
         return smarts, ""
@@ -1282,19 +1245,6 @@ def reaction_template_arity(smarts: str) -> tuple[int, int]:
         raise ValueError(f"RDKit could not parse reaction SMARTS {smarts!r}")
     reaction.Initialize()
     return reaction.GetNumReactantTemplates(), reaction.GetNumProductTemplates()
-
-
-def _enhance_reaction_description(
-    description: str,
-    *,
-    reactant_count: int,
-    product_count: int,
-) -> str:
-    return re.sub(
-        r"Template with \d+ reactant pattern\(s\) and \d+ product pattern\(s\)\.",
-        f"Template with {reactant_count} reactant pattern(s) and {product_count} product pattern(s).",
-        description.strip(),
-    )
 
 
 def _introduces_unmapped_product_atoms(products: str) -> bool:
