@@ -12,7 +12,7 @@ from typing import Any
 
 from synclaw.core import chem, db, fingerprint_index, reactions
 from synclaw.core.toxicity import BLOCK_KEY, ToxicityConfig, ToxicityScreen, refusal_message
-from synclaw.tools.contracts import clamp_to_contract
+from synclaw.tools.contracts import TOOL_ARGUMENT_DEFAULTS, clamp_to_contract
 
 REVERSE_RANK_LIMIT = 25
 REVERSE_RANK_MAX_OUTCOMES = 10
@@ -587,6 +587,9 @@ class SynthesisTools:
                             reaction_id=reaction_id,
                             reactant_smiles=[item["smiles"] for item in resolved],
                             product_smiles=product,
+                            max_products=TOOL_ARGUMENT_DEFAULTS["simulate_reaction"][
+                                "max_products"
+                            ],
                         )
                         result["resolved_reactants"] = resolved
                 result["step_index"] = index

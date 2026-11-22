@@ -461,7 +461,8 @@ def search_reaction_templates_structural_matches(
     conn,
     reactant_smiles: list[str] | None = None,
     product_smiles: str | list[str] | None = None,
-    run_forward: bool = False,
+    *,
+    run_forward: bool,
 ) -> dict[str, Any]:
     """Rank every template whose SMARTS roles structurally match the molecules."""
 
@@ -627,7 +628,8 @@ def simulate_reaction(
     reaction_id: str,
     reactant_smiles: list[str],
     product_smiles: str | None = None,
-    max_products: int = 100,
+    *,
+    max_products: int,
 ) -> dict[str, Any]:
     """Run a reaction template and optionally check a claimed product.
 
@@ -752,6 +754,7 @@ def _smarts_grounding_candidates(
         conn,
         reactant_smiles=reactant_smiles,
         product_smiles=product_smiles,
+        run_forward=False,
     )
     for match in matches.get("results") or []:
         if exact is None or match["reaction_id"] != exact["reaction_id"]:
@@ -909,7 +912,8 @@ def simulate_reverse_reaction(
     conn,
     reaction_id: str,
     product_smiles: str | list[str],
-    max_outcomes: int = 50,
+    *,
+    max_outcomes: int,
 ) -> dict[str, Any]:
     """Run a reaction template backwards from product molecule(s) to candidate reactant sets."""
 
