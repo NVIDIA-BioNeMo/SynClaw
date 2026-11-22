@@ -512,8 +512,8 @@ uv run python scripts/render_tool_trace.py artifacts/traces/chembl_task0.jsonl \
 
 The evaluator scores the best accepted `submit_pathway` result in a trace (the last attempt if none
 was accepted). Summary columns cover whether a submission was accepted, reaction-valid and
-building-block-grounded; similarity to the target (stereo-aware, with constitutional and
-stereo-aware variants reported alongside); turn, tool-call and failure counts; and the hidden-stock
+building-block-grounded; `similarity_to_target` (stereo-aware) with
+`constitutional_similarity_to_target` alongside; turn, tool-call and failure counts; and the hidden-stock
 fields.
 
 `run_success` means the run produced an accepted, RDKit-validated pathway. `meets_similarity_floor`

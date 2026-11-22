@@ -1047,15 +1047,9 @@ def render_similarity_fields(
     constitutional = first_present(submission, "constitutional_similarity_to_target")
     if constitutional is None:
         constitutional = first_present(run_summary, "constitutional_similarity_to_target")
-    stereo = first_present(submission, "stereo_aware_similarity_to_target")
-    if stereo is None:
-        stereo = first_present(run_summary, "stereo_aware_similarity_to_target")
-    lines = []
-    if constitutional is not None:
-        lines.append(f"- Constitutional similarity to target: `{constitutional}`")
-    if stereo is not None:
-        lines.append(f"- Stereo-aware similarity to target: `{stereo}`")
-    return lines
+    if constitutional is None:
+        return []
+    return [f"- Constitutional similarity to target: `{constitutional}`"]
 
 
 def format_token_usage(usage: dict[str, Any]) -> str:

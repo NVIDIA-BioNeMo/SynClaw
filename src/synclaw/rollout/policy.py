@@ -907,13 +907,13 @@ def submission_identical_to_target(
 def _submission_fingerprint_similarity(
     submission: dict[str, Any] | None,
     target_smiles: str | None,
-    score: str,
+    key: str,
 ) -> float | None:
-    """Return a stored or recomputed fingerprint score (``constitutional`` or ``stereo_aware``)."""
+    """Return the stored ``{key}_to_target`` score, or recompute ``chem.similarity``'s ``key``."""
 
     if not submission or submission.get("accepted") is not True or not target_smiles:
         return None
-    value = submission.get(f"{score}_similarity_to_target")
+    value = submission.get(f"{key}_to_target")
     if value is not None:
         return float(value)
     final_smiles = submission.get("actual_final_smiles") or submission.get("final_smiles")
@@ -922,14 +922,16 @@ def _submission_fingerprint_similarity(
     result = chem.similarity(str(target_smiles), str(final_smiles))
     if not result.get("valid"):
         return None
-    return result.get(f"{score}_similarity")
+    return result.get(key)
 
 
 def submission_constitutional_similarity_to_target(
     submission: dict[str, Any] | None,
     target_smiles: str | None,
 ) -> float | None:
-    return _submission_fingerprint_similarity(submission, target_smiles, "constitutional")
+    return _submission_fingerprint_similarity(
+        submission, target_smiles, "constitutional_similarity"
+    )
 
 
 def submission_similarity_to_target(
@@ -938,7 +940,7 @@ def submission_similarity_to_target(
 ) -> float | None:
     """The active similarity: stereo-aware Morgan/Tanimoto."""
 
-    return _submission_fingerprint_similarity(submission, target_smiles, "stereo_aware")
+    return _submission_fingerprint_similarity(submission, target_smiles, "similarity")
 
 
 def submission_summary_fields(
@@ -956,7 +958,6 @@ def submission_summary_fields(
         "constitutional_similarity_to_target": submission_constitutional_similarity_to_target(
             submission, target_smiles
         ),
-        "stereo_aware_similarity_to_target": similarity,
         "pathway_type": submission.get("pathway_type") if submission else None,
         "final_smiles": (
             submission.get("final_smiles")
@@ -990,7 +991,6 @@ def selected_submission_event(
             "similarity_to_target": summary["similarity_to_target"],
             "identical_to_target": summary["identical_to_target"],
             "constitutional_similarity_to_target": summary["constitutional_similarity_to_target"],
-            "stereo_aware_similarity_to_target": summary["stereo_aware_similarity_to_target"],
             "submission_arguments": submission_arguments,
             "result": submission,
             "model_result": model_result,

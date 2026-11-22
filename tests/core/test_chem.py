@@ -44,15 +44,13 @@ class ChemTests(unittest.TestCase):
         self.assertTrue(result["valid"])
         self.assertEqual(result["similarity"], 1.0)
         self.assertEqual(result["constitutional_similarity"], 1.0)
-        self.assertEqual(result["stereo_aware_similarity"], 1.0)
 
     def test_similarity_reports_constitutional_and_stereo_aware_scores(self):
         result = chem.similarity("F[C@H](Cl)Br", "F[C@@H](Cl)Br")
 
         self.assertTrue(result["valid"])
         self.assertEqual(result["constitutional_similarity"], 1.0)
-        self.assertLess(result["stereo_aware_similarity"], 1.0)
-        self.assertEqual(result["similarity"], result["stereo_aware_similarity"])
+        self.assertLess(result["similarity"], 1.0)
 
     def test_mces_returns_bond_tanimoto_and_parseable_fragment(self):
         result = chem.mces("CCO", "CCN")

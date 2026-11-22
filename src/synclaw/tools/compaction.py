@@ -154,7 +154,6 @@ def _compact_submit_pathway(result: dict[str, Any]) -> dict[str, Any]:
             "similarity_to_target",
             "identical_to_target",
             "constitutional_similarity_to_target",
-            "stereo_aware_similarity_to_target",
             "reaction_validation",
             "pathway_type",
             "direct_building_block_ref",

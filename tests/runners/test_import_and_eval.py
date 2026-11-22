@@ -257,7 +257,7 @@ class ImportAndEvalTests(unittest.TestCase):
                             "final_smiles": "CCO",
                             "submitted_final_smiles": "CCO",
                             "constitutional_similarity_to_target": 1.0,
-                            "stereo_aware_similarity_to_target": 1.0,
+                            "similarity_to_target": 1.0,
                             "steps": [{"valid": True, "actual_product_smiles": "CCO"}],
                         },
                     },
@@ -274,7 +274,6 @@ class ImportAndEvalTests(unittest.TestCase):
             self.assertIsNone(summary["final_smiles"])
             self.assertIsNone(summary["similarity_to_target"])
             self.assertIsNone(summary["constitutional_similarity_to_target"])
-            self.assertIsNone(summary["stereo_aware_similarity_to_target"])
 
     def test_evaluate_trace_uses_last_submit_pathway_call(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -384,10 +383,7 @@ class ImportAndEvalTests(unittest.TestCase):
 
             self.assertTrue(summary["accepted"])
             self.assertEqual(summary["constitutional_similarity_to_target"], 1.0)
-            self.assertLess(summary["stereo_aware_similarity_to_target"], 1.0)
-            self.assertEqual(
-                summary["similarity_to_target"], summary["stereo_aware_similarity_to_target"]
-            )
+            self.assertLess(summary["similarity_to_target"], 1.0)
 
     def test_evaluate_trace_keeps_the_best_accepted_submission_over_a_later_one(self):
         with tempfile.TemporaryDirectory() as tmp:

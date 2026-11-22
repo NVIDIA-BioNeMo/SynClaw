@@ -924,7 +924,6 @@ def score_pathway_against_target(
             chem.matches_target(target_smiles, final_smiles) if scorable else None
         ),
         "constitutional_similarity_to_target": similarity.get("constitutional_similarity"),
-        "stereo_aware_similarity_to_target": similarity.get("stereo_aware_similarity"),
     }
 
 

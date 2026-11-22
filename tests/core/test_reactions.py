@@ -1794,7 +1794,6 @@ class ReactionTemplateTests(unittest.TestCase):
             self.assertEqual(result["final_smiles"], "C=O")
             self.assertIsNone(result["similarity_to_target"])
             self.assertIsNone(result["constitutional_similarity_to_target"])
-            self.assertIsNone(result["stereo_aware_similarity_to_target"])
             self.assertIn("rejected", result["error_message"])
             self.assertTrue(result["building_block_grounded"])
             self.assertEqual(result["referenced_building_block_ids"], [1])
@@ -1826,7 +1825,6 @@ class ReactionTemplateTests(unittest.TestCase):
             self.assertEqual(result["actual_final_smiles"], "F[C@H](Cl)Br")
             self.assertEqual(result["actual_final_products"], ["F[C@@H](Cl)Br", "F[C@H](Cl)Br"])
             self.assertEqual(result["constitutional_similarity_to_target"], 1.0)
-            self.assertEqual(result["stereo_aware_similarity_to_target"], 1.0)
             self.assertEqual(result["similarity_to_target"], 1.0)
 
     def test_submit_pathway_has_no_similarity_without_rdkit_final_product(self):
