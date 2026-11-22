@@ -10,6 +10,7 @@ import hashlib
 import itertools
 import json
 import re
+import sqlite3
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -599,7 +600,9 @@ def structural_rank_key(match: dict[str, Any]) -> tuple[Any, ...]:
     )
 
 
-def lookup_reaction_template(conn, reaction_id: str) -> tuple[dict[str, Any] | None, str | None]:
+def lookup_reaction_template(
+    conn: sqlite3.Connection, reaction_id: str
+) -> tuple[dict[str, Any] | None, str | None]:
     """Resolve a template ID, or explain why it is unavailable."""
 
     template = db.get_reaction_template(conn, reaction_id)

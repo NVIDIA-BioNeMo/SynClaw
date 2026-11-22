@@ -327,7 +327,8 @@ def require_reaction_templates(conn: sqlite3.Connection) -> None:
     if any(stored != numbered for stored, numbered, _ in _reaction_template_numbering(conn)):
         raise RuntimeError(
             "This database's reaction template IDs are not numbered R001 onward. "
-            "Re-run `synclaw ingest-reactions --db <path>` to renumber them."
+            "Re-run `synclaw ingest-reactions --db <path>` to renumber them; it reinstalls every "
+            "bundled source, so then drop any you do not use with `synclaw db remove-reactions`."
         )
 
 
