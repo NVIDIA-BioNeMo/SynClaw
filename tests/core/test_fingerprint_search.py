@@ -44,6 +44,7 @@ def test_threshold_query_returns_every_match_without_top_k_or_tie_caps() -> None
     )
     query = chem.constitutional_morgan_fingerprint("CCO")
     assert len(index.top_k(query, 1, min_similarity=1.0)) == fingerprint_index.MAX_TIED_RESULTS
+    assert len(index.top_k(query, count, min_similarity=1.0)) == count
     hits = index.top_k(query, None, min_similarity=1.0, exclude_ids={1})
     assert {bb_id for bb_id, _ in hits} == set(range(2, count + 1))
 
@@ -57,8 +58,9 @@ def test_threshold_query_handles_empty_fingerprints() -> None:
         popcounts=np.array([0, 1]),
     )
     empty = DataStructs.ExplicitBitVect(chem.MORGAN_N_BITS)
-    assert index.top_k(empty, None, min_similarity=1) == [(1, 1.0)]
-    assert index.top_k(empty, None, min_similarity=0) == [(1, 1.0), (2, 0.0)]
+    assert index.top_k(empty, None, min_similarity=0.1) == []
+    assert index.top_k(empty, None, min_similarity=0) == [(1, 0.0), (2, 0.0)]
+    assert index.top_k(empty, 1, min_similarity=0) == [(1, 0.0), (2, 0.0)]
 
 
 def test_similarity_filter_is_exhaustive_inclusive_and_cached(
