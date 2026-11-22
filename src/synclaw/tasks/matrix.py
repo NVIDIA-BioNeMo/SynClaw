@@ -112,6 +112,8 @@ def load_template_records(libraries: Sequence[str]) -> list[dict[str, Any]]:
         if library not in sources:
             raise ValueError(f"unknown reaction library {library!r}; bundled: {', '.join(sources)}")
         path = root / sources[library]["file"]
+        if not path.exists():
+            raise FileNotFoundError(f"no template file for library {library!r} at {path}")
         with open(path) as handle:
             for line in handle:
                 line = line.strip()
