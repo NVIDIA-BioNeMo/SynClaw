@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from synclaw.core import chem, db, reactions
+from synclaw.core import chem, db
 from synclaw.core.toxicity import MODE_OFF, ToxicityConfig, toxicity_summary_fields
 from synclaw.rollout.loop import call_local_tool
 from synclaw.rollout.policy import (
@@ -228,8 +228,9 @@ def _resolve_reaction_ids(
     """Resolve each step's template ID, or return None when one cannot be resolved.
 
     Template IDs are numbered per database, so an ID alone may name a different template
-    here than in the run. A step is resolved only through the SMARTS its recorded result
-    ran; a step that recorded none cannot be replayed. A step without a usable
+    here than in the run, and a reaction SMARTS could ground to a template the run lacked.
+    A step is resolved only through the template SMARTS its recorded result ran; a step
+    that recorded none cannot be replayed. A step without a usable
     ``reaction_id`` is left for ``submit_pathway`` to reject.
     """
 
@@ -237,12 +238,7 @@ def _resolve_reaction_ids(
     with db.session(tools.db_path) as conn:
         for index, step in enumerate(steps):
             reaction_id = step.get("reaction_id") if isinstance(step, dict) else None
-            # submit_pathway grounds a reaction SMARTS to a library template itself.
-            if (
-                not reaction_id
-                or not isinstance(reaction_id, str)
-                or reactions.is_reaction_smarts(reaction_id)
-            ):
+            if not reaction_id or not isinstance(reaction_id, str):
                 resolved.append(step)
                 continue
             smarts = recorded_smarts.get(index)

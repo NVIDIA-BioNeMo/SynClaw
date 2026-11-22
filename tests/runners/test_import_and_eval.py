@@ -326,11 +326,17 @@ class ImportAndEvalTests(unittest.TestCase):
                 "steps": [{"step_index": 1, "valid": False}],
                 "issues": ["step 1: Unknown reaction template: R001"],
             }
-            events = [message, _call_event(first, "CC=O"), _result_event(rejected, "CC=O")]
-            trace.write_text(
-                "\n".join(json.dumps(event) for event in events) + "\n", encoding="utf-8"
-            )
-            self.assertFalse(evaluate_trace_file(trace, db_path, model="mock-model")["accepted"])
+            as_smarts = {
+                **first,
+                "steps": [{**first["steps"][0], "reaction_id": "[C:1][O:2]>>[C:1]=[O:2]"}],
+            }
+            for call in (first, as_smarts):
+                events = [message, _call_event(call, "CC=O"), _result_event(rejected, "CC=O")]
+                trace.write_text(
+                    "\n".join(json.dumps(event) for event in events) + "\n", encoding="utf-8"
+                )
+                summary = evaluate_trace_file(trace, db_path, model="mock-model")
+                self.assertFalse(summary["accepted"])
 
     def test_evaluate_trace_scores_an_enantiomer_with_stereo_aware_similarity(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -428,7 +434,18 @@ class ImportAndEvalTests(unittest.TestCase):
                     "target_smiles": "C=O",
                     "payload": {"text": "Plan C=O"},
                 },
-                *(_call_event(arguments, "C=O") for arguments in (analogue, exact)),
+                _call_event(analogue, "C=O"),
+                _result_event({}, "C=O"),
+                _call_event(exact, "C=O"),
+                # The run grounded the reaction SMARTS to this library template.
+                _result_event(
+                    {
+                        "steps": [
+                            {"step_index": 1, "template": {"smarts": "[C:1][O:2]>>[C:1]=[O:2]"}}
+                        ]
+                    },
+                    "C=O",
+                ),
             ]
             trace.write_text(
                 "\n".join(json.dumps(event) for event in events) + "\n", encoding="utf-8"

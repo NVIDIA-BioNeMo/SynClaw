@@ -1131,6 +1131,8 @@ def list_reaction_templates(conn: sqlite3.Connection) -> list[dict[str, Any]]:
 
 
 def table_counts(db_path: str | Path) -> dict[str, int]:
+    """Row counts of the tables this database has; older databases may lack some."""
+
     tables = [
         "building_blocks",
         "import_errors",
@@ -1138,9 +1140,11 @@ def table_counts(db_path: str | Path) -> dict[str, int]:
         "reaction_library_catalog",
     ]
     with session(db_path) as conn:
+        present = {row[0] for row in conn.execute("SELECT name FROM sqlite_master")}
         return {
             table: int(conn.execute(f"SELECT COUNT(*) AS count FROM {table}").fetchone()["count"])
             for table in tables
+            if table in present
         }
 
 
