@@ -462,7 +462,7 @@ def _require_prepared_building_block_search(
 ) -> dict[str, Any]:
     """Validate prepared-search state, optionally including full catalog scans."""
 
-    display_path = db_path or _connection_database_path(conn)
+    display_path = db_path or _main_database_path(conn) or "the active database"
     try:
         metadata = _building_block_search_metadata(
             conn,
@@ -488,13 +488,6 @@ def _require_prepared_building_block_search(
     ):
         raise RuntimeError(_prepared_search_error(display_path))
     return metadata
-
-
-def _connection_database_path(conn: sqlite3.Connection) -> str:
-    for row in conn.execute("PRAGMA database_list"):
-        if str(row[1]) == "main" and row[2]:
-            return str(row[2])
-    return "the active database"
 
 
 def stage_prepared_search_database(
@@ -684,10 +677,10 @@ def _insert_building_block_rows(
 def search_building_blocks(
     conn: sqlite3.Connection,
     query: str,
-    limit: int = 20,
-    include_near: bool = True,
-    min_similarity: float = 0.15,
     *,
+    limit: int,
+    include_near: bool,
+    min_similarity: float,
     hidden_ids: frozenset[int] = frozenset(),
 ) -> list[dict[str, Any]]:
     """Return the exact stock match for a SMILES query, then its nearest neighbours.
@@ -954,7 +947,8 @@ def get_reaction_template_by_smarts(conn: sqlite3.Connection, smarts: str) -> di
 def search_reaction_templates(
     conn: sqlite3.Connection,
     query: str,
-    limit: int = 20,
+    *,
+    limit: int,
 ) -> list[dict[str, Any]]:
     """Rank templates by TF-IDF similarity to a text query."""
 
@@ -1177,7 +1171,7 @@ def _reaction_template_row(row: sqlite3.Row) -> dict[str, Any]:
         except (TypeError, json.JSONDecodeError):
             decoded[key] = default
     value["tags"] = decoded["tags_json"]
-    reactants, products = _split_reaction_smarts(str(value.get("smarts") or ""))
+    reactants, products = split_reaction_smarts(str(value.get("smarts") or ""))
     reactant_count, product_count = reaction_template_arity(str(value.get("smarts") or ""))
     value["reactant_count"] = reactant_count
     value["product_count"] = product_count
@@ -1230,10 +1224,10 @@ def _main_database_path(conn: sqlite3.Connection) -> str:
     return ""
 
 
-def _split_reaction_smarts(smarts: str) -> tuple[str, str]:
-    if ">>" not in smarts:
-        return smarts, ""
-    reactants, products = smarts.split(">>", 1)
+def split_reaction_smarts(smarts: str) -> tuple[str, str]:
+    """Return the reactant and product sides of a ``reactants>>products`` SMARTS."""
+
+    reactants, _, products = smarts.partition(">>")
     return reactants, products
 
 

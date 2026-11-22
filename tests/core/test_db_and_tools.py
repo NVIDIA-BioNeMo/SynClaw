@@ -94,7 +94,9 @@ class DbAndToolsTests(unittest.TestCase):
             statements: list[str] = []
             with db.session(database) as conn:
                 conn.set_trace_callback(statements.append)
-                results = db.search_building_blocks(conn, "CCO", include_near=False)
+                results = db.search_building_blocks(
+                    conn, "CCO", limit=20, include_near=False, min_similarity=0.15
+                )
                 conn.set_trace_callback(None)
 
             self.assertEqual(results[0]["match_type"], "exact")
@@ -137,7 +139,9 @@ class DbAndToolsTests(unittest.TestCase):
                             re.escape(f"synclaw db prepare-search --db {database.resolve()}"),
                         ),
                     ):
-                        db.search_building_blocks(conn, "CCO", include_near=False)
+                        db.search_building_blocks(
+                            conn, "CCO", limit=20, include_near=False, min_similarity=0.15
+                        )
 
     def test_unprepared_database_allows_only_browsing(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -148,9 +152,16 @@ class DbAndToolsTests(unittest.TestCase):
             db.ingest_building_blocks(source, database)
 
             with db.session(database) as conn:
-                self.assertEqual(db.search_building_blocks(conn, "*", limit=1)[0]["smiles"], "CCO")
+                self.assertEqual(
+                    db.search_building_blocks(
+                        conn, "*", limit=1, include_near=True, min_similarity=0.15
+                    )[0]["smiles"],
+                    "CCO",
+                )
                 with self.assertRaisesRegex(RuntimeError, "prepare-search"):
-                    db.search_building_blocks(conn, "CCO", include_near=False)
+                    db.search_building_blocks(
+                        conn, "CCO", limit=20, include_near=False, min_similarity=0.15
+                    )
 
     def test_ingest_search_and_tool_submission(self):
         with tempfile.TemporaryDirectory() as tmp:

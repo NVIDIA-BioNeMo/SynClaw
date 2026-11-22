@@ -936,7 +936,7 @@ def simulate_reverse_reaction(
             "reaction_executed": False,
         }
 
-    reactants, products = _split_reaction_smarts(template["smarts"])
+    reactants, products = db.split_reaction_smarts(template["smarts"])
     expected_reactants, expected_products = db.reaction_template_arity(str(template["smarts"]))
     if len(product_inputs) != expected_products:
         return {
@@ -1276,12 +1276,3 @@ def _dedupe_texts(values: list[str]) -> list[str]:
 def _infer_description(smarts: str) -> str:
     arity, product_count = db.reaction_template_arity(smarts)
     return f"Template with {arity} reactant pattern(s) and {product_count} product pattern(s)."
-
-
-def _split_reaction_smarts(smarts: str) -> tuple[str, str]:
-    reactants, _, products = smarts.partition(SMARTS_ARROW)
-    if not products and ">" in smarts:
-        parts = smarts.split(">")
-        reactants = parts[0]
-        products = parts[-1]
-    return reactants, products

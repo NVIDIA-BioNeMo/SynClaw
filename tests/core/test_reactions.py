@@ -1251,7 +1251,7 @@ class ReactionTemplateTests(unittest.TestCase):
             ingest_reaction_templates(source, db_path=db_path, library="demo")
             with db.session(db_path) as conn:
                 with self.assertRaisesRegex(ValueError, "needs a query"):
-                    db.search_reaction_templates(conn, " ")
+                    db.search_reaction_templates(conn, " ", limit=1)
             db.prepare_building_block_search(db_path)
             tools = SynthesisTools(db_path)
 
