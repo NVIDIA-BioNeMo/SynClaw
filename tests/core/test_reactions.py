@@ -287,10 +287,10 @@ class ReactionTemplateTests(unittest.TestCase):
             source = Path(tmp) / "templates.jsonl"
             db_path = Path(tmp) / "test.sqlite"
             records = []
-            for reaction_id in sorted(selected_ids):
+            for number, reaction_id in enumerate(sorted(selected_ids), start=1):
                 record = dict(annotations[("synformer", reaction_id)])
                 record.pop("reactant_roles", None)
-                record["smarts"] = "[*:1]>>[*:1]"
+                record["smarts"] = f"[*:{number}]>>[*:{number}]"
                 records.append(record)
             source.write_text(
                 "".join(json.dumps(record) + "\n" for record in records),
@@ -516,14 +516,16 @@ class ReactionTemplateTests(unittest.TestCase):
                 )
                 + "\n"
                 + json.dumps({"reaction_id": "R002", "smarts": "[C:1>>[C:1]"})
+                + "\n"
+                + json.dumps({"reaction_id": "R003", "smarts": ">>"})
                 + "\n",
                 encoding="utf-8",
             )
 
             stats = ingest_reaction_templates(source, db_path=db_path, library="demo")
 
-            self.assertEqual(stats["records"], 2)
-            self.assertEqual(stats["invalid"], 2)
+            self.assertEqual(stats["records"], 3)
+            self.assertEqual(stats["invalid"], 3)
             self.assertEqual(stats["inserted"], 0)
 
     def test_text_search_weights_rare_terms_above_common_ones(self):
@@ -534,7 +536,11 @@ class ReactionTemplateTests(unittest.TestCase):
             source.write_text(
                 "".join(
                     json.dumps(
-                        {"reaction_id": f"R{index:03d}", "smarts": "[C:1]>>[C:1]", "name": name}
+                        {
+                            "reaction_id": f"R{index:03d}",
+                            "smarts": f"[C:{index + 1}]>>[C:{index + 1}]",
+                            "name": name,
+                        }
                     )
                     + "\n"
                     for index, name in enumerate(names)
@@ -567,7 +573,7 @@ class ReactionTemplateTests(unittest.TestCase):
                 + json.dumps(
                     {
                         "reaction_id": "R002",
-                        "reaction_smarts": "[C:1]-[N:2]>>[C:1]-[N:2]",
+                        "reaction_smarts": "[C:3]-[N:4]>>[C:3]-[N:4]",
                         "name": "Plain transformation",
                         "search_terms": ["imine conversion"],
                     }
@@ -637,7 +643,9 @@ class ReactionTemplateTests(unittest.TestCase):
             source = tmp_path / "templates.txt"
             db_path = tmp_path / "test.sqlite"
             source.write_text(
-                ("[C:1][O:2]>>[C:1]=[O:2]\n" * 44) + "[N:1].[C:2]>>[N:1][C:2]\n", encoding="utf-8"
+                "".join(f"[C:{n}][O:99]>>[C:{n}]=[O:99]\n" for n in range(1, 45))
+                + "[N:1].[C:2]>>[N:1][C:2]\n",
+                encoding="utf-8",
             )
             ingest_reaction_templates(source, db_path=db_path, library="demo")
 
@@ -1378,7 +1386,7 @@ class ReactionTemplateTests(unittest.TestCase):
                         if index == 120
                         else "Carbonyl identity",
                         "description": "Structurally matches carbonyl product.",
-                        "smarts": "[C:1]=[O:2]>>[C:1]=[O:2]",
+                        "smarts": f"[C:{index + 1}]=[O:999]>>[C:{index + 1}]=[O:999]",
                     }
                 )
             source.write_text(

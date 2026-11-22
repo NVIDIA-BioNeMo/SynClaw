@@ -73,6 +73,11 @@ def ingest_reaction_libraries(
             records.append((library, {**row, "family_metadata": families[row["family"]]}))
     if len({row["smarts"] for _, row in records}) != len(records):
         raise ValueError("Bundled reaction sources contain duplicated SMARTS")
+    unparseable = [
+        row["reaction_id"] for _, row in records if not _is_reaction_smarts_template(row["smarts"])
+    ]
+    if unparseable:
+        raise ValueError(f"Bundled templates with SMARTS RDKit cannot run: {unparseable}")
     db.init_db(db_path)
     stats = {"libraries": libraries, "records": len(records), "inserted": 0, "replaced": 0}
     versions = bundled_reaction_library_versions()
@@ -148,6 +153,12 @@ def ingest_reaction_templates(
                     replace_existing_tags=True,
                 )
                 stats["annotated"] += 1
+            stored = db.get_reaction_template_by_smarts(conn, normalized["smarts"])
+            if stored is not None:
+                raise ValueError(
+                    f"{normalized['reaction_id']}: its SMARTS is already stored as {stored['reaction_id']}; "
+                    "store each SMARTS in one library only"
+                )
             inserted = db.upsert_reaction_template(conn, **normalized)
             if inserted:
                 stats["inserted"] += 1
@@ -440,10 +451,10 @@ def _is_reaction_smarts_template(smarts: str) -> bool:
     if SMARTS_ARROW not in smarts:
         return False
     try:
-        db.reaction_template_arity(smarts)
+        reactants, products = db.reaction_template_arity(smarts)
     except ValueError:
         return False
-    return True
+    return reactants > 0 and products > 0
 
 
 def _normalize_reaction_id(value: Any, *, index: int, library: str) -> str:
@@ -458,7 +469,7 @@ def _normalize_reaction_id(value: Any, *, index: int, library: str) -> str:
 
 
 def search_reaction_templates_structural_matches(
-    conn,
+    conn: sqlite3.Connection,
     reactant_smiles: list[str] | None = None,
     product_smiles: str | list[str] | None = None,
     *,
@@ -624,7 +635,7 @@ def lookup_reaction_template(
 
 
 def simulate_reaction(
-    conn,
+    conn: sqlite3.Connection,
     reaction_id: str,
     reactant_smiles: list[str],
     product_smiles: str | None = None,
@@ -662,7 +673,7 @@ def is_reaction_smarts(reaction_id: Any) -> bool:
 
 
 def _simulate_reaction_smarts(
-    conn,
+    conn: sqlite3.Connection,
     smarts: str,
     reactant_smiles: list[str],
     product_smiles: str | None,
@@ -741,7 +752,7 @@ def _simulate_reaction_smarts(
 
 
 def _smarts_grounding_candidates(
-    conn,
+    conn: sqlite3.Connection,
     smarts: str,
     reactant_smiles: list[str],
     product_smiles: str | None,
@@ -909,7 +920,7 @@ def _simulate_template(
 
 
 def simulate_reverse_reaction(
-    conn,
+    conn: sqlite3.Connection,
     reaction_id: str,
     product_smiles: str | list[str],
     *,

@@ -28,7 +28,7 @@ def test_incomplete_family_metadata_fails_the_family_overview(tmp_path, metadata
     records = [
         {
             "reaction_id": f"R{i:03d}",
-            "smarts": "[C:1]>>[C:1]",
+            "smarts": f"[C:{i + 1}]>>[C:{i + 1}]",
             "family": f"family {i}",
             "family_metadata": {"description": "Fixture family.", "search_terms": ["family hint"]},
         }

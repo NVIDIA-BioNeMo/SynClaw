@@ -6,6 +6,8 @@
 import hashlib
 import json
 import re
+import sqlite3
+from contextlib import closing
 from typing import Any
 
 import pytest
@@ -287,6 +289,29 @@ def test_lean_search_snapshot_keeps_library_records(catalog_db, tmp_path):
     validate_model_run_database(lean)
     with db.session(lean) as conn:
         assert set(db.reaction_library_catalog(conn)) == set(DEFAULT_REACTION_LIBRARIES)
+
+
+def test_a_smarts_already_in_another_library_is_rejected(tmp_path):
+    for name in ("first", "second"):
+        (tmp_path / f"{name}.txt").write_text("[C:1][O:2]>>[C:1]=[O:2]\n")
+    database = tmp_path / "test.sqlite"
+    ingest_reaction_templates(tmp_path / "first.txt", database, library="first")
+    with pytest.raises(ValueError, match="already stored as R001"):
+        ingest_reaction_templates(tmp_path / "second.txt", database, library="second")
+
+
+def test_a_lean_snapshot_of_a_database_from_before_numbering_says_to_reingest(tmp_path):
+    old = tmp_path / "old.sqlite"
+    columns = "reaction_id, library, name, description, smarts, created_at, updated_at"
+    with closing(sqlite3.connect(old)) as conn:
+        conn.execute(f"CREATE TABLE reaction_templates ({columns})")
+        conn.executemany(
+            f"INSERT INTO reaction_templates ({columns}) VALUES (?, ?, 'n', 'd', ?, 't', 't')",
+            [("synformer:R000", "first", "C>>C"), ("synformer:R000", "second", "N>>N")],
+        )
+        conn.commit()
+    with pytest.raises(RuntimeError, match="ingest-reactions --db"):
+        db.prepare_building_block_search(old, output_path=tmp_path / "lean.sqlite")
 
 
 def test_ord_templates_trace_to_uspto_grants_and_nvidia_templates_are_separate() -> None:

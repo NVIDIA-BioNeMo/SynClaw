@@ -242,9 +242,15 @@ def prepare_building_block_search(
                     if not columns:
                         continue
                     names = ", ".join(columns)
-                    conn.execute(
-                        f"INSERT INTO main.{table} ({names}) SELECT {names} FROM source.{table}"
-                    )
+                    try:
+                        conn.execute(
+                            f"INSERT INTO main.{table} ({names}) SELECT {names} FROM source.{table}"
+                        )
+                    except sqlite3.IntegrityError as exc:
+                        raise RuntimeError(
+                            f"{source}'s {table} do not fit this version's schema; it predates "
+                            f"template numbering. Run `synclaw ingest-reactions --db {source}` first."
+                        ) from exc
             _prepare_building_block_search_in_place(temporary)
             os.replace(temporary, destination)
         finally:
