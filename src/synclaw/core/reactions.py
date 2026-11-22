@@ -18,7 +18,6 @@ from typing import Any
 from synclaw.core import chem, db
 from synclaw.core.libraries import (
     BUNDLED_REACTION_SOURCE,
-    REACTION_CATALOG_RESOURCE,
     bundled_reaction_catalog,
     bundled_reaction_library_versions,
     bundled_reaction_template_dir,
@@ -102,7 +101,7 @@ def ingest_reaction_libraries(
 def _verified_bundled_file(template_dir: Path, entry: dict[str, Any]) -> Path:
     path = template_dir / entry["file"]
     if hashlib.sha256(path.read_bytes()).hexdigest() != entry["sha256"]:
-        raise ValueError(f"{path} does not match its SHA-256 in {REACTION_CATALOG_RESOURCE}")
+        raise ValueError(f"{path} does not match its SHA-256 in reaction_libraries.json")
     return path
 
 

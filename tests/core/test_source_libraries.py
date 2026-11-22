@@ -16,7 +16,7 @@ from rdkit.Chem import rdChemReactions
 from synclaw import paths
 from synclaw.cli import build_parser
 from synclaw.core import db, libraries
-from synclaw.core.libraries import DEFAULT_REACTION_LIBRARIES, normalize_libraries
+from synclaw.core.libraries import normalize_libraries
 from synclaw.core.reactions import ingest_reaction_libraries, ingest_reaction_templates
 from synclaw.rollout.loop import call_local_tool
 from synclaw.rollout.prompts import validate_model_run_database
@@ -222,7 +222,7 @@ def test_cli_imports_the_bundled_catalog(tmp_path):
 def test_bundled_import_records_catalog_and_detects_stale_or_untracked_libraries(catalog_db):
     with db.session(catalog_db) as conn:
         records = db.reaction_library_catalog(conn)
-        assert set(records) == set(DEFAULT_REACTION_LIBRARIES)
+        assert set(records) == set(libraries_json()["sources"])
         assert records["ord"]["template_count"] == 203
         assert records["nvidia"]["template_count"] == 8
         db.require_reaction_templates(conn)
@@ -288,7 +288,7 @@ def test_lean_search_snapshot_keeps_library_records(catalog_db, tmp_path):
     db.prepare_building_block_search(catalog_db, output_path=lean)
     validate_model_run_database(lean)
     with db.session(lean) as conn:
-        assert set(db.reaction_library_catalog(conn)) == set(DEFAULT_REACTION_LIBRARIES)
+        assert set(db.reaction_library_catalog(conn)) == set(libraries_json()["sources"])
 
 
 def test_a_smarts_already_in_another_library_is_rejected(tmp_path):

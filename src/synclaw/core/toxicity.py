@@ -26,14 +26,13 @@ from typing import Any, Final
 
 from rdkit import Chem, DataStructs
 
-from synclaw import paths
 from synclaw.core import chem
 
 MODE_ON: Final = "on"
 MODE_OFF: Final = "off"
 MODES: Final = (MODE_ON, MODE_OFF)
 DEFAULT_THRESHOLD: Final = 0.8
-DEFAULT_WATCHLIST: Final = paths.REPO_ROOT / "var" / "safety" / "mols_to_filter.txt"
+DEFAULT_WATCHLIST: Final = Path("var/safety/mols_to_filter.txt")
 ENV_MODE: Final = "SYNCLAW_TOXICITY_SCREEN"
 ENV_WATCHLIST: Final = "SYNCLAW_TOXICITY_WATCHLIST"
 ENV_THRESHOLD: Final = "SYNCLAW_TOXICITY_THRESHOLD"
