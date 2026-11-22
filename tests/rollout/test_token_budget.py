@@ -763,6 +763,14 @@ def test_unlimited_budgets_drop_their_clauses_from_the_prompt():
         context_limit_stated=False,
     )
     assert turns_only == "Plan syntheses.\n\nUse no more than 40 assistant turns."
+    single = prompt(
+        max_tool_calls=1,
+        max_turns=1,
+        max_tokens=None,
+        max_model_len=50000,
+        context_limit_stated=False,
+    )
+    assert single == "Plan syntheses.\n\nUse no more than 1 total tool call or 1 assistant turn."
     context_only = prompt(max_tool_calls=0, max_turns=None, max_tokens=None, max_model_len=50000)
     assert context_only.startswith("Plan syntheses.\n\nYour context-window budget is 50000 tokens")
     assert "Use no more than" not in context_only and "capped" not in context_only

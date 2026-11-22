@@ -30,6 +30,10 @@ def require_current_prompt_text(task: dict[str, Any]) -> dict[str, Any]:
     )
 
 
+def _plural(count: int) -> str:
+    return "" if count == 1 else "s"
+
+
 def build_initial_messages(
     *,
     task: dict[str, Any],
@@ -42,14 +46,11 @@ def build_initial_messages(
     """
 
     config = config or RolloutPolicyConfig()
-    limits = [
-        *(
-            [f"{config.max_tool_calls} total tool call{'' if config.max_tool_calls == 1 else 's'}"]
-            if config.max_tool_calls > 0
-            else []
-        ),
-        *([f"{config.max_turns} assistant turns"] if config.max_turns is not None else []),
-    ]
+    limits = []
+    if config.max_tool_calls > 0:
+        limits.append(f"{config.max_tool_calls} total tool call{_plural(config.max_tool_calls)}")
+    if config.max_turns is not None:
+        limits.append(f"{config.max_turns} assistant turn{_plural(config.max_turns)}")
     budget = [
         *([f"Use no more than {' or '.join(limits)}."] if limits else []),
         *limit_sentences(config.stated_max_model_len, config.max_tokens),

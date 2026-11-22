@@ -73,21 +73,26 @@ def serialized_input_bytes(payload: Any) -> int:
     return len(json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
 
 
+_OPAQUE_INPUT_TYPES = frozenset(
+    {
+        "image_url",
+        "input_image",
+        "input_audio",
+        "image",
+        "document",
+        "item_reference",
+        "redacted_thinking",
+    }
+)
+
+
 def _opaque_input(value: Any) -> bool:
+    """Whether input holds content whose token cost cannot be estimated from its JSON bytes."""
+
     if isinstance(value, dict):
         kind = value.get("type")
         if value.get("encrypted_content") or (
-            isinstance(kind, str)
-            and kind
-            in {
-                "image_url",
-                "input_image",
-                "input_audio",
-                "image",
-                "document",
-                "item_reference",
-                "redacted_thinking",
-            }
+            isinstance(kind, str) and kind in _OPAQUE_INPUT_TYPES
         ):
             return True
         # A Responses reasoning summary is not the hidden reasoning it references.
@@ -190,11 +195,10 @@ class ContextTokenEstimator:
             if occupied is not None:
                 source = "provider_usage_plus_replay_delta"
         return ContextBudgetSnapshot(
-            context_window_tokens,
-            occupied,
-            max_output_tokens,
-            source,
-            estimated=True,
+            context_window_tokens=context_window_tokens,
+            input_tokens=occupied,
+            max_output_tokens=max_output_tokens,
+            source=source,
         )
 
     def _replay_input_tokens(self, payload: Any) -> int | None:
@@ -425,8 +429,6 @@ def budget_summary_fields(events: Sequence[dict[str, Any]]) -> dict[str, Any]:
                     "last_context_remaining_tokens": payload["remaining_tokens"],
                     "context_budget_source": payload["source"],
                     "context_budget_estimated": payload["estimated"],
-                    "last_request_output_tokens": payload.get(
-                        "request_output_tokens", payload.get("max_output_tokens")
-                    ),
+                    "last_request_output_tokens": payload["request_output_tokens"],
                 }
     return {}
