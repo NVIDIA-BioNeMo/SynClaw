@@ -11,7 +11,6 @@ workers shares that one copy with all of them.
 
 from __future__ import annotations
 
-import json
 import sqlite3
 import threading
 from collections.abc import Iterable
@@ -35,7 +34,7 @@ MAX_TIED_RESULTS = 1000
 
 _LOCK = threading.Lock()
 # One index per database path, replaced when the catalog is prepared again.
-_LOADED: dict[str, tuple[str, FingerprintIndex]] = {}
+_LOADED: dict[str, tuple[tuple[Any, ...], FingerprintIndex]] = {}
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,7 +47,7 @@ class FingerprintIndex:
 
     def top_k(
         self,
-        query_fingerprint: Any,
+        query_fingerprint: DataStructs.ExplicitBitVect,
         k: int | None,
         *,
         min_similarity: float,
@@ -56,38 +55,46 @@ class FingerprintIndex:
     ) -> list[tuple[int, float]]:
         """Return top-k matches; k=None returns every threshold match without the tie cap."""
 
+        if (k is not None and k <= 0) or not len(self.ids):
+            return []
         query = pack_fingerprint(query_fingerprint)
         query_count = int(np.bitwise_count(query).sum())
-        if (k is not None and (k <= 0 or query_count == 0)) or not len(self.ids):
+        if query_count == 0:
             return []
-        intersections = np.empty(len(self.ids), dtype=np.int32)
-        for start in range(0, len(self.ids), SCAN_CHUNK_ROWS):
-            block = self.fingerprints[start : start + SCAN_CHUNK_ROWS]
-            intersections[start : start + len(block)] = np.bitwise_count(block & query).sum(
-                axis=1, dtype=np.int32
-            )
+        intersections = _row_popcounts(self.fingerprints, query)
         unions = query_count + self.popcounts - intersections
+        # Like RDKit, an empty catalog fingerprint has similarity 0 to any query.
         similarities = np.divide(
-            intersections, unions, out=np.ones(len(self.ids)), where=unions != 0
+            intersections, unions, out=np.zeros(len(self.ids)), where=unions != 0
         )
+        candidates = np.flatnonzero(similarities >= min_similarity)
         if exclude_ids:
             excluded = np.fromiter(exclude_ids, dtype=np.int64)
-            positions = np.searchsorted(self.ids, excluded)
-            positions = positions[positions < len(self.ids)]
-            positions = positions[np.isin(self.ids[positions], excluded)]
-            similarities[positions] = -1.0
-        candidates = np.flatnonzero(similarities >= min_similarity)
+            candidates = candidates[~np.isin(self.ids[candidates], excluded)]
         if k is not None and len(candidates) > k:
             kth = np.partition(similarities[candidates], -k)[-k]
             candidates = candidates[similarities[candidates] >= kth]
-        if k is not None and len(candidates) > MAX_TIED_RESULTS:
-            # Candidates are in id order, so a stable sort keeps the lowest ids among ties.
-            order = np.argsort(-similarities[candidates], kind="stable")
-            candidates = candidates[order[:MAX_TIED_RESULTS]]
+            tie_cap = max(k, MAX_TIED_RESULTS)
+            if len(candidates) > tie_cap:
+                # Candidates are in id order, so a stable sort keeps the lowest ids among ties.
+                order = np.argsort(-similarities[candidates], kind="stable")
+                candidates = candidates[order[:tie_cap]]
         return [(int(self.ids[position]), float(similarities[position])) for position in candidates]
 
 
-def pack_fingerprint(fingerprint: Any) -> np.ndarray:
+def _row_popcounts(fingerprints: np.ndarray, mask: np.ndarray | None = None) -> np.ndarray:
+    """Count the set bits in each row, optionally after ANDing with ``mask``, in bounded chunks."""
+
+    counts = np.empty(len(fingerprints), dtype=np.int32)
+    for start in range(0, len(fingerprints), SCAN_CHUNK_ROWS):
+        block = fingerprints[start : start + SCAN_CHUNK_ROWS]
+        if mask is not None:
+            block = block & mask
+        counts[start : start + len(block)] = np.bitwise_count(block).sum(axis=1, dtype=np.int32)
+    return counts
+
+
+def pack_fingerprint(fingerprint: DataStructs.ExplicitBitVect) -> np.ndarray:
     """Pack an RDKit bit vector into the index's uint64 word layout."""
 
     return np.frombuffer(bytes.fromhex(DataStructs.BitVectToFPSText(fingerprint)), dtype=np.uint64)
@@ -116,11 +123,9 @@ def write_fingerprint_chunks(conn: sqlite3.Connection, rows: Iterable[tuple[int,
         hex_fingerprints.clear()
 
     for building_block_id, canonical_smiles in rows:
-        ids.append(int(building_block_id))
+        ids.append(building_block_id)
         hex_fingerprints.append(
-            DataStructs.BitVectToFPSText(
-                chem.constitutional_morgan_fingerprint(str(canonical_smiles))
-            )
+            DataStructs.BitVectToFPSText(chem.constitutional_morgan_fingerprint(canonical_smiles))
         )
         if len(ids) == STORED_CHUNK_ROWS:
             flush()
@@ -148,7 +153,7 @@ def load_fingerprint_index(conn: sqlite3.Connection, db_path: str | Path) -> Fin
     return loaded[1]
 
 
-def _catalog_key(conn: sqlite3.Connection) -> str:
+def _catalog_key(conn: sqlite3.Connection) -> tuple[Any, ...]:
     row = conn.execute(
         """
         SELECT building_block_count, maximum_building_block_id,
@@ -158,7 +163,7 @@ def _catalog_key(conn: sqlite3.Connection) -> str:
     ).fetchone()
     if row is None:
         raise RuntimeError("Building-block fingerprint search needs a prepared search index")
-    return json.dumps(tuple(row))
+    return tuple(row)
 
 
 def _read_index(conn: sqlite3.Connection) -> FingerprintIndex:
@@ -174,10 +179,7 @@ def _read_index(conn: sqlite3.Connection) -> FingerprintIndex:
             fingerprint_bytes, dtype=np.uint64
         ).reshape(row_count, WORDS)
         position += row_count
-    popcounts = np.empty(count, dtype=np.int32)
-    for start in range(0, count, SCAN_CHUNK_ROWS):
-        block = fingerprints[start : start + SCAN_CHUNK_ROWS]
-        popcounts[start : start + len(block)] = np.bitwise_count(block).sum(axis=1, dtype=np.int32)
+    popcounts = _row_popcounts(fingerprints)
     # Read-only, so forked workers that inherit the arrays keep sharing their pages.
     for array in (ids, fingerprints, popcounts):
         array.flags.writeable = False
