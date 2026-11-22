@@ -227,9 +227,10 @@ def _resolve_reaction_ids(
 ) -> list[Any] | None:
     """Resolve each step's template ID, or return None when one cannot be resolved.
 
-    Template IDs are numbered per database, but each step's result records the SMARTS it
-    ran, so a step is resolved to the template with that SMARTS whenever one was recorded.
-    A step without a usable ``reaction_id`` is left for ``submit_pathway`` to reject.
+    Template IDs are numbered per database, so an ID alone may name a different template
+    here than in the run. A step is resolved only through the SMARTS its recorded result
+    ran; a step that recorded none cannot be replayed. A step without a usable
+    ``reaction_id`` is left for ``submit_pathway`` to reject.
     """
 
     resolved = []
@@ -244,15 +245,11 @@ def _resolve_reaction_ids(
             ):
                 resolved.append(step)
                 continue
-            template = db.get_reaction_template(conn, reaction_id)
             smarts = recorded_smarts.get(index)
-            if smarts and (template is None or template["smarts"] != smarts):
-                template = db.get_reaction_template_by_smarts(conn, smarts)
-                if template is not None:
-                    step = {**step, "reaction_id": template["reaction_id"]}
+            template = db.get_reaction_template_by_smarts(conn, smarts) if smarts else None
             if template is None:
                 return None
-            resolved.append(step)
+            resolved.append({**step, "reaction_id": template["reaction_id"]})
     return resolved
 
 

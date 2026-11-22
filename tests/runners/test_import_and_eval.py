@@ -289,19 +289,26 @@ class ImportAndEvalTests(unittest.TestCase):
                 "steps": [{"reaction_id": "R001", "reactants": ["CO"], "product_smiles": "C=O"}],
                 "pathway_text": "First candidate.",
             }
+            # Template IDs are numbered per database; the recorded SMARTS says which one ran.
             second = {
-                "steps": [{"reaction_id": "R001", "reactants": ["CCO"], "product_smiles": "CC=O"}],
+                "steps": [{"reaction_id": "R033", "reactants": ["CCO"], "product_smiles": "CC=O"}],
                 "pathway_text": "Second candidate.",
             }
+            recorded = {
+                "steps": [{"step_index": 1, "template": {"smarts": "[C:1][O:2]>>[C:1]=[O:2]"}}]
+            }
+            message = {
+                "event_type": "message",
+                "role": "user",
+                "target_smiles": "CC=O",
+                "payload": {"text": "Plan CC=O"},
+            }
             events = [
-                {
-                    "event_type": "message",
-                    "role": "user",
-                    "target_smiles": "CC=O",
-                    "payload": {"text": "Plan CC=O"},
-                },
+                message,
                 _call_event(first, "CC=O"),
+                _result_event(recorded, "CC=O"),
                 _call_event(second, "CC=O"),
+                _result_event(recorded, "CC=O"),
             ]
             trace.write_text(
                 "\n".join(json.dumps(event) for event in events) + "\n", encoding="utf-8"
@@ -313,25 +320,17 @@ class ImportAndEvalTests(unittest.TestCase):
             self.assertEqual(summary["final_smiles"], "CC=O")
             self.assertEqual(summary["similarity_to_target"], 1.0)
 
-            # IDs numbered by another database resolve through the SMARTS recorded in each call's result.
-            retired = {
-                **second,
-                "steps": [{**second["steps"][0], "reaction_id": "R033"}],
+            # Without a recorded SMARTS, the ID cannot name a template, so the run's verdict stands.
+            rejected = {
+                "accepted": False,
+                "steps": [{"step_index": 1, "valid": False}],
+                "issues": ["step 1: Unknown reaction template: R001"],
             }
-            recorded = {
-                "steps": [{"step_index": 1, "template": {"smarts": "[C:1][O:2]>>[C:1]=[O:2]"}}]
-            }
-            events = [
-                events[0],
-                _call_event(first, "CC=O"),
-                _result_event(recorded, "CC=O"),
-                _call_event(retired, "CC=O"),
-                _result_event(recorded, "CC=O"),
-            ]
+            events = [message, _call_event(first, "CC=O"), _result_event(rejected, "CC=O")]
             trace.write_text(
                 "\n".join(json.dumps(event) for event in events) + "\n", encoding="utf-8"
             )
-            self.assertTrue(evaluate_trace_file(trace, db_path, model="mock-model")["accepted"])
+            self.assertFalse(evaluate_trace_file(trace, db_path, model="mock-model")["accepted"])
 
     def test_evaluate_trace_scores_an_enantiomer_with_stereo_aware_similarity(self):
         with tempfile.TemporaryDirectory() as tmp:
