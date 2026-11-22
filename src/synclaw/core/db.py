@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""SQLite persistence for building blocks, traces, and evaluations."""
+"""SQLite storage for building blocks, reaction templates and prepared building-block search."""
 
 from __future__ import annotations
 
@@ -29,7 +29,10 @@ from synclaw.core.libraries import (
     normalize_libraries,
 )
 
-DEFAULT_DB_PATH = Path("var/synclaw.sqlite")
+# Search tuning.
+# Constitutional near-match hits that the stereo-aware score re-ranks.
+STEREO_RERANK_POOL = 200
+# Score shift for a matched search term (+) or exclusion (-), as a fraction of the best text match.
 REACTION_TEXT_SEARCH_CURATED_BONUS = 0.2
 # English function words that appear in most template descriptions and would otherwise
 # let any conversational query match nearly the whole catalog.
@@ -65,16 +68,12 @@ REACTION_TEXT_SEARCH_STOPWORDS = frozenset(
         "without",
     }
 )
-BUILDING_BLOCK_SEARCH_INDEX_VERSION = 3
 BUILDING_BLOCK_FINGERPRINT_TABLE = fingerprint_index.FINGERPRINT_CHUNK_TABLE
 BUILDING_BLOCK_SEARCH_METADATA_TABLE = "building_block_search_metadata"
-# Constitutional top hits that the stereo-aware score re-ranks.
-STEREO_RERANK_POOL = 200
 
 BUILDING_BLOCK_SEARCH_SCHEMA = f"""
 CREATE TABLE IF NOT EXISTS {BUILDING_BLOCK_SEARCH_METADATA_TABLE} (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
-    index_version INTEGER NOT NULL,
     building_block_count INTEGER NOT NULL,
     maximum_building_block_id INTEGER NOT NULL,
     fingerprint_radius INTEGER NOT NULL,
@@ -121,9 +120,7 @@ CREATE TABLE IF NOT EXISTS building_blocks (
     created_at TEXT NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_building_blocks_smiles ON building_blocks(smiles);
 CREATE INDEX IF NOT EXISTS idx_building_blocks_inchi_key ON building_blocks(inchi_key);
-CREATE INDEX IF NOT EXISTS idx_building_blocks_heavy_atoms ON building_blocks(heavy_atom_count);
 
 CREATE TABLE IF NOT EXISTS import_errors (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -145,7 +142,7 @@ CREATE TABLE IF NOT EXISTS reaction_templates (
     metadata_json TEXT NOT NULL DEFAULT '{}',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
-    UNIQUE(reaction_id, library)
+    UNIQUE(reaction_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_reaction_templates_library ON reaction_templates(library);
@@ -157,9 +154,6 @@ CREATE TABLE IF NOT EXISTS reaction_library_catalog (
     template_count INTEGER NOT NULL,
     installed_at TEXT NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_reaction_templates_name ON reaction_templates(name);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_reaction_templates_template_library
-    ON reaction_templates(reaction_id, library);
 """
 
 
@@ -167,10 +161,15 @@ def now_iso() -> str:
     return datetime.now(UTC).isoformat()
 
 
-def connect(db_path: str | Path = DEFAULT_DB_PATH) -> sqlite3.Connection:
+def connect(db_path: str | Path) -> sqlite3.Connection:
+    """Open an existing database; only ``init_db`` creates one."""
+
     path = Path(db_path)
-    if path.parent:
-        path.parent.mkdir(parents=True, exist_ok=True)
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"SQLite database does not exist: {path}. Create it with `synclaw db init --db {path}` "
+            "or an ingest command."
+        )
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
@@ -178,7 +177,7 @@ def connect(db_path: str | Path = DEFAULT_DB_PATH) -> sqlite3.Connection:
 
 
 @contextmanager
-def session(db_path: str | Path = DEFAULT_DB_PATH) -> Iterator[sqlite3.Connection]:
+def session(db_path: str | Path) -> Iterator[sqlite3.Connection]:
     conn = connect(db_path)
     try:
         yield conn
@@ -190,13 +189,17 @@ def session(db_path: str | Path = DEFAULT_DB_PATH) -> Iterator[sqlite3.Connectio
         conn.close()
 
 
-def init_db(db_path: str | Path = DEFAULT_DB_PATH) -> None:
-    with session(db_path) as conn:
+def init_db(db_path: str | Path) -> None:
+    """Create the database file if it is missing and apply the schema."""
+
+    path = Path(db_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with closing(sqlite3.connect(path)) as conn:
         conn.executescript(SCHEMA)
 
 
 def prepare_building_block_search(
-    db_path: str | Path = DEFAULT_DB_PATH,
+    db_path: str | Path,
     *,
     output_path: str | Path | None = None,
 ) -> dict[str, Any]:
@@ -239,9 +242,15 @@ def prepare_building_block_search(
                     if not columns:
                         continue
                     names = ", ".join(columns)
-                    conn.execute(
-                        f"INSERT INTO main.{table} ({names}) SELECT {names} FROM source.{table}"
-                    )
+                    try:
+                        conn.execute(
+                            f"INSERT INTO main.{table} ({names}) SELECT {names} FROM source.{table}"
+                        )
+                    except sqlite3.IntegrityError as exc:
+                        raise RuntimeError(
+                            f"{source}'s {table} do not fit this version's schema; it predates "
+                            f"template numbering. Run `synclaw ingest-reactions --db {source}` first."
+                        ) from exc
             _prepare_building_block_search_in_place(temporary)
             os.replace(temporary, destination)
         finally:
@@ -251,7 +260,6 @@ def prepare_building_block_search(
     return {
         "database": str(destination),
         "source_database": str(source),
-        "index_version": BUILDING_BLOCK_SEARCH_INDEX_VERSION,
         "building_block_count": metadata["building_block_count"],
         "fingerprint_count": metadata["fingerprint_count"],
         "prepared_at": metadata["prepared_at"],
@@ -280,12 +288,11 @@ def _prepare_building_block_search_in_place(db_path: Path) -> None:
         conn.execute(
             f"""
             INSERT INTO {BUILDING_BLOCK_SEARCH_METADATA_TABLE}(
-                singleton, index_version, building_block_count,
+                singleton, building_block_count,
                 maximum_building_block_id, fingerprint_radius,
                 fingerprint_bits, rdkit_version, prepared, prepared_at
-            ) VALUES (1, ?, ?, ?, ?, ?, ?, 1, ?)
+            ) VALUES (1, ?, ?, ?, ?, ?, 1, ?)
             ON CONFLICT(singleton) DO UPDATE SET
-                index_version=excluded.index_version,
                 building_block_count=excluded.building_block_count,
                 maximum_building_block_id=excluded.maximum_building_block_id,
                 fingerprint_radius=excluded.fingerprint_radius,
@@ -295,7 +302,6 @@ def _prepare_building_block_search_in_place(db_path: Path) -> None:
                 prepared_at=excluded.prepared_at
             """,
             (
-                BUILDING_BLOCK_SEARCH_INDEX_VERSION,
                 int(count),
                 int(maximum_id),
                 chem.MORGAN_RADIUS,
@@ -306,43 +312,58 @@ def _prepare_building_block_search_in_place(db_path: Path) -> None:
         )
 
 
-def _reaction_library_filter(library: LibrarySelection) -> tuple[str, list[str]]:
-    libraries = normalize_libraries(library)
-    if not libraries:
-        return "1", []
-    return f"library IN ({','.join('?' for _ in libraries)})", list(libraries)
+def require_reaction_templates(conn: sqlite3.Connection) -> None:
+    """Fail loudly unless the database's reaction templates are present, current and numbered.
 
-
-def require_reaction_library(conn: sqlite3.Connection, library: LibrarySelection) -> None:
-    """Fail loudly unless every selected reaction library is present and current.
-
-    A missing library otherwise degrades silently: the family overview is empty
-    and every template search returns zero results with ``valid: true``. An
-    empty selection checks every library in the database.
+    Without templates the family overview is empty and every template search
+    returns zero results with ``valid: true``.
     """
 
-    libraries = normalize_libraries(library)
-    available = _available_reaction_libraries(conn)
-    missing = [name for name in libraries if name not in available]
-    if missing:
-        listed = ", ".join(repr(name) for name in available) if available else "none"
-        bundled = bundled_reaction_library_versions()
-        fixes = []
-        if any(name in bundled for name in missing):
-            fixes.append(
-                "import the bundled sources with `synclaw ingest-reactions --db <path>` from a source "
-                "checkout, or rebuild the prepared database"
-            )
-        fixes += [
-            f"ingest {name!r} with `synclaw ingest-reactions <templates.jsonl> --library {name} --db <path>`"
-            for name in missing
-            if name not in bundled
-        ]
+    libraries = _available_reaction_libraries(conn)
+    if not libraries:
         raise RuntimeError(
-            f"Reaction library {', '.join(repr(name) for name in missing)} has no templates in this database "
-            f"(available: {listed}). To fix, {'; '.join(fixes)}; or select an existing library."
+            "This database has no reaction templates. Import the bundled sources with "
+            "`synclaw ingest-reactions --db <path>` from a source checkout, or a custom file with "
+            "`synclaw ingest-reactions <templates> --library <name> --db <path>`."
         )
-    _require_current_reaction_libraries(conn, libraries or available)
+    _require_current_reaction_libraries(conn, libraries)
+    if any(stored != numbered for stored, numbered, _ in _reaction_template_numbering(conn)):
+        raise RuntimeError(
+            "This database's reaction template IDs are not numbered R001 onward. "
+            "Re-run `synclaw ingest-reactions --db <path>` to renumber them; it reinstalls every "
+            "bundled source, so then drop any you do not use with `synclaw db remove-reactions`."
+        )
+
+
+def _reaction_template_numbering(conn: sqlite3.Connection) -> list[tuple[str, str, int]]:
+    """Pair each template's stored ID with its R001…RN ID and row id.
+
+    Templates are ordered by a hash of their SMARTS, so neither IDs nor ID-order
+    tie-breaks group templates by library.
+    """
+
+    rows = conn.execute("SELECT id, reaction_id, smarts FROM reaction_templates").fetchall()
+    rows.sort(key=lambda row: (hashlib.sha256(row["smarts"].encode()).hexdigest(), row["id"]))
+    width = max(3, len(str(len(rows))))
+    return [
+        (row["reaction_id"], f"R{number:0{width}d}", row["id"])
+        for number, row in enumerate(rows, start=1)
+    ]
+
+
+def number_reaction_templates(conn: sqlite3.Connection) -> None:
+    """Renumber every template R001…RN across all libraries in the database."""
+
+    numbering = _reaction_template_numbering(conn)
+    # Park every row on a unique placeholder first so no new ID collides with an old one.
+    conn.executemany(
+        "UPDATE reaction_templates SET reaction_id = ? WHERE id = ?",
+        [(f"#{row_id}", row_id) for *_, row_id in numbering],
+    )
+    conn.executemany(
+        "UPDATE reaction_templates SET reaction_id = ? WHERE id = ?",
+        [(numbered, row_id) for _, numbered, row_id in numbering],
+    )
 
 
 def _available_reaction_libraries(conn: sqlite3.Connection) -> tuple[str, ...]:
@@ -383,12 +404,9 @@ def _require_current_reaction_libraries(
 
 
 def reaction_library_catalog(conn: sqlite3.Connection) -> dict[str, dict[str, Any]]:
-    """Return import records by library; databases built before tracking have none."""
+    """Return import records by library."""
 
-    try:
-        rows = conn.execute("SELECT * FROM reaction_library_catalog").fetchall()
-    except sqlite3.OperationalError:
-        return {}
+    rows = conn.execute("SELECT * FROM reaction_library_catalog").fetchall()
     return {str(row["library"]): dict(row) for row in rows}
 
 
@@ -415,7 +433,7 @@ def replace_reaction_library(
 
 
 def remove_reaction_libraries(conn: sqlite3.Connection, libraries: LibrarySelection) -> int:
-    """Delete templates stored under the given libraries along with their import records."""
+    """Delete these libraries' templates and import records, then renumber the rest."""
 
     names = normalize_libraries(libraries)
     if not names:
@@ -424,17 +442,13 @@ def remove_reaction_libraries(conn: sqlite3.Connection, libraries: LibrarySelect
     removed = conn.execute(
         f"DELETE FROM reaction_templates WHERE library IN ({placeholders})", names
     ).rowcount
-    try:
-        conn.execute(
-            f"DELETE FROM reaction_library_catalog WHERE library IN ({placeholders})", names
-        )
-    except sqlite3.OperationalError:
-        pass
+    conn.execute(f"DELETE FROM reaction_library_catalog WHERE library IN ({placeholders})", names)
+    number_reaction_templates(conn)
     return removed
 
 
 def require_prepared_building_block_search(
-    db_path: str | Path = DEFAULT_DB_PATH,
+    db_path: str | Path,
 ) -> dict[str, Any]:
     """Fail clearly unless a current, complete prepared BB search index exists."""
 
@@ -454,7 +468,7 @@ def _require_prepared_building_block_search(
 ) -> dict[str, Any]:
     """Validate prepared-search state, optionally including full catalog scans."""
 
-    display_path = db_path or _connection_database_path(conn)
+    display_path = db_path or _main_database_path(conn) or "the active database"
     try:
         metadata = _building_block_search_metadata(
             conn,
@@ -463,8 +477,7 @@ def _require_prepared_building_block_search(
     except sqlite3.OperationalError as exc:
         raise RuntimeError(_prepared_search_error(display_path)) from exc
     if (
-        metadata["index_version"] != BUILDING_BLOCK_SEARCH_INDEX_VERSION
-        or not metadata["prepared"]
+        not metadata["prepared"]
         or metadata["fingerprint_radius"] != chem.MORGAN_RADIUS
         or metadata["fingerprint_bits"] != chem.MORGAN_N_BITS
         or metadata["rdkit_version"] != chem.RDKIT_VERSION
@@ -481,13 +494,6 @@ def _require_prepared_building_block_search(
     ):
         raise RuntimeError(_prepared_search_error(display_path))
     return metadata
-
-
-def _connection_database_path(conn: sqlite3.Connection) -> str:
-    for row in conn.execute("PRAGMA database_list"):
-        if str(row[1]) == "main" and row[2]:
-            return str(row[2])
-    return "the active database"
 
 
 def stage_prepared_search_database(
@@ -555,7 +561,7 @@ def _building_block_search_metadata(
     ).fetchone()
     if row is None:
         raise sqlite3.OperationalError("prepared building-block search metadata is absent")
-    metadata = _row_dict(row)
+    metadata = dict(row)
     if not include_catalog_state:
         return metadata
     current_count, current_maximum_id = conn.execute(
@@ -578,7 +584,7 @@ def _prepared_search_error(db_path: str | Path) -> str:
 
 def ingest_building_blocks(
     source_path: str | Path,
-    db_path: str | Path = DEFAULT_DB_PATH,
+    db_path: str | Path,
     batch_size: int = 1000,
 ) -> dict[str, int | str]:
     """Load a SMILES text file into SQLite.
@@ -677,10 +683,10 @@ def _insert_building_block_rows(
 def search_building_blocks(
     conn: sqlite3.Connection,
     query: str,
-    limit: int = 20,
-    include_near: bool = True,
-    min_similarity: float = 0.15,
     *,
+    limit: int,
+    include_near: bool,
+    min_similarity: float,
     hidden_ids: frozenset[int] = frozenset(),
 ) -> list[dict[str, Any]]:
     """Return the exact stock match for a SMILES query, then its nearest neighbours.
@@ -706,7 +712,7 @@ def search_building_blocks(
             """,
             (json.dumps(sorted(hidden_ids)), limit),
         )
-        return [_with_match_metadata(_row_dict(row), "browse", None) for row in cursor.fetchall()]
+        return [_with_match_metadata(dict(row), "browse", None) for row in cursor.fetchall()]
 
     validation = chem.validate_smiles(text)
     if not validation["valid"]:
@@ -731,7 +737,7 @@ def search_building_blocks(
         return results
     constitutional_scores = dict(hits)
     rows = [
-        _row_dict(row)
+        dict(row)
         for row in conn.execute(
             """
             SELECT id, smiles, canonical_smiles, inchi_key, heavy_atom_count, source_file
@@ -803,7 +809,7 @@ def get_building_block(
         (bb_id,),
     )
     row = cursor.fetchone()
-    return _row_dict(row) if row is not None else None
+    return dict(row) if row is not None else None
 
 
 def exact_building_block_matches(
@@ -834,7 +840,7 @@ def get_building_block_by_canonical_smiles(
         (canonical_smiles,),
     )
     row = cursor.fetchone()
-    return _row_dict(row) if row is not None and row["id"] not in hidden_ids else None
+    return dict(row) if row is not None and row["id"] not in hidden_ids else None
 
 
 def building_block_ids_matching_target(conn: sqlite3.Connection, smiles: str) -> frozenset[int]:
@@ -923,38 +929,23 @@ def upsert_reaction_template(
     return False
 
 
-def get_reaction_template(
-    conn: sqlite3.Connection,
-    reaction_id: str,
-    *,
-    library: LibrarySelection = None,
-) -> dict[str, Any] | None:
-    library_where, library_params = _reaction_library_filter(library)
-    cursor = conn.execute(
-        f"""
-        SELECT reaction_id, library, name, description, smarts, tags_json, metadata_json
-        FROM reaction_templates
-        WHERE reaction_id = ? AND {library_where}
-        """,
-        (reaction_id, *library_params),
-    )
-    row = cursor.fetchone()
+_TEMPLATE_COLUMNS = "reaction_id, name, description, smarts, tags_json, metadata_json"
+
+
+def get_reaction_template(conn: sqlite3.Connection, reaction_id: str) -> dict[str, Any] | None:
+    row = conn.execute(
+        f"SELECT {_TEMPLATE_COLUMNS} FROM reaction_templates WHERE reaction_id = ?",
+        (reaction_id,),
+    ).fetchone()
     return _reaction_template_row(row) if row is not None else None
 
 
-def get_reaction_template_by_smarts(
-    conn: sqlite3.Connection,
-    smarts: str,
-    *,
-    library: LibrarySelection = None,
-) -> dict[str, Any] | None:
+def get_reaction_template_by_smarts(conn: sqlite3.Connection, smarts: str) -> dict[str, Any] | None:
     """Return the one template with exactly this SMARTS, or None if none or several match."""
 
-    library_where, library_params = _reaction_library_filter(library)
     rows = conn.execute(
-        "SELECT reaction_id, library, name, description, smarts, tags_json, metadata_json "
-        f"FROM reaction_templates WHERE smarts = ? AND {library_where} LIMIT 2",
-        (str(smarts).strip(), *library_params),
+        f"SELECT {_TEMPLATE_COLUMNS} FROM reaction_templates WHERE smarts = ? LIMIT 2",
+        (str(smarts).strip(),),
     ).fetchall()
     return _reaction_template_row(rows[0]) if len(rows) == 1 else None
 
@@ -962,49 +953,39 @@ def get_reaction_template_by_smarts(
 def search_reaction_templates(
     conn: sqlite3.Connection,
     query: str,
-    limit: int = 20,
-    library: LibrarySelection = None,
+    *,
+    limit: int,
 ) -> list[dict[str, Any]]:
     """Rank templates by TF-IDF similarity to a text query."""
 
     text = query.strip()
     if not text or text == "*":
         raise ValueError(f"Reaction template text search needs a query, not {query!r}")
-    index = _reaction_text_index(conn, normalize_libraries(library))
+    index = _reaction_text_index(conn)
     query_terms = set(_text_terms(text))
     query_smarts_terms = set(_smarts_terms(text))
     normalized_query = _normalize_reaction_search_phrase(text)
     scored = []
     for position, row in enumerate(index.rows):
-        alias_terms = {
-            term
-            for pattern, values in (row.get("token_aliases") or {}).items()
-            if _search_phrase_is_contained(normalized_query, pattern)
-            for term in _text_terms(" ".join(_metadata_text_list(values)))
-        }
-        curated = (
-            bool(alias_terms)
-            + any(
-                _search_phrase_is_contained(normalized_query, hint)
-                for hint in row.get("query_hints") or []
-            )
-            - any(
-                _search_phrase_is_contained(normalized_query, term)
-                for term in row.get("search_exclusions") or []
-            )
+        curated = any(
+            _search_phrase_is_contained(normalized_query, hint)
+            for hint in row.get("query_hints") or []
+        ) - any(
+            _search_phrase_is_contained(normalized_query, term)
+            for term in row.get("search_exclusions") or []
         )
         scored.append(
             (
                 row,
-                index.text.cosine(query_terms | alias_terms, position)
+                index.text.cosine(query_terms, position)
                 + index.smarts.cosine(query_smarts_terms, position),
                 curated,
                 row["reaction_id"].lower() == text.lower() or row["smarts"] == text,
                 len(query_terms & index.text.documents[position].keys()) / max(1, len(query_terms)),
             )
         )
-    # Cosine scores are scaled to the best match so curated aliases, hints and exclusions
-    # shift a template by a fixed fraction of it.
+    # Cosine scores are scaled to the best match so curated hints and exclusions shift a
+    # template by a fixed fraction of it.
     top = max((cosine for _, cosine, _, _, _ in scored), default=0.0) or 1.0
     matches = []
     for row, cosine, curated, exact_id, coverage in scored:
@@ -1016,7 +997,6 @@ def search_reaction_templates(
             -match[2],
             -match[1],
             -match[3],
-            match[0]["library"],
             match[0]["reaction_id"],
         )
     )
@@ -1103,7 +1083,7 @@ class _TfIdfVectors:
 
 
 class _ReactionTextIndex:
-    """Text and SMARTS vectors for one library selection, kept apart so SMARTS never shifts text scores."""
+    """Text and SMARTS vectors for the database's templates, kept apart so SMARTS never shifts text scores."""
 
     def __init__(self, rows: list[dict[str, Any]]):
         self.rows = rows
@@ -1111,52 +1091,38 @@ class _ReactionTextIndex:
         self.smarts = _TfIdfVectors([Counter(_smarts_terms(row.get("smarts", ""))) for row in rows])
 
 
-def _reaction_text_index(
-    conn: sqlite3.Connection, libraries: tuple[str, ...]
-) -> _ReactionTextIndex:
+def _reaction_text_index(conn: sqlite3.Connection) -> _ReactionTextIndex:
     database_path = _main_database_path(conn)
     if not database_path or conn.in_transaction:
-        return _ReactionTextIndex(list_reaction_templates(conn, library=libraries))
-    return _cached_reaction_text_index(
-        database_path, libraries, *_reaction_template_revision(conn, libraries)
-    )
+        return _ReactionTextIndex(list_reaction_templates(conn))
+    return _cached_reaction_text_index(database_path, *_reaction_template_revision(conn))
 
 
 @lru_cache(maxsize=16)
 def _cached_reaction_text_index(
     database_path: str,
-    libraries: tuple[str, ...],
     row_count: int,
     newest_update: str,
 ) -> _ReactionTextIndex:
     conn = connect(database_path)
     try:
-        return _ReactionTextIndex(list_reaction_templates(conn, library=libraries))
+        return _ReactionTextIndex(list_reaction_templates(conn))
     finally:
         conn.close()
 
 
-def list_reaction_templates(
-    conn: sqlite3.Connection,
-    library: LibrarySelection = None,
-) -> list[dict[str, Any]]:
-    """Return every template in the selected libraries, in library and ID order."""
+def list_reaction_templates(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    """Return every template in ID order."""
 
-    where, params = _reaction_library_filter(library)
     cursor = conn.execute(
-        f"""
-        SELECT reaction_id, library, name, description, smarts, tags_json, metadata_json
-        FROM reaction_templates
-        WHERE {where}
-        ORDER BY library, reaction_id
-        """,
-        params,
+        f"SELECT {_TEMPLATE_COLUMNS} FROM reaction_templates ORDER BY reaction_id"
     )
     return [_reaction_template_row(row) for row in cursor.fetchall()]
 
 
-def table_counts(db_path: str | Path = DEFAULT_DB_PATH) -> dict[str, int]:
-    init_db(db_path)
+def table_counts(db_path: str | Path) -> dict[str, int]:
+    """Row counts of the tables this database has; older databases may lack some."""
+
     tables = [
         "building_blocks",
         "import_errors",
@@ -1164,9 +1130,11 @@ def table_counts(db_path: str | Path = DEFAULT_DB_PATH) -> dict[str, int]:
         "reaction_library_catalog",
     ]
     with session(db_path) as conn:
+        present = {row[0] for row in conn.execute("SELECT name FROM sqlite_master")}
         return {
             table: int(conn.execute(f"SELECT COUNT(*) AS count FROM {table}").fetchone()["count"])
             for table in tables
+            if table in present
         }
 
 
@@ -1185,16 +1153,6 @@ def iter_jsonl(path: str | Path) -> Iterator[dict[str, Any]]:
             yield value
 
 
-def _row_dict(row: sqlite3.Row) -> dict[str, Any]:
-    value = dict(row)
-    if "metadata_json" in value and isinstance(value["metadata_json"], str):
-        try:
-            value["metadata"] = json.loads(value["metadata_json"])
-        except json.JSONDecodeError:
-            value["metadata"] = {}
-    return value
-
-
 def _metadata_text_list(value: Any) -> list[str]:
     if value in (None, ""):
         return []
@@ -1210,22 +1168,22 @@ def _metadata_dict_list(value: Any) -> list[dict[str, Any]]:
 
 
 def _reaction_template_row(row: sqlite3.Row) -> dict[str, Any]:
+    # Provenance and source IDs stay in the database, out of every tool result.
     value = dict(row)
-    for source_key, target_key, default in (
-        ("tags_json", "tags", []),
-        ("metadata_json", "metadata", {}),
-    ):
+    decoded = {}
+    for key, default in (("tags_json", []), ("metadata_json", {})):
         try:
-            value[target_key] = json.loads(value[source_key])
+            decoded[key] = json.loads(value.pop(key))
         except (TypeError, json.JSONDecodeError):
-            value[target_key] = default
-    reactants, products = _split_reaction_smarts(str(value.get("smarts") or ""))
+            decoded[key] = default
+    value["tags"] = decoded["tags_json"]
+    reactants, products = split_reaction_smarts(str(value.get("smarts") or ""))
     reactant_count, product_count = reaction_template_arity(str(value.get("smarts") or ""))
     value["reactant_count"] = reactant_count
     value["product_count"] = product_count
     introduces_unmapped_product_atoms = _introduces_unmapped_product_atoms(products)
     value["introduces_unmapped_product_atoms"] = introduces_unmapped_product_atoms
-    metadata = value.get("metadata") if isinstance(value.get("metadata"), dict) else {}
+    metadata = decoded["metadata_json"] if isinstance(decoded["metadata_json"], dict) else {}
     annotation = metadata.get("annotation") if isinstance(metadata.get("annotation"), dict) else {}
     if annotation:
         value["reaction_family"] = str(
@@ -1233,11 +1191,6 @@ def _reaction_template_row(row: sqlite3.Row) -> dict[str, Any]:
         )
         value["query_hints"] = _metadata_text_list(annotation.get("search_terms"))
         value["search_exclusions"] = _metadata_text_list(annotation.get("search_exclusions"))
-        value["token_aliases"] = (
-            dict(annotation["token_aliases"])
-            if isinstance(annotation.get("token_aliases"), dict)
-            else {}
-        )
         value["reactant_roles"] = _metadata_dict_list(annotation.get("reactant_roles"))
         value["family_metadata"] = (
             dict(annotation["family_metadata"])
@@ -1255,31 +1208,17 @@ def _reaction_template_row(row: sqlite3.Row) -> dict[str, Any]:
     value["reaction_family"] = ""
     value["query_hints"] = list(value.get("tags") or [])
     value["search_exclusions"] = []
-    value["token_aliases"] = {}
     value["reactant_roles"] = []
     value["family_metadata"] = {}
     value["overview"] = {}
     value["execution_hints"] = []
-    value["description"] = _enhance_reaction_description(
-        str(value.get("description") or ""),
-        reactant_count=reactant_count,
-        product_count=product_count,
-    )
     return value
 
 
-def _reaction_template_revision(
-    conn: sqlite3.Connection,
-    libraries: tuple[str, ...],
-) -> tuple[int, str]:
-    where, params = _reaction_library_filter(libraries)
+def _reaction_template_revision(conn: sqlite3.Connection) -> tuple[int, str]:
     row = conn.execute(
-        f"""
-        SELECT COUNT(*) AS row_count, COALESCE(MAX(updated_at), '') AS newest_update
-        FROM reaction_templates
-        WHERE {where}
-        """,
-        params,
+        "SELECT COUNT(*) AS row_count, COALESCE(MAX(updated_at), '') AS newest_update "
+        "FROM reaction_templates"
     ).fetchone()
     return int(row["row_count"]), str(row["newest_update"])
 
@@ -1291,96 +1230,21 @@ def _main_database_path(conn: sqlite3.Connection) -> str:
     return ""
 
 
-def file_revision(path: Path) -> tuple[str, int, int]:
-    """Identity of a file for cache keys: any write changes mtime or size."""
+def split_reaction_smarts(smarts: str) -> tuple[str, str]:
+    """Return the reactant and product sides of a ``reactants>>products`` SMARTS."""
 
-    resolved = path.resolve()
-    try:
-        stat = resolved.stat()
-    except OSError:
-        return str(resolved), 0, 0
-    return str(resolved), stat.st_mtime_ns, stat.st_size
-
-
-def _reaction_template_metadata(row: sqlite3.Row) -> dict[str, Any]:
-    try:
-        metadata = json.loads(row["metadata_json"])
-    except (TypeError, json.JSONDecodeError):
-        return {}
-    return metadata if isinstance(metadata, dict) else {}
-
-
-def _split_reaction_smarts(smarts: str) -> tuple[str, str]:
-    if ">>" not in smarts:
-        return smarts, ""
-    reactants, products = smarts.split(">>", 1)
+    reactants, _, products = smarts.partition(">>")
     return reactants, products
 
 
-def split_smarts_components(text: str) -> list[str]:
-    """Split SMARTS components on top-level dots only.
-
-    Dots can occur inside a single parenthesized template, e.g. a disconnected
-    product template. Those dots are part of one RDKit template and must not be
-    counted as separate reactant/product templates.
-    """
-
-    components: list[str] = []
-    current: list[str] = []
-    bracket_depth = 0
-    paren_depth = 0
-    for char in text:
-        if char == "[":
-            bracket_depth += 1
-        elif char == "]" and bracket_depth > 0:
-            bracket_depth -= 1
-        elif bracket_depth == 0 and char == "(":
-            paren_depth += 1
-        elif bracket_depth == 0 and char == ")" and paren_depth > 0:
-            paren_depth -= 1
-        if char == "." and bracket_depth == 0 and paren_depth == 0:
-            component = "".join(current).strip()
-            if component:
-                components.append(component)
-            current = []
-            continue
-        current.append(char)
-    component = "".join(current).strip()
-    if component:
-        components.append(component)
-    return components
-
-
 def reaction_template_arity(smarts: str) -> tuple[int, int]:
-    """Return RDKit reactant/product template counts, falling back to SMARTS parsing."""
+    """Return RDKit's reactant and product template counts for a reaction SMARTS."""
 
-    reactants, products = _split_reaction_smarts(smarts)
-    fallback = (len(split_smarts_components(reactants)), len(split_smarts_components(products)))
-    if ">>" not in smarts:
-        return fallback
-    try:
-        from rdkit.Chem import AllChem, rdChemReactions
-
-        reaction = AllChem.ReactionFromSmarts(smarts)
-        if reaction is None:
-            return fallback
-        rdChemReactions.ChemicalReaction.Initialize(reaction)
-        return reaction.GetNumReactantTemplates(), reaction.GetNumProductTemplates()
-    except Exception:
-        return fallback
-
-
-def _enhance_reaction_description(
-    description: str,
-    *,
-    reactant_count: int,
-    product_count: int,
-) -> str:
-    return re.sub(
-        r"Template with \d+ reactant pattern\(s\) and \d+ product pattern\(s\)\.",
-        f"Template with {reactant_count} reactant pattern(s) and {product_count} product pattern(s).",
-        description.strip(),
-    )
+    reaction = chem.rdChemReactions.ReactionFromSmarts(smarts)
+    if reaction is None:
+        raise ValueError(f"RDKit could not parse reaction SMARTS {smarts!r}")
+    reaction.Initialize()
+    return reaction.GetNumReactantTemplates(), reaction.GetNumProductTemplates()
 
 
 def _introduces_unmapped_product_atoms(products: str) -> bool:
@@ -1389,28 +1253,13 @@ def _introduces_unmapped_product_atoms(products: str) -> bool:
 
 def reaction_template_library_overview(
     conn: sqlite3.Connection,
-    library: LibrarySelection = None,
     *,
     max_families: int = 8,
-    examples_per_family: int = 3,
     max_notable_templates: int = 4,
 ) -> dict[str, Any]:
-    selection_where, params = _reaction_library_filter(library)
-    where = f"WHERE {selection_where}"
-    rows = conn.execute(
-        f"""
-        SELECT reaction_id, library, name, description, smarts, tags_json, metadata_json
-        FROM reaction_templates
-        {where}
-        ORDER BY library, reaction_id
-        """,
-        params,
-    ).fetchall()
+    templates = list_reaction_templates(conn)
     grouped: dict[str, dict[str, Any]] = {}
-    templates: list[dict[str, Any]] = []
-    for row in rows:
-        template = _reaction_template_row(row)
-        templates.append(template)
+    for template in templates:
         family = str(template.get("reaction_family") or "unclassified")
         family_metadata = (
             template.get("family_metadata")
@@ -1425,7 +1274,6 @@ def reaction_template_library_overview(
                 "description": str(family_metadata.get("description") or "").strip(),
                 "query_hints": family_query_hints,
                 "count": 0,
-                "example_reaction_ids": [],
             },
         )
         if not group["description"]:
@@ -1433,12 +1281,10 @@ def reaction_template_library_overview(
         if family_query_hints and not group["query_hints"]:
             group["query_hints"] = family_query_hints
         group["count"] += 1
-        if len(group["example_reaction_ids"]) < examples_per_family:
-            group["example_reaction_ids"].append(template["reaction_id"])
     for group in grouped.values():
         if not group["description"] or not group["query_hints"]:
             raise ValueError(
-                f"Reaction library {library!r}, family {group['family']!r}: "
+                f"Reaction family {group['family']!r}: "
                 "missing family_metadata.description or family_metadata.search_terms. "
                 "Import the bundled catalog with `synclaw ingest-reactions --db <path>` and drop unused "
                 "libraries with `synclaw db remove-reactions <name> --db <path>`, "
@@ -1450,8 +1296,7 @@ def reaction_template_library_overview(
         key=lambda item: (-int(item["count"]), str(item["family"])),
     )
     return {
-        "library": library,
-        "template_count": len(rows),
+        "template_count": len(templates),
         "families": families[: max(1, int(max_families))],
         "family_count": len(grouped),
         "notable_templates": _notable_reaction_templates(
@@ -1478,6 +1323,8 @@ def _notable_reaction_templates(
     notable = []
     seen_categories = set()
     for _, category, _, template in scored:
+        if len(notable) >= limit:
+            break
         if category in seen_categories:
             continue
         seen_categories.add(category)
@@ -1489,8 +1336,6 @@ def _notable_reaction_templates(
                 "query_hints": list(template.get("query_hints") or [])[:4],
             }
         )
-        if len(notable) >= max(0, int(limit)):
-            break
     return notable
 
 

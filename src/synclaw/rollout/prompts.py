@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Any
 
 from synclaw.core import db
-from synclaw.core.libraries import LibrarySelection
 from synclaw.rollout.budget import limit_sentences
 from synclaw.rollout.policy import RolloutPolicyConfig
 from synclaw.tasks.datasets import PROMPT_FINGERPRINT
@@ -63,7 +62,7 @@ def build_initial_messages(
     ]
 
 
-def validate_model_run_database(db_path: str | Path, *, library: LibrarySelection = None) -> None:
+def validate_model_run_database(db_path: str | Path) -> None:
     with db.session(db_path) as conn:
         building_blocks = conn.execute("SELECT COUNT(*) FROM building_blocks").fetchone()[0]
         reaction_templates = conn.execute("SELECT COUNT(*) FROM reaction_templates").fetchone()[0]
@@ -75,9 +74,9 @@ def validate_model_run_database(db_path: str | Path, *, library: LibrarySelectio
         )
     db.require_prepared_building_block_search(db_path)
     with db.session(db_path) as conn:
-        db.require_reaction_library(conn, library)
+        db.require_reaction_templates(conn)
         # Fail once here rather than at the first query-less template search.
-        db.reaction_template_library_overview(conn, library=library)
+        db.reaction_template_library_overview(conn)
 
 
 __all__ = [

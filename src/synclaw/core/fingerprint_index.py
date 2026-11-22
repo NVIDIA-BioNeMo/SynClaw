@@ -151,7 +151,7 @@ def load_fingerprint_index(conn: sqlite3.Connection, db_path: str | Path) -> Fin
 def _catalog_key(conn: sqlite3.Connection) -> str:
     row = conn.execute(
         """
-        SELECT index_version, building_block_count, maximum_building_block_id,
+        SELECT building_block_count, maximum_building_block_id,
                fingerprint_radius, fingerprint_bits, rdkit_version, prepared_at
         FROM building_block_search_metadata WHERE singleton = 1
         """

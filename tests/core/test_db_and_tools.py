@@ -17,6 +17,7 @@ class DbAndToolsTests(unittest.TestCase):
     def test_reverse_grounding_reuses_identical_precursor_searches(self):
         with tempfile.TemporaryDirectory() as tmp:
             database = Path(tmp) / "synclaw.sqlite"
+            db.init_db(database)
             tools = SynthesisTools(database)
             result = {
                 "candidate_reactant_sets": [
@@ -93,7 +94,9 @@ class DbAndToolsTests(unittest.TestCase):
             statements: list[str] = []
             with db.session(database) as conn:
                 conn.set_trace_callback(statements.append)
-                results = db.search_building_blocks(conn, "CCO", include_near=False)
+                results = db.search_building_blocks(
+                    conn, "CCO", limit=20, include_near=False, min_similarity=0.15
+                )
                 conn.set_trace_callback(None)
 
             self.assertEqual(results[0]["match_type"], "exact")
@@ -136,7 +139,9 @@ class DbAndToolsTests(unittest.TestCase):
                             re.escape(f"synclaw db prepare-search --db {database.resolve()}"),
                         ),
                     ):
-                        db.search_building_blocks(conn, "CCO", include_near=False)
+                        db.search_building_blocks(
+                            conn, "CCO", limit=20, include_near=False, min_similarity=0.15
+                        )
 
     def test_unprepared_database_allows_only_browsing(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -147,9 +152,16 @@ class DbAndToolsTests(unittest.TestCase):
             db.ingest_building_blocks(source, database)
 
             with db.session(database) as conn:
-                self.assertEqual(db.search_building_blocks(conn, "*", limit=1)[0]["smiles"], "CCO")
+                self.assertEqual(
+                    db.search_building_blocks(
+                        conn, "*", limit=1, include_near=True, min_similarity=0.15
+                    )[0]["smiles"],
+                    "CCO",
+                )
                 with self.assertRaisesRegex(RuntimeError, "prepare-search"):
-                    db.search_building_blocks(conn, "CCO", include_near=False)
+                    db.search_building_blocks(
+                        conn, "CCO", limit=20, include_near=False, min_similarity=0.15
+                    )
 
     def test_ingest_search_and_tool_submission(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -182,7 +194,7 @@ class DbAndToolsTests(unittest.TestCase):
                 target_smiles="C=O",
                 steps=[
                     {
-                        "reaction_id": "demo:R000",
+                        "reaction_id": "R001",
                         "reactants": ["BB:1"],
                         "product_smiles": "C=O",
                     }
@@ -220,7 +232,7 @@ class DbAndToolsTests(unittest.TestCase):
             too_many = tools.simulate_reaction(".".join(["[C:1]"] * 5) + ">>[C:1]", ["CO"] * 5)
 
             self.assertTrue(submission["accepted"])
-            self.assertEqual(submission["steps"][0]["reaction_id"], "demo:R000")
+            self.assertEqual(submission["steps"][0]["reaction_id"], "R001")
             self.assertEqual(submission["steps"][0]["reaction_smarts"], oxidation)
             self.assertFalse(wrong_claim["valid"])
             self.assertIn("does not generate the claimed product", wrong_claim["issues"][0])
@@ -252,20 +264,22 @@ class DbAndToolsTests(unittest.TestCase):
                 "[CH3:1][OH:2]>>[CH2:1]=[O:2]", ["CO"], product_smiles="C=O"
             )
             bad_product = tools.simulate_reaction(any_alcohol, ["CO"], product_smiles="C1C(")
-            primary_only = SynthesisTools(db_path, reaction_libraries="primary")
+            with db.session(db_path) as conn:
+                db.remove_reaction_libraries(conn, "demo")
+            primary_only = SynthesisTools(db_path)
             unclaimed = primary_only.simulate_reaction(any_alcohol, ["CC(O)CO"])
             claimed = primary_only.simulate_reaction(
                 any_alcohol, ["CC(O)CO"], product_smiles="CC(O)C=O"
             )
 
-            self.assertEqual(own["reaction_id"], "demo:R001")
+            self.assertEqual(own["reaction_id"], "R002")
             self.assertEqual(
                 bad_product["issues"], ["product invalid: RDKit could not parse SMILES"]
             )
             self.assertFalse(unclaimed["valid"])
             self.assertIn("No library template generates the same products", unclaimed["issues"][0])
             self.assertTrue(claimed["valid"])
-            self.assertEqual(claimed["reaction_id"], "primary:R000")
+            self.assertEqual(claimed["reaction_id"], "R001")
 
     def test_missing_building_block_reference_is_reported(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -282,7 +296,7 @@ class DbAndToolsTests(unittest.TestCase):
                 target_smiles="C=O",
                 steps=[
                     {
-                        "reaction_id": "demo:R000",
+                        "reaction_id": "R001",
                         "reactants": ["BB:999"],
                         "product_smiles": "C=O",
                     }
@@ -308,7 +322,7 @@ class DbAndToolsTests(unittest.TestCase):
                 steps=[{"reactants": ["BB:1"], "product_smiles": "CC=O"}]
             )
             no_reactants = tools.submit_pathway(
-                steps=[{"reaction_id": "demo:R000", "product_smiles": "CC=O"}]
+                steps=[{"reaction_id": "R001", "product_smiles": "CC=O"}]
             )
 
             self.assertFalse(no_reaction["accepted"])
@@ -328,7 +342,7 @@ class DbAndToolsTests(unittest.TestCase):
             db_path = tmp_path / "test.sqlite"
             db.ingest_building_blocks(source, db_path)
             ingest_reaction_templates(templates, db_path=db_path, library="demo")
-            step = {"reaction_id": "demo:R000", "reactants": ["BB:1"], "product_smiles": "CC=O"}
+            step = {"reaction_id": "R001", "reactants": ["BB:1"], "product_smiles": "CC=O"}
 
             submission = SynthesisTools(db_path).submit_pathway(
                 target_smiles="CC=O", steps=[step, step]
@@ -348,7 +362,7 @@ class DbAndToolsTests(unittest.TestCase):
             db_path = tmp_path / "test.sqlite"
             db.ingest_building_blocks(source, db_path)
             ingest_reaction_templates(templates, db_path=db_path, library="demo")
-            step = {"reaction_id": "demo:R000", "reactants": ["BB:1"], "product_smiles": "CC=O"}
+            step = {"reaction_id": "R001", "reactants": ["BB:1"], "product_smiles": "CC=O"}
             forward = {**step, "reactants": ["INT:2"]}
 
             submission = SynthesisTools(db_path).submit_pathway(
@@ -371,8 +385,8 @@ class DbAndToolsTests(unittest.TestCase):
             db_path = tmp_path / "test.sqlite"
             db.ingest_building_blocks(source, db_path)
             ingest_reaction_templates(templates, db_path=db_path, library="demo")
-            failed = {"reaction_id": "demo:R999", "reactants": ["BB:1"], "product_smiles": "CC=O"}
-            uses_it = {"reaction_id": "demo:R000", "reactants": ["INT:1"], "product_smiles": "CC=O"}
+            failed = {"reaction_id": "R999", "reactants": ["BB:1"], "product_smiles": "CC=O"}
+            uses_it = {"reaction_id": "R001", "reactants": ["INT:1"], "product_smiles": "CC=O"}
 
             submission = SynthesisTools(db_path).submit_pathway(
                 target_smiles="CC=O", steps=[failed, uses_it]
@@ -443,7 +457,7 @@ class DbAndToolsTests(unittest.TestCase):
             db.prepare_building_block_search(db_path)
 
             result = SynthesisTools(db_path).simulate_reverse_reaction(
-                "demo:R000",
+                "R001",
                 "C=O",
                 include_near=True,
                 min_similarity=0.0,
@@ -452,9 +466,9 @@ class DbAndToolsTests(unittest.TestCase):
 
             detail = result["candidate_reactant_sets"][0]["reactant_details"][0]
             self.assertTrue(result["valid"])
-            self.assertEqual(result["template_summary"]["reaction_id"], "demo:R000")
+            self.assertEqual(result["template_summary"]["reaction_id"], "R001")
             model_view = compact_tool_result("simulate_reverse_reaction", result)
-            self.assertEqual(model_view["template_summary"]["reaction_id"], "demo:R000")
+            self.assertEqual(model_view["template_summary"]["reaction_id"], "R001")
             self.assertTrue(result["reverse_planning_summary"]["has_fully_grounded_candidate"])
             self.assertTrue(detail["has_exact_building_block_match"])
             self.assertEqual(detail["exact_building_block_matches"][0]["submit_reference"], "BB:1")

@@ -10,6 +10,7 @@ import hashlib
 import itertools
 import json
 import re
+import sqlite3
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -18,11 +19,9 @@ from synclaw.core import chem, db
 from synclaw.core.libraries import (
     BUNDLED_REACTION_SOURCE,
     REACTION_CATALOG_RESOURCE,
-    LibrarySelection,
     bundled_reaction_catalog,
     bundled_reaction_library_versions,
     bundled_reaction_template_dir,
-    normalize_libraries,
 )
 
 SMARTS_ARROW = ">>"
@@ -39,7 +38,6 @@ ANNOTATION_METADATA_KEYS = (
     "family_metadata",
     "search_terms",
     "search_exclusions",
-    "token_aliases",
     "reactant_roles",
     "retro_planning_notes",
     "execution_caveats",
@@ -49,12 +47,13 @@ ANNOTATION_METADATA_KEYS = (
 
 
 def ingest_reaction_libraries(
-    db_path: str | Path = db.DEFAULT_DB_PATH,
+    db_path: str | Path,
 ) -> dict[str, Any]:
-    """Install all bundled sources once; choose a source union when searching.
+    """Install every bundled source and renumber the database's templates R001 onward.
 
     Existing rows stored under bundled library names are replaced in the same
-    transaction, so a reimport never leaves stale or renumbered templates behind.
+    transaction, so a reimport never leaves stale templates behind. Drop sources
+    a run should not use with ``db.remove_reaction_libraries``.
     """
     catalog = bundled_reaction_catalog()
     template_dir = bundled_reaction_template_dir()
@@ -74,6 +73,11 @@ def ingest_reaction_libraries(
             records.append((library, {**row, "family_metadata": families[row["family"]]}))
     if len({row["smarts"] for _, row in records}) != len(records):
         raise ValueError("Bundled reaction sources contain duplicated SMARTS")
+    unparseable = [
+        row["reaction_id"] for _, row in records if not _is_reaction_smarts_template(row["smarts"])
+    ]
+    if unparseable:
+        raise ValueError(f"Bundled templates with SMARTS RDKit cannot run: {unparseable}")
     db.init_db(db_path)
     stats = {"libraries": libraries, "records": len(records), "inserted": 0, "replaced": 0}
     versions = bundled_reaction_library_versions()
@@ -83,6 +87,7 @@ def ingest_reaction_libraries(
             normalized = normalize_template_record(row, index=index, library=library)
             db.upsert_reaction_template(conn, **normalized)
             stats["inserted"] += 1
+        db.number_reaction_templates(conn)
         for library, source in catalog["sources"].items():
             db.replace_reaction_library(
                 conn,
@@ -103,7 +108,7 @@ def _verified_bundled_file(template_dir: Path, entry: dict[str, Any]) -> Path:
 
 def ingest_reaction_templates(
     source_path: str | Path,
-    db_path: str | Path = db.DEFAULT_DB_PATH,
+    db_path: str | Path,
     library: str = "default",
     annotations_path: str | Path | None = None,
 ) -> dict[str, Any]:
@@ -137,7 +142,7 @@ def ingest_reaction_templates(
         for index, record in enumerate(records, start=start_index):
             stats["records"] += 1
             normalized = normalize_template_record(record, index=index, library=library)
-            if not normalized["smarts"] or SMARTS_ARROW not in normalized["smarts"]:
+            if not _is_reaction_smarts_template(normalized["smarts"]):
                 stats["invalid"] += 1
                 continue
             annotation = annotations.get((library, normalized["reaction_id"]))
@@ -148,6 +153,12 @@ def ingest_reaction_templates(
                     replace_existing_tags=True,
                 )
                 stats["annotated"] += 1
+            stored = db.get_reaction_template_by_smarts(conn, normalized["smarts"])
+            if stored is not None:
+                raise ValueError(
+                    f"{normalized['reaction_id']}: its SMARTS is already stored as {stored['reaction_id']}; "
+                    "store each SMARTS in one library only"
+                )
             inserted = db.upsert_reaction_template(conn, **normalized)
             if inserted:
                 stats["inserted"] += 1
@@ -168,6 +179,7 @@ def ingest_reaction_templates(
             catalog_sha256=digest.hexdigest(),
             template_count=stats["inserted"] + stats["updated"],
         )
+        db.number_reaction_templates(conn)
     return stats
 
 
@@ -235,15 +247,6 @@ def _validate_template_annotation(annotation: dict[str, Any], *, source: str) ->
                 source=source,
                 field="family_metadata.search_terms",
             )
-
-    token_aliases = annotation.get("token_aliases")
-    if token_aliases is not None:
-        if not isinstance(token_aliases, dict):
-            raise ValueError(f"{source}: token_aliases must be an object")
-        for pattern, aliases in token_aliases.items():
-            if not isinstance(pattern, str) or not pattern.strip():
-                raise ValueError(f"{source}: token_aliases keys must be non-empty strings")
-            _validate_text_list(aliases, source=source, field=f"token_aliases.{pattern}")
 
     reactant_roles = annotation.get("reactant_roles")
     if reactant_roles is not None:
@@ -375,7 +378,7 @@ def _decode_inline_annotation_value(key: str, value: Any, *, source: str) -> Any
             except json.JSONDecodeError:
                 pass
         return _normalize_tags(text) if key in {"search_terms", "search_exclusions"} else text
-    if key in {"family_metadata", "token_aliases", "reactant_roles", "overview"}:
+    if key in {"family_metadata", "reactant_roles", "overview"}:
         try:
             return json.loads(text)
         except json.JSONDecodeError as exc:
@@ -392,9 +395,10 @@ def normalize_template_record(record: dict[str, Any], index: int, library: str) 
     description = _first_value(record, DESCRIPTION_KEYS)
     tags = _normalize_tags(_first_value(record, TAG_KEYS))
     if not name:
-        name = _infer_name(str(reaction_id), str(smarts or ""))
-    if not description:
-        description = _infer_description(str(smarts or ""))
+        name = "Unnamed reaction template"
+    valid = _is_reaction_smarts_template(str(smarts or ""))
+    if not description and valid:
+        description = _infer_description(str(smarts))
     # Keep the record's own metadata (e.g. provenance) and nest any other unused fields,
     # so neither can be mistaken for the curated annotation stored below.
     consumed = {
@@ -416,6 +420,8 @@ def normalize_template_record(record: dict[str, Any], index: int, library: str) 
     }
     if source_fields:
         metadata["source_fields"] = source_fields
+    # Import numbers every template R001 onward; this keeps the ID the source used.
+    metadata["source_id"] = str(reaction_id)
     value = {
         "reaction_id": str(reaction_id),
         "library": library,
@@ -425,7 +431,7 @@ def normalize_template_record(record: dict[str, Any], index: int, library: str) 
         "tags_json": json.dumps(tags, sort_keys=True),
         "metadata_json": json.dumps(metadata, sort_keys=True),
     }
-    if not value["smarts"] or SMARTS_ARROW not in value["smarts"]:
+    if not valid:
         return value
     inline_annotation = _inline_template_annotation(record, source=str(reaction_id))
     if inline_annotation:
@@ -441,6 +447,16 @@ def normalize_template_record(record: dict[str, Any], index: int, library: str) 
     )
 
 
+def _is_reaction_smarts_template(smarts: str) -> bool:
+    if SMARTS_ARROW not in smarts:
+        return False
+    try:
+        reactants, products = db.reaction_template_arity(smarts)
+    except ValueError:
+        return False
+    return reactants > 0 and products > 0
+
+
 def _normalize_reaction_id(value: Any, *, index: int, library: str) -> str:
     if value in (None, ""):
         return f"{library}:R{index:03d}"
@@ -453,13 +469,13 @@ def _normalize_reaction_id(value: Any, *, index: int, library: str) -> str:
 
 
 def search_reaction_templates_structural_matches(
-    conn,
+    conn: sqlite3.Connection,
     reactant_smiles: list[str] | None = None,
     product_smiles: str | list[str] | None = None,
-    library: LibrarySelection = None,
-    run_forward: bool = False,
+    *,
+    run_forward: bool,
 ) -> dict[str, Any]:
-    """Rank every selected template whose SMARTS roles structurally match the molecules."""
+    """Rank every template whose SMARTS roles structurally match the molecules."""
 
     reactant_inputs = _normalize_smiles_inputs(reactant_smiles)
     product_inputs = _normalize_smiles_inputs(product_smiles)
@@ -471,7 +487,6 @@ def search_reaction_templates_structural_matches(
             "products": [],
             "count": 0,
             "results": [],
-            "library": library,
             "run_forward": run_forward,
         }
 
@@ -487,7 +502,6 @@ def search_reaction_templates_structural_matches(
             "products": product_validations,
             "count": 0,
             "results": [],
-            "library": library,
             "run_forward": run_forward,
         }
 
@@ -495,7 +509,7 @@ def search_reaction_templates_structural_matches(
     reactant_mols = [Chem.MolFromSmiles(v["canonical_smiles"]) for v in reactant_validations]
     product_mols = [Chem.MolFromSmiles(v["canonical_smiles"]) for v in product_validations]
     requested_product_smiles = [str(v["canonical_smiles"]) for v in product_validations]
-    templates = db.list_reaction_templates(conn, library=library)
+    templates = db.list_reaction_templates(conn)
     matches: list[dict[str, Any]] = []
     execution_issues: list[str] = []
 
@@ -591,7 +605,6 @@ def search_reaction_templates_structural_matches(
         "issues": [],
         "reactants": reactant_validations,
         "products": product_validations,
-        "library": library,
         "run_forward": run_forward,
         "scanned_template_count": len(templates),
         "matched_template_count": len(matches),
@@ -606,37 +619,28 @@ def search_reaction_templates_structural_matches(
 def structural_rank_key(match: dict[str, Any]) -> tuple[Any, ...]:
     return (
         -float(match.get("structure_match", {}).get("score", 0.0)),
-        match.get("library", ""),
         match.get("reaction_id", ""),
     )
 
 
 def lookup_reaction_template(
-    conn,
-    reaction_id: str,
-    *,
-    library: LibrarySelection = None,
+    conn: sqlite3.Connection, reaction_id: str
 ) -> tuple[dict[str, Any] | None, str | None]:
-    """Resolve a template within a library selection, or explain why it is unavailable."""
+    """Resolve a template ID, or explain why it is unavailable."""
 
-    template = db.get_reaction_template(conn, reaction_id, library=library)
+    template = db.get_reaction_template(conn, reaction_id)
     if template is not None:
         return template, None
-    libraries = normalize_libraries(library)
-    if libraries and db.get_reaction_template(conn, reaction_id) is not None:
-        return None, (
-            f"Reaction template {reaction_id} is outside this run's reaction libraries ({', '.join(libraries)})"
-        )
     return None, f"Unknown reaction template: {reaction_id}"
 
 
 def simulate_reaction(
-    conn,
+    conn: sqlite3.Connection,
     reaction_id: str,
     reactant_smiles: list[str],
     product_smiles: str | None = None,
-    max_products: int = 100,
-    library: LibrarySelection = None,
+    *,
+    max_products: int,
 ) -> dict[str, Any]:
     """Run a reaction template and optionally check a claimed product.
 
@@ -651,9 +655,8 @@ def simulate_reaction(
             reactant_smiles,
             product_smiles,
             max_products=max_products,
-            library=library,
         )
-    template, issue = lookup_reaction_template(conn, reaction_id, library=library)
+    template, issue = lookup_reaction_template(conn, reaction_id)
     if template is None:
         return {"valid": False, "reaction_id": reaction_id, "issues": [issue]}
     return _simulate_template(
@@ -670,13 +673,12 @@ def is_reaction_smarts(reaction_id: Any) -> bool:
 
 
 def _simulate_reaction_smarts(
-    conn,
+    conn: sqlite3.Connection,
     smarts: str,
     reactant_smiles: list[str],
     product_smiles: str | None,
     *,
     max_products: int,
-    library: LibrarySelection,
 ) -> dict[str, Any]:
     """Run the library template that reproduces a reaction SMARTS on these reactants.
 
@@ -715,9 +717,7 @@ def _simulate_reaction_smarts(
         claimed = product["canonical_smiles"] if product is not None else None
         wanted = {claimed} if claimed else set(proposed["generated_products"])
         reactants = [item["canonical_smiles"] for item in proposed["reactants"]]
-        for template in _smarts_grounding_candidates(
-            conn, smarts, reactants, claimed, library=library
-        ):
+        for template in _smarts_grounding_candidates(conn, smarts, reactants, claimed):
             result = _simulate_template(
                 template,
                 str(template["reaction_id"]),
@@ -752,14 +752,12 @@ def _simulate_reaction_smarts(
 
 
 def _smarts_grounding_candidates(
-    conn,
+    conn: sqlite3.Connection,
     smarts: str,
     reactant_smiles: list[str],
     product_smiles: str | None,
-    *,
-    library: LibrarySelection,
 ) -> Iterator[dict[str, Any]]:
-    exact = db.get_reaction_template_by_smarts(conn, smarts, library=library)
+    exact = db.get_reaction_template_by_smarts(conn, smarts)
     if exact is not None:
         yield exact
     # Role matching alone is cheap; the caller simulates candidates only until one fits.
@@ -767,13 +765,10 @@ def _smarts_grounding_candidates(
         conn,
         reactant_smiles=reactant_smiles,
         product_smiles=product_smiles,
-        library=library,
+        run_forward=False,
     )
     for match in matches.get("results") or []:
-        if exact is None or (match["reaction_id"], match["library"]) != (
-            exact["reaction_id"],
-            exact["library"],
-        ):
+        if exact is None or match["reaction_id"] != exact["reaction_id"]:
             yield {key: value for key, value in match.items() if key != "structure_match"}
 
 
@@ -921,15 +916,15 @@ def _simulate_template(
 
 
 def simulate_reverse_reaction(
-    conn,
+    conn: sqlite3.Connection,
     reaction_id: str,
     product_smiles: str | list[str],
-    max_outcomes: int = 50,
-    library: LibrarySelection = None,
+    *,
+    max_outcomes: int,
 ) -> dict[str, Any]:
     """Run a reaction template backwards from product molecule(s) to candidate reactant sets."""
 
-    template, issue = lookup_reaction_template(conn, reaction_id, library=library)
+    template, issue = lookup_reaction_template(conn, reaction_id)
     if template is None:
         return {"valid": False, "reaction_id": reaction_id, "issues": [issue]}
 
@@ -951,7 +946,7 @@ def simulate_reverse_reaction(
             "reaction_executed": False,
         }
 
-    reactants, products = _split_reaction_smarts(template["smarts"])
+    reactants, products = db.split_reaction_smarts(template["smarts"])
     expected_reactants, expected_products = db.reaction_template_arity(str(template["smarts"]))
     if len(product_inputs) != expected_products:
         return {
@@ -1285,19 +1280,6 @@ def _dedupe_texts(values: list[str]) -> list[str]:
     return result
 
 
-def _infer_name(reaction_id: str, smarts: str) -> str:
-    return f"Reaction template {reaction_id}"
-
-
 def _infer_description(smarts: str) -> str:
     arity, product_count = db.reaction_template_arity(smarts)
     return f"Template with {arity} reactant pattern(s) and {product_count} product pattern(s)."
-
-
-def _split_reaction_smarts(smarts: str) -> tuple[str, str]:
-    reactants, _, products = smarts.partition(SMARTS_ARROW)
-    if not products and ">" in smarts:
-        parts = smarts.split(">")
-        reactants = parts[0]
-        products = parts[-1]
-    return reactants, products

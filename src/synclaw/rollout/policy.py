@@ -12,7 +12,6 @@ from dataclasses import dataclass, replace
 from typing import Any, Literal
 
 from synclaw.core import chem
-from synclaw.core.libraries import DEFAULT_REACTION_LIBRARIES
 from synclaw.tools.compaction import compact_json_size, compact_tool_result
 from synclaw.tools.contracts import (
     TASK_OVERRIDE_FIELDS,
@@ -40,7 +39,6 @@ DEFAULT_TURN_WARNING_REMAINING = 3
 DEFAULT_FORCE_SUBMIT_AFTER_NON_TOOL_TURNS = 2
 DEFAULT_SAME_PATHWAY_FINISH_AFTER = 5
 DEFAULT_MAX_LOW_SIMILARITY_SUBMISSIONS: int | None = None
-DEFAULT_REACTION_LIBRARY = DEFAULT_REACTION_LIBRARIES
 DEFAULT_CONTEXT_WARNING_REMAINING_FRACTION = 0.5
 DEFAULT_CONTEXT_CRITICAL_REMAINING_FRACTION = 0.25
 # The context length a deployment serves and enforces when it names none of its own.
@@ -1023,5 +1021,4 @@ def request_summary_fields(args: Any, config: RolloutPolicyConfig) -> dict[str, 
         "stop_condition": config.stop_condition,
         "max_turns": config.max_turns,
         "max_tool_calls": config.max_tool_calls,
-        "reaction_library": getattr(args, "reaction_library", None),
     }

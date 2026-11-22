@@ -8,12 +8,12 @@
     "synformer": {
       "file": "synformer/templates.jsonl",
       "templates": 114,
-      "sha256": "3dd13b6fc750f3d8f8f9c5ec1c63feeb3d28439d3c2cc429d10764b61e8fddd5"
+      "sha256": "540910c6750f0a69390a53bbbf6a731782a8a9477d36b6edb646d86534203968"
     },
     "paroutes": {
       "file": "paroutes/templates.jsonl",
       "templates": 176,
-      "sha256": "78fa9e09cae2c444b6825296c7e3bc9c20a4c294812bd4052f29550c026c3557"
+      "sha256": "e134486fdc8940fe11a1afa2afaee6d08dc3cc48b22b7ba8202e7d047d610323"
     },
     "ord": {
       "file": "ord/templates.jsonl",

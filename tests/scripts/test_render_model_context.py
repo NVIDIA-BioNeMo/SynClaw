@@ -58,7 +58,6 @@ def test_renders_the_run_prompt_with_task_and_run_exclusions(tmp_path: Path) -> 
         taskset=taskset,
         task_index=0,
         db_path=db_path,
-        reaction_library="demo",
         max_tool_calls=10,
         api_mode="chat",
         exclude_tools=["mces"],

@@ -20,3 +20,6 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 DATA_DIR = REPO_ROOT / "data"
+
+# The CLI's --db default, relative to the working directory rather than the repository.
+DEFAULT_DB_PATH = Path("var/synclaw.sqlite")

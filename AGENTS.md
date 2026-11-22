@@ -41,7 +41,7 @@ databases belong under the ignored `artifacts/` and `var/` directories.
 Do not commit licensed or generated chemistry data. The exceptions are the reaction
 templates, annotations and attribution files under `data/reaction_templates/`, their
 `src/synclaw/reaction_libraries.json` manifest, and the curated common-reagent building
-blocks. Store each SMARTS in one source only and select unions at runtime. Keep every
+blocks. Store each SMARTS in one source only; a run uses every template in its database. Keep every
 license and provenance notice, including the per-template ORD provenance.
 
 Building-block catalogs are prepared by users (see the README).
@@ -78,15 +78,17 @@ components. Keep reverse-simulation responses concise: surface exact BB
 grounding, cap near-match lists, and make ungrounded precursors clearly
 intermediate-only. `search_reaction_templates` supports text search and
 structural SMARTS-role matching from supplied reactant/product SMILES in the
-same public tool; keep library selection and reverse-ranking policy
-harness-controlled rather than model-controlled. `submit_pathway` is strict:
+same public tool; keep reverse-ranking policy harness-controlled rather than
+model-controlled. Template IDs are numbered `R001` onward across the whole database
+at import, in SMARTS-hash order; keep library names and source IDs out of tool
+results. `submit_pathway` is strict:
 starting reactants must be grounded in the local building-block database by
 `BB:<id>` or exact building-block SMILES, and intermediates must use
 `INT:<step_number>`. Invalid tool calls should return structured, retryable
 errors so the model can repair within the turn budget.
 
-Raw TXT reaction-template imports use zero-based SynFormer-style IDs. For
-example, the 45th SMARTS line imports as `synformer:R044`.
+Raw TXT reaction-template imports use zero-based SynFormer-style source IDs. For
+example, the 45th SMARTS line is recorded as `metadata.source_id` `synformer:R044`.
 
 RDKit is required. The package should fail loudly if RDKit is unavailable; do
 not add fallback chemistry validation that could make invalid routes look valid.
