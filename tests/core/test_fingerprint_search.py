@@ -58,9 +58,8 @@ def test_threshold_query_handles_empty_fingerprints() -> None:
         popcounts=np.array([0, 1]),
     )
     empty = DataStructs.ExplicitBitVect(chem.MORGAN_N_BITS)
-    assert index.top_k(empty, None, min_similarity=0.1) == []
-    assert index.top_k(empty, None, min_similarity=0) == [(1, 0.0), (2, 0.0)]
-    assert index.top_k(empty, 1, min_similarity=0) == [(1, 0.0), (2, 0.0)]
+    assert index.top_k(empty, None, min_similarity=0) == []
+    assert index.top_k(empty, 1, min_similarity=0) == []
 
 
 def test_similarity_filter_is_exhaustive_inclusive_and_cached(

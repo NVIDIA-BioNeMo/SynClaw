@@ -16,6 +16,7 @@ import threading
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from rdkit import DataStructs
@@ -33,7 +34,7 @@ MAX_TIED_RESULTS = 1000
 
 _LOCK = threading.Lock()
 # One index per database path, replaced when the catalog is prepared again.
-_LOADED: dict[str, tuple[tuple, FingerprintIndex]] = {}
+_LOADED: dict[str, tuple[tuple[Any, ...], FingerprintIndex]] = {}
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,9 +59,11 @@ class FingerprintIndex:
             return []
         query = pack_fingerprint(query_fingerprint)
         query_count = int(np.bitwise_count(query).sum())
+        if query_count == 0:
+            return []
         intersections = _row_popcounts(self.fingerprints, query)
         unions = query_count + self.popcounts - intersections
-        # Like RDKit, two empty fingerprints have similarity 0.
+        # Like RDKit, an empty catalog fingerprint has similarity 0 to any query.
         similarities = np.divide(
             intersections, unions, out=np.zeros(len(self.ids)), where=unions != 0
         )
@@ -150,7 +153,7 @@ def load_fingerprint_index(conn: sqlite3.Connection, db_path: str | Path) -> Fin
     return loaded[1]
 
 
-def _catalog_key(conn: sqlite3.Connection) -> tuple:
+def _catalog_key(conn: sqlite3.Connection) -> tuple[Any, ...]:
     row = conn.execute(
         """
         SELECT building_block_count, maximum_building_block_id,
