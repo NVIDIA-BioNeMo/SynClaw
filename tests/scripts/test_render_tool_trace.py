@@ -564,7 +564,6 @@ def test_similarity_call_renders_ordered_markdown_arguments():
             "payload": {
                 "result": {
                     "valid": True,
-                    "method": "rdkit_morgan_tanimoto",
                     "similarity": 0.75,
                     "left": {"canonical_smiles": "Cc1nsc(-c2ccc[n+](CC#N)c2)n1"},
                     "right": {"canonical_smiles": "Cc1nc(-c2ccncc2)sc1CC#N"},

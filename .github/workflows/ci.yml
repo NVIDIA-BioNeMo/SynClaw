@@ -62,7 +62,7 @@ jobs:
           for python in 3.11 3.14; do
             uv venv --python "$python" ".wheel-venv-$python"
             uv pip install --python ".wheel-venv-$python/bin/python" dist/*.whl
-            ".wheel-venv-$python/bin/python" -I -c "from importlib.metadata import version; import synclaw; from synclaw.core.chem import compare_molecular_identity; from synclaw.providers import load_provider_config; assert synclaw.__version__ == version('synclaw'); assert compare_molecular_identity('CCO', 'OCC')['identical']; assert load_provider_config().providers"
+            ".wheel-venv-$python/bin/python" -I -c "from importlib.metadata import version; import synclaw; from synclaw.core.chem import matches_target; from synclaw.providers import load_provider_config; assert synclaw.__version__ == version('synclaw'); assert matches_target('CCO', 'OCC') is True; assert load_provider_config().providers"
           done
       - name: Check that a release tag matches the package version
         if: startsWith(github.ref, 'refs/tags/v')

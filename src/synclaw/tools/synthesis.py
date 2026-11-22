@@ -121,7 +121,6 @@ class SynthesisTools:
                 "Near matches are purchasable alternatives, not proof that the original query SMILES is in the library."
             ),
             "results": results,
-            "chem_backend": chem.backend_name(),
         }
 
     def get_building_block(self, bb_id: int) -> dict[str, Any]:
@@ -284,7 +283,6 @@ class SynthesisTools:
                     "generated_product_sets": [],
                     "generated_product_count": 0,
                     "generated_product_set_count": 0,
-                    "execution_backend": "rdkit",
                 }
             result = reactions.simulate_reaction(
                 conn,
@@ -688,7 +686,6 @@ class SynthesisTools:
             "building_block_grounded": grounding["grounded"],
             "referenced_building_block_ids": grounding["building_block_ids"],
             "ungrounded_reactants": grounding["ungrounded_reactants"],
-            "chem_backend": chem.backend_name(),
         }
 
 
@@ -824,7 +821,6 @@ def _direct_purchase_submission(
         "building_block_grounded": grounding["grounded"],
         "referenced_building_block_ids": grounding["building_block_ids"],
         "ungrounded_reactants": grounding["ungrounded_reactants"],
-        "chem_backend": chem.backend_name(),
     }
 
 
@@ -907,7 +903,6 @@ def score_pathway_against_target(
             chem.matches_target(target_smiles, final_smiles) if scorable else None
         ),
         "constitutional_similarity_to_target": similarity.get("constitutional_similarity"),
-        "stereo_aware_similarity_to_target": similarity.get("stereo_aware_similarity"),
     }
 
 
@@ -933,16 +928,26 @@ def select_final_product(
     target_validation = chem.validate_smiles(target_smiles)
     if not target_validation["valid"]:
         return candidates[0]
-    return max(candidates, key=lambda product: _final_product_rank(product, target_smiles))
+    canonical_target = target_validation["canonical_smiles"]
+    target_fingerprints = (
+        chem.stereo_aware_morgan_fingerprint(canonical_target),
+        chem.constitutional_morgan_fingerprint(canonical_target),
+    )
+    return max(candidates, key=lambda product: _final_product_rank(product, target_fingerprints))
 
 
-def _final_product_rank(product_smiles: str, target_smiles: str) -> tuple[float, float, str]:
-    result = chem.similarity(target_smiles, product_smiles)
-    stereo = result.get("stereo_aware_similarity")
-    constitutional = result.get("constitutional_similarity")
+def _final_product_rank(
+    product_smiles: str, target_fingerprints: tuple[Any, Any]
+) -> tuple[float, float, str]:
+    stereo_target, constitutional_target = target_fingerprints
+    try:
+        stereo = chem.stereo_aware_morgan_fingerprint(product_smiles)
+        constitutional = chem.constitutional_morgan_fingerprint(product_smiles)
+    except ValueError:
+        return -1.0, -1.0, product_smiles
     return (
-        float(stereo) if stereo is not None else -1.0,
-        float(constitutional) if constitutional is not None else -1.0,
+        chem.bulk_tanimoto(stereo_target, [stereo])[0],
+        chem.bulk_tanimoto(constitutional_target, [constitutional])[0],
         product_smiles,
     )
 

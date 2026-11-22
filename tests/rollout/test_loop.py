@@ -328,7 +328,7 @@ def test_with_a_model_stop_condition_the_model_answers_after_an_exact_submission
     exact = {
         "accepted": True,
         "actual_final_smiles": "CCO",
-        "stereo_aware_similarity_to_target": 1.0,
+        "similarity_to_target": 1.0,
     }
     transport = FakeTransport(
         [
@@ -356,7 +356,7 @@ def test_shared_rollout_selects_accepted_submission_and_records_trace() -> None:
             {
                 "accepted": True,
                 "actual_final_smiles": "CCO",
-                "stereo_aware_similarity_to_target": 1.0,
+                "similarity_to_target": 1.0,
                 "constitutional_similarity_to_target": 1.0,
             }
         ]
@@ -386,7 +386,6 @@ def test_shared_rollout_selects_accepted_submission_and_records_trace() -> None:
         "similarity_to_target",
         "identical_to_target",
         "constitutional_similarity_to_target",
-        "stereo_aware_similarity_to_target",
         "submission_arguments",
         "result",
         "model_result",
@@ -422,7 +421,7 @@ def test_shared_rollout_keeps_rejected_submission_but_does_not_score_it() -> Non
                 "actual_final_smiles": "CCO",
                 "final_smiles": "CCO",
                 "constitutional_similarity_to_target": 1.0,
-                "stereo_aware_similarity_to_target": 1.0,
+                "similarity_to_target": 1.0,
             }
         ]
     )
@@ -440,7 +439,6 @@ def test_shared_rollout_keeps_rejected_submission_but_does_not_score_it() -> Non
         event for event in result.state.events if event["event_type"] == "selected_submission"
     )
     assert selected["payload"]["similarity_to_target"] is None
-    assert selected["payload"]["stereo_aware_similarity_to_target"] is None
 
 
 def test_shared_rollout_replays_malformed_tool_arguments_as_canonical_json() -> None:
@@ -512,7 +510,7 @@ def test_output_limit_recovers_once_without_resetting_budgets(estimated_input_to
         finish_reason=finish_reason,
     )
     transport = FakeTransport([truncated, tool_turn("submit_pathway", {"steps": []})])
-    tools = FakeTools([{"accepted": True, "stereo_aware_similarity_to_target": 1.0}])
+    tools = FakeTools([{"accepted": True, "similarity_to_target": 1.0}])
     result = _run_shared_rollout(
         transport,
         tools,
@@ -572,7 +570,7 @@ def test_truncated_tool_batch_is_not_executed_and_keeps_reasoning_boundary():
             tool_turn("submit_pathway", {"steps": []}),
         ]
     )
-    tools = FakeTools([{"accepted": True, "stereo_aware_similarity_to_target": 1.0}])
+    tools = FakeTools([{"accepted": True, "similarity_to_target": 1.0}])
     result = _run_shared_rollout(transport, tools)
     assert tools.calls == ["submit_pathway"]
     assert result.state.policy.total_tool_calls == 1
@@ -600,9 +598,7 @@ def test_reasoning_only_recovery_keeps_work_from_earlier_tool_turns():
             tool_turn("submit_pathway", {"steps": []}),
         ]
     )
-    tools = FakeTools(
-        [{"matches": []}, {"accepted": True, "stereo_aware_similarity_to_target": 1.0}]
-    )
+    tools = FakeTools([{"matches": []}, {"accepted": True, "similarity_to_target": 1.0}])
     result = _run_shared_rollout(transport, tools)
     assistants = [m for m in transport.requests[2] if m["role"] == "assistant"]
     assert "First plan before search" in assistants[0]["content"]
@@ -630,7 +626,7 @@ def test_output_limit_does_not_recover_without_budget_or_valid_protocol(blocked_
 
 
 def test_output_limit_retry_is_bounded_across_checkpoint_resume_and_keeps_best_route():
-    analogue = {"accepted": True, "stereo_aware_similarity_to_target": 0.6}
+    analogue = {"accepted": True, "similarity_to_target": 0.6}
     state = RolloutState(messages=list(task().initial_messages), events=[])
     saved = {}
 
@@ -720,7 +716,7 @@ def test_shared_rollout_requests_and_accepts_a_tool_limit_final_submission() -> 
             {
                 "accepted": True,
                 "actual_final_smiles": "CC",
-                "stereo_aware_similarity_to_target": 0.4,
+                "similarity_to_target": 0.4,
                 "constitutional_similarity_to_target": 0.4,
             },
         ]

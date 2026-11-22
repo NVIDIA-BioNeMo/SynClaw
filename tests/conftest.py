@@ -30,7 +30,7 @@ def block_live_http(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture
 def inchi_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Make every Standard InChI conversion fail, as on an RDKit build without InChI."""
+    """Make every Standard InChI conversion raise, as RDKit does on an internal error."""
 
     from rdkit.Chem import rdinchi
 

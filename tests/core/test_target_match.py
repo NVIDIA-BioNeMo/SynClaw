@@ -5,6 +5,7 @@
 
 import pytest
 from rdkit import Chem
+from rdkit.Chem import rdinchi
 
 from synclaw.core import chem
 
@@ -33,7 +34,9 @@ from synclaw.core import chem
     ],
 )
 def test_tautomers_standard_inchi_keeps_apart_match(target: str, product: str) -> None:
-    assert not chem.molecules_identical(target, product)
+    assert Chem.MolToInchi(Chem.MolFromSmiles(target)) != Chem.MolToInchi(
+        Chem.MolFromSmiles(product)
+    )
     assert chem.matches_target(target, product) is True
 
 
@@ -103,9 +106,21 @@ def test_different_molecules_do_not_match(target: str, product: str) -> None:
     assert chem.matches_target(target, product) is False
 
 
+def test_perfect_fingerprint_similarity_does_not_establish_identity() -> None:
+    assert chem.similarity("CCCCCCC", "CCCCCCCC")["similarity"] == 1.0
+    assert chem.matches_target("CCCCCCC", "CCCCCCCC") is False
+
+
 @pytest.mark.parametrize(
     ("target", "product"),
-    [("CCO", "OCC"), ("[CH3:7][OH:2]", "OC"), ("O=c1cccc[nH]1", "Oc1ccccn1")],
+    [
+        ("CCO", "OCC"),
+        ("c1ccccc1", "C1=CC=CC=C1"),
+        ("[CH3:7][OH:2]", "OC"),
+        ("[Na+].[Cl-]", "[Cl-].[Na+]"),
+        ("O=c1cccc[nH]1", "Oc1ccccn1"),
+        ("NCC(=O)O", "[NH3+]CC(=O)[O-]"),  # Standard InChI ignores charge placement.
+    ],
 )
 def test_standard_inchi_identity_still_matches(target: str, product: str) -> None:
     assert chem.matches_target(target, product) is True
@@ -121,10 +136,18 @@ def test_open_stereo_beyond_the_cap_is_compared_strictly(monkeypatch: pytest.Mon
 def test_invalid_inputs_cannot_be_compared(invalid: str | None) -> None:
     assert chem.matches_target(invalid, "CCO") is None
     assert chem.matches_target("CCO", invalid) is None
+    assert chem.unscoreable_reason(invalid)
 
 
 def test_failed_inchi_conversion_cannot_be_compared(inchi_unavailable: None) -> None:
     assert chem.matches_target("CCO", "CCO") is None
+    assert chem.unscoreable_reason("CCO") == "InChI unavailable"
+
+
+def test_inchi_error_status_cannot_be_compared(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(rdinchi, "MolToInchi", lambda mol: ("", 2, "conversion error", "", ""))
+    assert chem.matches_target("CCO", "CCO") is None
+    assert chem.unscoreable_reason("CCO") == "conversion error"
 
 
 def test_lookup_prefixes_cover_tautomers_and_every_stereoisomer() -> None:

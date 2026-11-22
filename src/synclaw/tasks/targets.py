@@ -56,7 +56,7 @@ from typing import Any
 
 import numpy as np
 
-from synclaw.core.chem import compare_molecular_identity
+from synclaw.core.chem import unscoreable_reason
 from synclaw.core.reactions import _rdkit_reaction_modules, _run_reaction_with_permutations
 
 MATRIX_FILE = "matrix.npy"
@@ -629,10 +629,7 @@ def _worker(task: tuple[int, str, GenerationOptions, int, str]) -> dict[str, Any
             # `tasks.datasets` refuses it. Dative-bonded organometallics such as ferrocenes are
             # the usual source. Rejecting it here keeps a target file and a task set the same
             # length instead of letting the mismatch surface downstream.
-            if (
-                options.require_scoreable
-                and not compare_molecular_identity(product, product)["valid"]
-            ):
+            if options.require_scoreable and unscoreable_reason(product):
                 unscoreable_filtered += 1
                 continue
             seen.add(product)

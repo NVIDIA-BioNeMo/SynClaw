@@ -188,17 +188,15 @@ def test_mces_compaction_keeps_actionable_overlap_fields():
         "right_bonds": 3,
         "union_bonds": 4,
         "timed_out": False,
-        "timeout_seconds": 20,
-        "method": "rdkit_rascal_mces_bond_tanimoto",
         "left": {
             "valid": True,
             "canonical_smiles": "CCCO",
-            "properties": {"formula": "C3H8O"},
+            "properties": {"heavy_atom_count": 4},
         },
         "right": {
             "valid": True,
             "canonical_smiles": "CCCN",
-            "properties": {"formula": "C3H9N"},
+            "properties": {"heavy_atom_count": 4},
         },
     }
 
@@ -322,7 +320,6 @@ def test_compaction_drops_echoed_settings_and_derivable_counts():
             "count": 0,
             "exact_match_count": 0,
             "near_match_count": 0,
-            "chem_backend": "rdkit",
             "results": [],
         },
     )
@@ -344,8 +341,7 @@ def test_compaction_drops_echoed_settings_and_derivable_counts():
         "similarity",
         {
             "similarity": 0.5,
-            "method": "rdkit_morgan_tanimoto",
-            "left": {"backend": "rdkit", "canonical_smiles": "CCO"},
+            "left": {"input": "OCC", "canonical_smiles": "CCO"},
         },
     )
 

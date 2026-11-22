@@ -37,7 +37,6 @@ def _accepted_submission(similarity: float) -> dict[str, object]:
     return {
         "accepted": True,
         "constitutional_similarity_to_target": similarity,
-        "stereo_aware_similarity_to_target": similarity,
         "similarity_to_target": similarity,
     }
 

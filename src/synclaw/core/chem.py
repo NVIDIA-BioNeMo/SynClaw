@@ -12,11 +12,12 @@ from __future__ import annotations
 
 from collections import Counter
 from functools import lru_cache
-from typing import Any, Literal
+from typing import Any
 
 try:
     from rdkit import Chem, DataStructs, RDLogger, rdBase
-    from rdkit.Chem import rdChemReactions, rdFingerprintGenerator, rdMolDescriptors, rdRascalMCES
+    from rdkit.Chem import rdChemReactions, rdFingerprintGenerator, rdinchi, rdRascalMCES
+    from rdkit.Chem.EnumerateStereoisomers import EnumerateStereoisomers, StereoEnumerationOptions
     from rdkit.Chem.MolStandardize import rdMolStandardize
 except ImportError as exc:  # pragma: no cover - exercised only in broken environments.
     raise RuntimeError(
@@ -26,7 +27,6 @@ except ImportError as exc:  # pragma: no cover - exercised only in broken enviro
 
 RDLogger.DisableLog("rdApp.*")
 
-MCES_METHOD = "rdkit_rascal_mces_bond_tanimoto"
 MCES_TIMEOUT_SECONDS = 20
 MCES_CACHE_SIZE = 2048
 MCES_MAX_BOND_MATCH_PAIRS = 10_000
@@ -44,12 +44,6 @@ _STEREO_AWARE_MORGAN_GENERATOR = rdFingerprintGenerator.GetMorganGenerator(
 RDKIT_VERSION = str(rdBase.rdkitVersion)
 
 
-def backend_name() -> str:
-    """Return the active chemistry backend."""
-
-    return "rdkit"
-
-
 def validate_smiles(smiles: str | None) -> dict[str, Any]:
     """Validate and canonicalize a SMILES string with RDKit."""
 
@@ -61,7 +55,6 @@ def validate_smiles(smiles: str | None) -> dict[str, Any]:
             "valid": False,
             "canonical_smiles": None,
             "error": "SMILES is empty",
-            "backend": "rdkit",
             "properties": {},
         }
 
@@ -72,7 +65,6 @@ def validate_smiles(smiles: str | None) -> dict[str, Any]:
             "valid": False,
             "canonical_smiles": None,
             "error": "RDKit could not parse SMILES",
-            "backend": "rdkit",
             "properties": {},
         }
 
@@ -82,10 +74,8 @@ def validate_smiles(smiles: str | None) -> dict[str, Any]:
         "valid": True,
         "canonical_smiles": canonical,
         "error": None,
-        "backend": "rdkit",
         "properties": {
             "heavy_atom_count": int(mol.GetNumHeavyAtoms()),
-            "formula": rdMolDescriptors.CalcMolFormula(mol),
             "inchi_key": _inchi_key(mol),
         },
     }
@@ -113,7 +103,7 @@ def strip_isotopes(smiles: str) -> str:
     and disconnected components. Isotopic hydrogens become ordinary hydrogens;
     stereochemistry that depended only on isotope distinctions is removed.
     Empty or invalid SMILES raise ``ValueError``. This does not change the
-    isotope-sensitive behavior of :func:`compare_molecular_identity`.
+    isotope-sensitive behavior of :func:`matches_target`.
     """
 
     mol = Chem.MolFromSmiles(smiles) if smiles.strip() else None
@@ -134,101 +124,21 @@ def strip_isotopes(smiles: str) -> str:
 
 
 def _inchi_key(mol: Any) -> str | None:
-    try:
-        return Chem.MolToInchiKey(mol)
-    except Exception:
-        return None
+    # RDKit reports a failed conversion as an empty key, not an exception.
+    return Chem.MolToInchiKey(mol) or None
 
 
-MolecularIdentityMode = Literal["standard_inchi", "canonical_isomeric", "canonical_nonisomeric"]
-
-
-def compare_molecular_identity(
-    smiles_a: str | None,
-    smiles_b: str | None,
-    *,
-    mode: MolecularIdentityMode = "standard_inchi",
-) -> dict[str, Any]:
-    """Compare molecular identity under an explicit representation policy.
-
-    ``standard_inchi`` compares full Standard InChI strings, including their
-    isotope, stereo and net-protonation layers, with InChI's built-in normalization
-    of supported tautomers. Some charge representations, such as neutral glycine
-    and its zwitterion, normalize to the same identity; use ``canonical_isomeric``
-    when charge placement matters. It is not universal tautomer or graph equality.
-    ``canonical_isomeric`` compares RDKit canonical isomeric SMILES without
-    tautomer normalization. ``canonical_nonisomeric`` compares canonical
-    non-isomeric SMILES, ignoring both stereo and isotopes.
-
-    All modes ignore atom-map labels and input atom/component ordering. No
-    additional salt stripping, neutralization or tautomer enumeration is done.
-    Conversion failures return ``valid=False, identical=False`` with an error;
-    InChI warnings are returned for inspection. There is no fingerprint fallback.
-    A caller scoring routes must separately require an accepted submission.
-    """
-
-    if mode not in {"standard_inchi", "canonical_isomeric", "canonical_nonisomeric"}:
-        raise ValueError(f"Unknown molecular identity mode: {mode!r}")
-    result: dict[str, Any] = {
-        "mode": mode,
-        "valid": False,
-        "identical": False,
-        "left_identity": None,
-        "right_identity": None,
-        "warnings": [],
-        "error": None,
-    }
-    for side, smiles in (("left", smiles_a), ("right", smiles_b)):
-        text = "" if smiles is None else str(smiles).strip()
-        mol = Chem.MolFromSmiles(text) if text else None
-        if mol is None or mol.GetNumAtoms() == 0:
-            result["error"] = f"{side} SMILES is empty or invalid"
-            return result
-        if any(atom.GetAtomicNum() == 0 for atom in mol.GetAtoms()):
-            result["error"] = f"{side} SMILES contains a wildcard atom"
-            return result
-        for atom in mol.GetAtoms():
-            atom.SetAtomMapNum(0)
-        try:
-            if mode == "standard_inchi":
-                identity, warning = _standard_inchi(mol)
-                if warning is not None:
-                    result["warnings"].append(f"{side}: {warning}")
-            else:
-                identity = Chem.MolToSmiles(
-                    mol, canonical=True, isomericSmiles=mode == "canonical_isomeric"
-                )
-                if not identity:
-                    raise ValueError("Canonical SMILES conversion failed")
-        except Exception as exc:
-            result["error"] = f"{side} {mode} conversion failed: {exc}"
-            return result
-        result[f"{side}_identity"] = identity
-    result["valid"] = True
-    result["identical"] = result["left_identity"] == result["right_identity"]
-    return result
-
-
-def molecules_identical(smiles_a: str | None, smiles_b: str | None) -> bool | None:
-    """Standard InChI identity as a tri-state; ``None`` when the pair cannot be compared."""
-
-    result = compare_molecular_identity(smiles_a, smiles_b)
-    return bool(result["identical"]) if result["valid"] else None
-
-
-def _standard_inchi(mol: Any) -> tuple[str, str | None]:
-    """Standard InChI of a molecule and its conversion warning, if any.
+def _standard_inchi(mol: Any) -> str:
+    """Standard InChI of a molecule.
 
     Raises:
         ValueError: InChI conversion failed or did not produce a Standard InChI.
     """
 
-    from rdkit.Chem import rdinchi
-
     identity, status, message, _, _ = rdinchi.MolToInchi(mol)
     if status not in (0, 1) or not identity.startswith("InChI=1S/"):
         raise ValueError(message or "Standard InChI conversion failed")
-    return identity, (message or "InChI conversion warning") if status == 1 else None
+    return identity
 
 
 # Exact-match scoring starts from Standard InChI identity and relaxes it for stereo the
@@ -267,6 +177,16 @@ def _identity_mol(smiles: str | None) -> Any:
     return mol
 
 
+def unscoreable_reason(smiles: str | None) -> str | None:
+    """Why :func:`matches_target` can never compare this molecule, or None if it can."""
+
+    try:
+        _standard_inchi(_identity_mol(smiles))
+    except (ValueError, RuntimeError) as exc:
+        return str(exc)
+    return None
+
+
 def _inchi_layers(inchi: str) -> list[str]:
     return inchi.split("/")[1:]
 
@@ -278,11 +198,6 @@ def _without_stereo_layers(inchi: str) -> tuple[str, ...]:
 def _open_stereoisomers(mol: Any) -> list[Any] | None:
     """Every assignment of the stereo ``mol`` leaves open; None above MAX_OPEN_STEREOISOMERS."""
 
-    from rdkit.Chem.EnumerateStereoisomers import (
-        EnumerateStereoisomers,
-        StereoEnumerationOptions,
-    )
-
     options = StereoEnumerationOptions(
         onlyUnassigned=True, unique=True, maxIsomers=MAX_OPEN_STEREOISOMERS + 1
     )
@@ -292,7 +207,7 @@ def _open_stereoisomers(mol: Any) -> list[Any] | None:
 
 def _open_stereoisomer_inchis(mol: Any) -> frozenset[str] | None:
     isomers = _open_stereoisomers(mol)
-    return None if isomers is None else frozenset(_standard_inchi(iso)[0] for iso in isomers)
+    return None if isomers is None else frozenset(_standard_inchi(iso) for iso in isomers)
 
 
 def _satisfies_stereo(target: Any, target_inchi: str, product: Any, product_inchi: str) -> bool:
@@ -312,8 +227,11 @@ def _satisfies_stereo(target: Any, target_inchi: str, product: Any, product_inch
 def matches_target(target_smiles: str | None, product_smiles: str | None) -> bool | None:
     """Whether a product counts as an exact reconstruction of the target.
 
-    Starts from Standard InChI identity (see :func:`compare_molecular_identity`) and
-    relaxes it in two ways:
+    Starts from Standard InChI identity: full Standard InChI strings, including their
+    isotope, stereo and net-protonation layers and InChI's normalization of supported
+    tautomers. Some charge placements, such as neutral glycine and its zwitterion,
+    normalize to the same identity. Atom maps and atom or component order are ignored;
+    salts are not stripped and nothing is neutralized. It relaxes this in two ways:
 
     - Stereo the target leaves open. The product matches when every stereoisomer it
       denotes is one the target allows: a specific isomer at a centre or double bond the
@@ -333,8 +251,8 @@ def matches_target(target_smiles: str | None, product_smiles: str | None) -> boo
     try:
         target = _identity_mol(target_smiles)
         product = _identity_mol(product_smiles)
-        target_inchi = _standard_inchi(target)[0]
-        product_inchi = _standard_inchi(product)[0]
+        target_inchi = _standard_inchi(target)
+        product_inchi = _standard_inchi(product)
         if _satisfies_stereo(target, target_inchi, product, product_inchi):
             return True
         if _without_stereo_layers(target_inchi) == _without_stereo_layers(product_inchi):
@@ -344,10 +262,8 @@ def matches_target(target_smiles: str | None, product_smiles: str | None) -> boo
             return False
         target = _TAUTOMERS.Canonicalize(target)
         product = _TAUTOMERS.Canonicalize(product)
-        return _satisfies_stereo(
-            target, _standard_inchi(target)[0], product, _standard_inchi(product)[0]
-        )
-    except Exception:
+        return _satisfies_stereo(target, _standard_inchi(target), product, _standard_inchi(product))
+    except (ValueError, RuntimeError):
         return None
 
 
@@ -368,12 +284,7 @@ def target_match_inchi_key_prefixes(target_smiles: str) -> frozenset[str]:
     return frozenset(key[:14] for key in keys if key)
 
 
-def similarity(
-    smiles_a: str,
-    smiles_b: str,
-    radius: int = 2,
-    n_bits: int = 2048,
-) -> dict[str, Any]:
+def similarity(smiles_a: str, smiles_b: str) -> dict[str, Any]:
     """Compute calibrated Morgan/Tanimoto similarity between two SMILES strings.
 
     The active ``similarity`` is the stereo-aware score; the constitutional score
@@ -387,8 +298,6 @@ def similarity(
             "valid": False,
             "similarity": None,
             "constitutional_similarity": None,
-            "stereo_aware_similarity": None,
-            "method": "rdkit_morgan_tanimoto",
             "left": left,
             "right": right,
             "error": "Both SMILES must be valid to compute similarity",
@@ -396,20 +305,12 @@ def similarity(
 
     mol_a = Chem.MolFromSmiles(left["canonical_smiles"])
     mol_b = Chem.MolFromSmiles(right["canonical_smiles"])
-    constitutional_score = _morgan_tanimoto(mol_a, mol_b, radius=radius, n_bits=n_bits)
-    stereo_score = _morgan_tanimoto(
-        mol_a,
-        mol_b,
-        radius=radius,
-        n_bits=n_bits,
-        include_chirality=True,
-    )
+    constitutional_score = _tanimoto(_CONSTITUTIONAL_MORGAN_GENERATOR, mol_a, mol_b)
+    stereo_score = _tanimoto(_STEREO_AWARE_MORGAN_GENERATOR, mol_a, mol_b)
     return {
         "valid": True,
         "similarity": stereo_score,
         "constitutional_similarity": constitutional_score,
-        "stereo_aware_similarity": stereo_score,
-        "method": "rdkit_morgan_tanimoto",
         "left": left,
         "right": right,
         "error": None,
@@ -467,12 +368,9 @@ def mces(smiles_a: str, smiles_b: str) -> dict[str, Any]:
             "right_bonds": None,
             "union_bonds": None,
             "timed_out": False,
-            "timeout_seconds": MCES_TIMEOUT_SECONDS,
-            "method": MCES_METHOD,
             "left": left,
             "right": right,
             "error": "Both SMILES must be valid to compute an MCES",
-            "chem_backend": backend_name(),
         }
 
     canonical_a = str(left["canonical_smiles"])
@@ -484,13 +382,7 @@ def mces(smiles_a: str, smiles_b: str) -> dict[str, Any]:
             result["right_bonds"],
             result["left_bonds"],
         )
-    result.update(
-        {
-            "left": left,
-            "right": right,
-            "chem_backend": backend_name(),
-        }
-    )
+    result.update({"left": left, "right": right})
     return result
 
 
@@ -501,9 +393,20 @@ def _cached_mces(canonical_a: str, canonical_b: str) -> dict[str, Any]:
     left_bonds = int(mol_a.GetNumBonds())
     right_bonds = int(mol_b.GetNumBonds())
 
-    if canonical_a == canonical_b or _mces_graph_key(mol_a) == _mces_graph_key(mol_b):
+    graph_a = _mces_graph_smiles(mol_a)
+    if canonical_a == canonical_b or graph_a == _mces_graph_smiles(mol_b):
+        if Chem.MolFromSmiles(graph_a) is None:
+            return _mces_result(
+                mces_smiles=None,
+                similarity=None,
+                matched_bonds=left_bonds,
+                left_bonds=left_bonds,
+                right_bonds=right_bonds,
+                union_bonds=left_bonds,
+                error="Could not convert the identical-graph MCES to SMILES",
+            )
         return _mces_result(
-            mces_smiles=_mces_molecule_smiles(mol_a),
+            mces_smiles=graph_a,
             similarity=1.0,
             matched_bonds=left_bonds,
             left_bonds=left_bonds,
@@ -660,23 +563,8 @@ def _mces_fragment_smiles(
     return smiles
 
 
-def _mces_molecule_smiles(mol: Any) -> str:
-    smiles = Chem.MolToSmiles(
-        _mces_output_mol(mol),
-        canonical=True,
-        isomericSmiles=False,
-    )
-    if not smiles or Chem.MolFromSmiles(smiles) is None:
-        raise ValueError("generated MCES is not a valid SMILES string")
-    return smiles
-
-
-def _mces_graph_key(mol: Any) -> str:
-    return Chem.MolToSmiles(
-        _mces_output_mol(mol),
-        canonical=True,
-        isomericSmiles=False,
-    )
+def _mces_graph_smiles(mol: Any) -> str:
+    return Chem.MolToSmiles(_mces_output_mol(mol), canonical=True, isomericSmiles=False)
 
 
 def _mces_output_mol(mol: Any) -> Any:
@@ -707,8 +595,6 @@ def _mces_result(
         "right_bonds": right_bonds,
         "union_bonds": union_bonds,
         "timed_out": timed_out,
-        "timeout_seconds": MCES_TIMEOUT_SECONDS,
-        "method": MCES_METHOD,
         "error": error,
     }
 
@@ -734,19 +620,9 @@ def _bond_match_label(bond: Any) -> tuple[Any, int, int]:
     return bond.GetBondType(), lower_atomic_number, upper_atomic_number
 
 
-def _morgan_tanimoto(
-    mol_a: Any,
-    mol_b: Any,
-    *,
-    radius: int,
-    n_bits: int,
-    include_chirality: bool = False,
-) -> float:
-    generator = rdFingerprintGenerator.GetMorganGenerator(
-        radius=radius,
-        fpSize=n_bits,
-        includeChirality=include_chirality,
+def _tanimoto(generator: Any, mol_a: Any, mol_b: Any) -> float:
+    return float(
+        DataStructs.TanimotoSimilarity(
+            generator.GetFingerprint(mol_a), generator.GetFingerprint(mol_b)
+        )
     )
-    fp_a = generator.GetFingerprint(mol_a)
-    fp_b = generator.GetFingerprint(mol_b)
-    return float(DataStructs.TanimotoSimilarity(fp_a, fp_b))

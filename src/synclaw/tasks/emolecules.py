@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 # RDKit directly rather than synclaw.core.chem: validate_smiles also computes an
-# InChIKey and formula per molecule, which this catalog-sized stream discards.
+# InChIKey per molecule, which this catalog-sized stream discards.
 from rdkit import Chem, RDLogger, rdBase
 
 from synclaw.tasks.matrix import MULTICOMPONENT_POLICIES

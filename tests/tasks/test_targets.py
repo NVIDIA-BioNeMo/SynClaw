@@ -219,13 +219,13 @@ def test_invalid_step_bounds_are_rejected(matrix_dir: Path, tmp_path: Path) -> N
 
 def test_unscoreable_targets_are_rejected_by_default(tmp_path: Path) -> None:
     """A target make-taskset can never match must not reach the file; ferrocene is the real case."""
-    from synclaw.core.chem import compare_molecular_identity
+    from synclaw.core.chem import unscoreable_reason
     from synclaw.tasks.targets import GenerationOptions as _Options
 
     # The dative-bond form, as some vendor catalogs write it. The ionic form "[cH-]1cccc1.[cH-]1cccc1.[Fe+2]"
     # converts fine, so the hazard is the bond type, not the metal.
     ferrocene = "CN(C)C[c]12->[Fe+2]3456789(<-[cH]%10[cH]->3[cH]->4[cH-]->5[cH]->6%10)<-[cH]([cH]->71)[cH]->8[cH-]->92"
-    assert compare_molecular_identity(ferrocene, ferrocene)["valid"] is False
+    assert unscoreable_reason(ferrocene)
     assert _Options().require_scoreable is True
 
 

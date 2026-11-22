@@ -439,7 +439,7 @@ def _cmd_db_init(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def _cmd_db_stats(args: argparse.Namespace) -> dict[str, Any]:
-    return {"db": args.db, "counts": db.table_counts(args.db), "chem_backend": chem.backend_name()}
+    return {"db": args.db, "counts": db.table_counts(args.db)}
 
 
 def _cmd_ingest_bbs(args: argparse.Namespace) -> dict[str, Any]:

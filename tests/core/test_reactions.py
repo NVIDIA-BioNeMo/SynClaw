@@ -875,7 +875,6 @@ class ReactionTemplateTests(unittest.TestCase):
 
             self.assertTrue(result["valid"])
             self.assertTrue(result["product_matched"])
-            self.assertEqual(result["execution_backend"], "rdkit")
             self.assertIn("C=O", result["generated_products"])
 
     def test_simulate_reaction_canonicalizes_generated_products_before_matching(self):
@@ -974,7 +973,6 @@ class ReactionTemplateTests(unittest.TestCase):
             )
 
             self.assertTrue(result["valid"])
-            self.assertEqual(result["execution_backend"], "rdkit")
             self.assertEqual(result["expected_reactant_count"], 1)
             self.assertEqual(result["provided_reactant_count"], 1)
             self.assertEqual(result["generated_products"], ["C=O"])
@@ -1056,7 +1054,6 @@ class ReactionTemplateTests(unittest.TestCase):
             )
 
             self.assertTrue(result["valid"])
-            self.assertEqual(result["execution_backend"], "rdkit")
             self.assertEqual(result["candidate_reactant_sets"][0]["reactants"], ["CO"])
             self.assertFalse(
                 result["candidate_reactant_sets"][0][
@@ -1762,7 +1759,6 @@ class ReactionTemplateTests(unittest.TestCase):
             self.assertEqual(result["final_smiles"], "C=O")
             self.assertIsNone(result["similarity_to_target"])
             self.assertIsNone(result["constitutional_similarity_to_target"])
-            self.assertIsNone(result["stereo_aware_similarity_to_target"])
             self.assertIn("rejected", result["error_message"])
             self.assertTrue(result["building_block_grounded"])
             self.assertEqual(result["referenced_building_block_ids"], [1])
@@ -1794,7 +1790,6 @@ class ReactionTemplateTests(unittest.TestCase):
             self.assertEqual(result["actual_final_smiles"], "F[C@H](Cl)Br")
             self.assertEqual(result["actual_final_products"], ["F[C@@H](Cl)Br", "F[C@H](Cl)Br"])
             self.assertEqual(result["constitutional_similarity_to_target"], 1.0)
-            self.assertEqual(result["stereo_aware_similarity_to_target"], 1.0)
             self.assertEqual(result["similarity_to_target"], 1.0)
 
     def test_submit_pathway_has_no_similarity_without_rdkit_final_product(self):
