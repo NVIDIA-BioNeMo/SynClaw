@@ -514,14 +514,16 @@ class ReactionTemplateTests(unittest.TestCase):
                         ],
                     }
                 )
+                + "\n"
+                + json.dumps({"reaction_id": "R002", "smarts": "[C:1>>[C:1]"})
                 + "\n",
                 encoding="utf-8",
             )
 
             stats = ingest_reaction_templates(source, db_path=db_path, library="demo")
 
-            self.assertEqual(stats["records"], 1)
-            self.assertEqual(stats["invalid"], 1)
+            self.assertEqual(stats["records"], 2)
+            self.assertEqual(stats["invalid"], 2)
             self.assertEqual(stats["inserted"], 0)
 
     def test_text_search_weights_rare_terms_above_common_ones(self):

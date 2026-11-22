@@ -137,7 +137,7 @@ def ingest_reaction_templates(
         for index, record in enumerate(records, start=start_index):
             stats["records"] += 1
             normalized = normalize_template_record(record, index=index, library=library)
-            if not normalized["smarts"] or SMARTS_ARROW not in normalized["smarts"]:
+            if not _is_reaction_smarts_template(normalized["smarts"]):
                 stats["invalid"] += 1
                 continue
             annotation = annotations.get((library, normalized["reaction_id"]))
@@ -385,8 +385,9 @@ def normalize_template_record(record: dict[str, Any], index: int, library: str) 
     tags = _normalize_tags(_first_value(record, TAG_KEYS))
     if not name:
         name = "Unnamed reaction template"
-    if not description:
-        description = _infer_description(str(smarts or ""))
+    valid = _is_reaction_smarts_template(str(smarts or ""))
+    if not description and valid:
+        description = _infer_description(str(smarts))
     # Keep the record's own metadata (e.g. provenance) and nest any other unused fields,
     # so neither can be mistaken for the curated annotation stored below.
     consumed = {
@@ -419,7 +420,7 @@ def normalize_template_record(record: dict[str, Any], index: int, library: str) 
         "tags_json": json.dumps(tags, sort_keys=True),
         "metadata_json": json.dumps(metadata, sort_keys=True),
     }
-    if not value["smarts"] or SMARTS_ARROW not in value["smarts"]:
+    if not valid:
         return value
     inline_annotation = _inline_template_annotation(record, source=str(reaction_id))
     if inline_annotation:
@@ -433,6 +434,16 @@ def normalize_template_record(record: dict[str, Any], index: int, library: str) 
         if inline_annotation
         else value
     )
+
+
+def _is_reaction_smarts_template(smarts: str) -> bool:
+    if SMARTS_ARROW not in smarts:
+        return False
+    try:
+        db.reaction_template_arity(smarts)
+    except ValueError:
+        return False
+    return True
 
 
 def _normalize_reaction_id(value: Any, *, index: int, library: str) -> str:

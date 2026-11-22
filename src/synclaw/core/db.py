@@ -1274,57 +1274,14 @@ def _split_reaction_smarts(smarts: str) -> tuple[str, str]:
     return reactants, products
 
 
-def split_smarts_components(text: str) -> list[str]:
-    """Split SMARTS components on top-level dots only.
-
-    Dots can occur inside a single parenthesized template, e.g. a disconnected
-    product template. Those dots are part of one RDKit template and must not be
-    counted as separate reactant/product templates.
-    """
-
-    components: list[str] = []
-    current: list[str] = []
-    bracket_depth = 0
-    paren_depth = 0
-    for char in text:
-        if char == "[":
-            bracket_depth += 1
-        elif char == "]" and bracket_depth > 0:
-            bracket_depth -= 1
-        elif bracket_depth == 0 and char == "(":
-            paren_depth += 1
-        elif bracket_depth == 0 and char == ")" and paren_depth > 0:
-            paren_depth -= 1
-        if char == "." and bracket_depth == 0 and paren_depth == 0:
-            component = "".join(current).strip()
-            if component:
-                components.append(component)
-            current = []
-            continue
-        current.append(char)
-    component = "".join(current).strip()
-    if component:
-        components.append(component)
-    return components
-
-
 def reaction_template_arity(smarts: str) -> tuple[int, int]:
-    """Return RDKit reactant/product template counts, falling back to SMARTS parsing."""
+    """Return RDKit's reactant and product template counts for a reaction SMARTS."""
 
-    reactants, products = _split_reaction_smarts(smarts)
-    fallback = (len(split_smarts_components(reactants)), len(split_smarts_components(products)))
-    if ">>" not in smarts:
-        return fallback
-    try:
-        from rdkit.Chem import AllChem, rdChemReactions
-
-        reaction = AllChem.ReactionFromSmarts(smarts)
-        if reaction is None:
-            return fallback
-        rdChemReactions.ChemicalReaction.Initialize(reaction)
-        return reaction.GetNumReactantTemplates(), reaction.GetNumProductTemplates()
-    except Exception:
-        return fallback
+    reaction = chem.rdChemReactions.ReactionFromSmarts(smarts)
+    if reaction is None:
+        raise ValueError(f"RDKit could not parse reaction SMARTS {smarts!r}")
+    reaction.Initialize()
+    return reaction.GetNumReactantTemplates(), reaction.GetNumProductTemplates()
 
 
 def _enhance_reaction_description(
@@ -1416,6 +1373,8 @@ def _notable_reaction_templates(
     notable = []
     seen_categories = set()
     for _, category, _, template in scored:
+        if len(notable) >= limit:
+            break
         if category in seen_categories:
             continue
         seen_categories.add(category)
@@ -1427,8 +1386,6 @@ def _notable_reaction_templates(
                 "query_hints": list(template.get("query_hints") or [])[:4],
             }
         )
-        if len(notable) >= max(0, int(limit)):
-            break
     return notable
 
 
