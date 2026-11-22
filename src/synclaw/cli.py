@@ -68,7 +68,7 @@ def build_parser() -> argparse.ArgumentParser:
     db_stats.set_defaults(func=_cmd_db_stats)
     db_remove_reactions = db_sub.add_parser(
         "remove-reactions",
-        help="Delete reaction-template libraries and their import records",
+        help="Delete reaction-template libraries and renumber the remaining templates",
     )
     db_remove_reactions.add_argument("library", nargs="+")
     db_remove_reactions.add_argument("--db", default=str(paths.DEFAULT_DB_PATH))
@@ -316,11 +316,6 @@ def build_parser() -> argparse.ArgumentParser:
         "--limit", type=int, default=TOOL_ARGUMENT_DEFAULTS["search_reaction_templates"]["limit"]
     )
     rxn_search.add_argument(
-        "--library",
-        action="append",
-        help="Source library to include; repeat or comma-separate for a union",
-    )
-    rxn_search.add_argument(
         "--reactant-smiles",
         action="append",
         help="Reactant or precursor SMILES to match; repeat for multiple reactants",
@@ -396,12 +391,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Validate and atomically stage the prepared DB under SLURM_TMPDIR",
     )
     serve.add_argument(
-        "--reaction-library",
-        nargs="+",
-        default=policy.DEFAULT_REACTION_LIBRARY,
-        help="Harness-controlled reaction-template library restriction",
-    )
-    serve.add_argument(
         "--max-concurrent-executions",
         type=int,
         default=64,
@@ -423,11 +412,6 @@ def build_parser() -> argparse.ArgumentParser:
         type=policy.parse_stop_condition,
         default=policy.DEFAULT_STOP_CONDITION,
         help="The run's stop condition: 'exact' (default), 'model' or a similarity from 0 to 1",
-    )
-    eval_parser.add_argument(
-        "--reaction-library",
-        action="append",
-        help="Reaction library the run was limited to; repeat or comma-separate for a union",
     )
     eval_parser.add_argument("--output")
     eval_parser.set_defaults(func=_cmd_eval_trace)
@@ -604,7 +588,6 @@ def _cmd_tool_search_reaction_templates(args: argparse.Namespace) -> dict[str, A
         reactant_smiles=args.reactant_smiles,
         product_smiles=product_smiles,
         limit=args.limit,
-        library=args.library,
         run_forward=args.run_forward,
     )
 
@@ -659,7 +642,6 @@ def _cmd_mcp_serve(args: argparse.Namespace) -> None:
     )
     serve(
         database_path,
-        reaction_library=args.reaction_library,
         max_concurrent_executions=args.max_concurrent_executions,
         toxicity=toxicity.config_from_args(args),
     )
@@ -668,8 +650,6 @@ def _cmd_mcp_serve(args: argparse.Namespace) -> None:
 
 def _cmd_eval_trace(args: argparse.Namespace) -> dict[str, Any]:
     tool_config = {"stop_condition": args.stop_condition}
-    if args.reaction_library:
-        tool_config["reaction_library"] = args.reaction_library
     summaries = [
         evaluate_trace_file(
             Path(trace),

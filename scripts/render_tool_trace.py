@@ -409,8 +409,6 @@ def summarize_tool_call_arguments(name: str, arguments: dict[str, Any]) -> list[
             )
         if arguments.get("product_smiles"):
             details.append(f"products: {format_smiles_list(arguments.get('product_smiles') or [])}")
-        if arguments.get("library"):
-            details.append(f"library: `{arguments.get('library')}`")
         if arguments.get("run_forward"):
             details.append("run_forward: `true`")
         return details or [f"arguments: `{compact_json(arguments)}`"]
@@ -578,8 +576,6 @@ def render_call(name: str, arguments: dict[str, Any]) -> list[str]:
             )
         if arguments.get("product_smiles"):
             lines.append(f"- Products: {format_smiles_list(arguments.get('product_smiles') or [])}")
-        if arguments.get("library"):
-            lines.append(f"- Library: `{arguments.get('library')}`")
         if "run_forward" in arguments:
             lines.append(f"- Run forward: `{str(bool(arguments.get('run_forward'))).lower()}`")
         return lines

@@ -85,9 +85,9 @@ def _tools(tmp_path: Path) -> SynthesisTools:
 def test_route_through_a_flagged_product_is_rejected_with_a_reason(
     tmp_path: Path, intermediate: bool
 ) -> None:
-    steps = [{"reaction_id": "demo:R000", "reactants": ["BB:1"], "product_smiles": FLAGGED}]
+    steps = [{"reaction_id": "R001", "reactants": ["BB:1"], "product_smiles": FLAGGED}]
     if intermediate:
-        steps.append({"reaction_id": "demo:R001", "reactants": ["INT:1"], "product_smiles": "CO"})
+        steps.append({"reaction_id": "R002", "reactants": ["INT:1"], "product_smiles": "CO"})
 
     result = _tools(tmp_path).submit_pathway(steps=steps, target_smiles="CC")
 
@@ -108,7 +108,7 @@ def test_unselected_generated_route_products_are_screened(tmp_path: Path, monkey
     result = tools.submit_pathway(
         steps=[
             {
-                "reaction_id": "demo:R002",
+                "reaction_id": "R003",
                 "reactants": ["BB:3"],
                 "product_smiles": "C=CCC",
             }
@@ -219,7 +219,7 @@ def test_replay_keeps_a_refusal_the_run_recorded(tmp_path: Path) -> None:
     from synclaw.rollout.policy import prepare_tool_call
 
     tools = _tools(tmp_path)
-    steps = [{"reaction_id": "demo:R000", "reactants": ["BB:1"], "product_smiles": FLAGGED}]
+    steps = [{"reaction_id": "R001", "reactants": ["BB:1"], "product_smiles": FLAGGED}]
     live = tools.submit_pathway(steps=steps, target_smiles="CC")
     assert live["refused"] is True
     call = prepare_tool_call(
@@ -304,7 +304,7 @@ def test_enabled_screen_keeps_the_initial_messages_in_the_trace(
 def test_refused_submission_is_compacted_without_the_screen_audit(tmp_path: Path) -> None:
     from synclaw.tools.compaction import compact_tool_result
 
-    steps = [{"reaction_id": "demo:R000", "reactants": ["BB:1"], "product_smiles": FLAGGED}]
+    steps = [{"reaction_id": "R001", "reactants": ["BB:1"], "product_smiles": FLAGGED}]
     result = _tools(tmp_path).submit_pathway(steps=steps, target_smiles="CC")
 
     compact = compact_tool_result("submit_pathway", result)

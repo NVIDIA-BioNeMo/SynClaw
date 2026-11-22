@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import os
+import shutil
 import signal
 import sys
 import threading
@@ -15,7 +16,6 @@ from pathlib import Path
 
 import pytest
 
-from synclaw.cli import build_parser
 from synclaw.core import db
 from synclaw.core.reactions import ingest_reaction_templates
 from synclaw.rollout.loop import call_local_tool
@@ -76,24 +76,11 @@ def test_async_tool_executor_caps_concurrency_and_releases_waiters() -> None:
 
 
 def test_mcp_tool_schemas_remain_public_and_wrappers_are_async(
-    tmp_path: Path,
+    tmp_path: Path, bundled_db: Path
 ) -> None:
-    args = build_parser().parse_args(["mcp", "serve"])
-    assert args.reaction_library == ("synformer", "paroutes", "ord", "nvidia")
-    assert inspect.signature(create_server).parameters["reaction_library"].default == (
-        "synformer",
-        "paroutes",
-        "ord",
-        "nvidia",
-    )
-
-    db.init_db(tmp_path / "synclaw.sqlite")
-    db.prepare_building_block_search(tmp_path / "synclaw.sqlite")
-    server = create_server(
-        tmp_path / "synclaw.sqlite",
-        reaction_library="",
-        use_process_pool=False,
-    )
+    database = Path(shutil.copy(bundled_db, tmp_path / "synclaw.sqlite"))
+    db.prepare_building_block_search(database)
+    server = create_server(database, use_process_pool=False)
 
     tools = server._tool_manager._tools
     assert set(tools) == {
@@ -127,7 +114,7 @@ def test_server_refuses_a_library_without_family_metadata_at_startup(tmp_path: P
     db.prepare_building_block_search(database)
 
     with pytest.raises(ValueError, match="missing family_metadata"):
-        create_server(database, reaction_library="custom", use_process_pool=False)
+        create_server(database, use_process_pool=False)
 
 
 def test_process_worker_rejects_schema_invalid_tool_arguments(

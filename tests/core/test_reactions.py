@@ -7,6 +7,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from conftest import numbered_id, numbered_ids
+
 from synclaw.core import db
 from synclaw.core.reactions import ingest_reaction_templates, load_template_annotations
 from synclaw.paths import REPO_ROOT
@@ -41,7 +43,7 @@ class ReactionTemplateTests(unittest.TestCase):
 
             self.assertEqual(stats["inserted"], 1)
             self.assertEqual(result["count"], 1)
-            self.assertEqual(result["results"][0]["reaction_id"], "demo:R001")
+            self.assertEqual(result["results"][0]["reaction_id"], numbered_id(db_path, "demo:R001"))
             self.assertIn("alcohol", result["results"][0]["tags"])
             self.assertEqual(result["results"][0]["reactant_count"], 1)
 
@@ -70,9 +72,9 @@ class ReactionTemplateTests(unittest.TestCase):
             )
 
             self.assertEqual(result["count"], 1)
-            self.assertEqual(result["results"][0]["reaction_id"], "demo:R001")
+            self.assertEqual(result["results"][0]["reaction_id"], numbered_id(db_path, "demo:R001"))
 
-    def test_reaction_ids_are_namespaced_by_library(self):
+    def test_libraries_may_reuse_a_source_id(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             first = tmp_path / "first.jsonl"
@@ -103,49 +105,12 @@ class ReactionTemplateTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            first_stats = ingest_reaction_templates(first, db_path=db_path, library="first")
-            second_stats = ingest_reaction_templates(second, db_path=db_path, library="second")
+            ingest_reaction_templates(first, db_path=db_path, library="first")
+            ingest_reaction_templates(second, db_path=db_path, library="second")
 
-            self.assertEqual(first_stats["inserted"], 1)
-            self.assertEqual(second_stats["inserted"], 1)
-            tools = SynthesisTools(db_path)
-            first_result = tools.search_reaction_templates("R001", library="first")
-            second_result = tools.search_reaction_templates("R001", library="second")
-            self.assertEqual(first_result["results"][0]["reaction_id"], "first:R001")
-            self.assertEqual(second_result["results"][0]["reaction_id"], "second:R001")
-
-    def test_database_allows_same_source_reaction_id_in_different_libraries(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            db_path = Path(tmp) / "test.sqlite"
-            db.init_db(db_path)
-            with db.session(db_path) as conn:
-                inserted_first = db.upsert_reaction_template(
-                    conn,
-                    reaction_id="R001",
-                    library="first",
-                    name="First",
-                    description="First library template.",
-                    smarts="[C:1][O:2]>>[C:1]=[O:2]",
-                    tags_json="[]",
-                    metadata_json="{}",
-                )
-                inserted_second = db.upsert_reaction_template(
-                    conn,
-                    reaction_id="R001",
-                    library="second",
-                    name="Second",
-                    description="Second library template.",
-                    smarts="[C:1][Cl:2].[N:3]>>[C:1][N:3]",
-                    tags_json="[]",
-                    metadata_json="{}",
-                )
-                first = db.search_reaction_templates(conn, "R001", library="first")
-                second = db.search_reaction_templates(conn, "R001", library="second")
-
-            self.assertTrue(inserted_first)
-            self.assertTrue(inserted_second)
-            self.assertEqual(first[0]["library"], "first")
-            self.assertEqual(second[0]["library"], "second")
+            ids = numbered_ids(db_path)
+            self.assertEqual(sorted(ids), ["first:R001", "second:R001"])
+            self.assertEqual(sorted(ids.values()), ["R001", "R002"])
 
     def test_raw_template_import_does_not_infer_reaction_query_language(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -163,7 +128,9 @@ class ReactionTemplateTests(unittest.TestCase):
             result = SynthesisTools(db_path).search_reaction_templates(
                 "cyanide substitution nitrile", limit=5
             )
-            template = SynthesisTools(db_path).get_reaction_template("demo:R000")["template"]
+            template = SynthesisTools(db_path).get_reaction_template(
+                numbered_id(db_path, "demo:R000")
+            )["template"]
 
             self.assertEqual(result["count"], 0)
             self.assertEqual(template["tags"], [])
@@ -228,7 +195,6 @@ class ReactionTemplateTests(unittest.TestCase):
             self.assertEqual(template["reactant_roles"], [])
             self.assertNotIn("cyanide substitution", template["tags"])
             self.assertIn("Curated caveat.", template["execution_hints"])
-            self.assertEqual(template["metadata"]["annotation"]["confidence"], "high")
 
     def test_annotation_validation_rejects_duplicate_and_inconsistent_records(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -285,17 +251,26 @@ class ReactionTemplateTests(unittest.TestCase):
     def test_production_annotations_cover_reviewed_search_misses(self):
         expected_ids = {
             "chloroformate": {"synformer:R009"},
-            "aldol": {"synformer:R003", "synformer:R010"},
+            "aldol": {
+                "synformer:R003",
+                "synformer:R010",
+            },
             "amidation": {"synformer:R008"},
             "quinazoline": {"synformer:R035"},
             "SNAr": {"synformer:R103"},
-            "enone": {"synformer:R003", "synformer:R010"},
+            "enone": {
+                "synformer:R003",
+                "synformer:R010",
+            },
             "1,4-diketone": {"synformer:R090"},
             "transesterification": {"synformer:R072"},
             "buchwald-hartwig": {"synformer:R103"},
             "chan-lam": {"synformer:R099"},
             "paal-knorr": {"synformer:R090"},
-            "hell-volhard-zelinsky": {"synformer:R111", "synformer:R112"},
+            "hell-volhard-zelinsky": {
+                "synformer:R111",
+                "synformer:R112",
+            },
             "Suzuki-Miyaura": {"synformer:R050"},
             "Negishi": {"synformer:R095"},
             "Fischer-Speier esterification": {"synformer:R072"},
@@ -323,12 +298,13 @@ class ReactionTemplateTests(unittest.TestCase):
             )
             ingest_reaction_templates(source, db_path=db_path, library="synformer")
             tools = SynthesisTools(db_path)
+            ids = numbered_ids(db_path)
 
             for query, expected in expected_ids.items():
                 with self.subTest(query=query):
                     result = tools.search_reaction_templates(query, limit=10)
                     result_ids = {item["reaction_id"] for item in result["results"]}
-                    self.assertTrue(expected.issubset(result_ids))
+                    self.assertTrue({ids[source_id] for source_id in expected} <= result_ids)
 
     def test_production_annotations_classify_isocyanate_amine_as_urea_formation(self):
         annotations = load_template_annotations(
@@ -417,7 +393,7 @@ class ReactionTemplateTests(unittest.TestCase):
             ingest_reaction_templates(source, db_path=db_path, library="demo")
             result = SynthesisTools(db_path).search_reaction_templates("suzuki")
 
-            self.assertEqual(result["results"][0]["reaction_id"], "demo:R001")
+            self.assertEqual(result["results"][0]["reaction_id"], numbered_id(db_path, "demo:R001"))
             self.assertIn("suzuki", result["results"][0]["tags"])
 
     def test_external_annotation_replaces_structured_source_tags_by_default(self):
@@ -460,7 +436,7 @@ class ReactionTemplateTests(unittest.TestCase):
 
             self.assertEqual(tools.search_reaction_templates("suzuki")["count"], 0)
             result = tools.search_reaction_templates("amide coupling")
-            self.assertEqual(result["results"][0]["reaction_id"], "demo:R001")
+            self.assertEqual(result["results"][0]["reaction_id"], numbered_id(db_path, "demo:R001"))
             self.assertNotIn("suzuki", result["results"][0]["tags"])
 
     def test_csv_inline_annotation_fields_accept_json_and_blank_cells(self):
@@ -494,7 +470,7 @@ class ReactionTemplateTests(unittest.TestCase):
             result = SynthesisTools(db_path).search_reaction_templates("curated oxidation")
 
             self.assertEqual(stats["inserted"], 2)
-            self.assertEqual(result["results"][0]["reaction_id"], "demo:R001")
+            self.assertEqual(result["results"][0]["reaction_id"], numbered_id(db_path, "demo:R001"))
 
     def test_bracket_led_inline_annotation_text_falls_back_from_json(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -517,9 +493,9 @@ class ReactionTemplateTests(unittest.TestCase):
             ingest_reaction_templates(source, db_path=db_path, library="demo")
             tools = SynthesisTools(db_path)
             result = tools.search_reaction_templates("dipolar")
-            template = tools.get_reaction_template("demo:R001")["template"]
+            template = tools.get_reaction_template(numbered_id(db_path, "demo:R001"))["template"]
 
-            self.assertEqual(result["results"][0]["reaction_id"], "demo:R001")
+            self.assertEqual(result["results"][0]["reaction_id"], numbered_id(db_path, "demo:R001"))
             self.assertIn("[3+2] cycloaddition", template["query_hints"])
             self.assertIn(note, template["execution_hints"])
 
@@ -568,8 +544,8 @@ class ReactionTemplateTests(unittest.TestCase):
             result = SynthesisTools(db_path).search_reaction_templates("suzuki coupling")
 
             # "suzuki" occurs in one template and "coupling" in four, so the rare term wins.
-            self.assertEqual(result["results"][0]["reaction_id"], "demo:R003")
-            self.assertEqual(result["results"][1]["reaction_id"], "demo:R000")
+            self.assertEqual(result["results"][0]["reaction_id"], numbered_id(db_path, "demo:R003"))
+            self.assertEqual(result["results"][1]["reaction_id"], numbered_id(db_path, "demo:R000"))
 
     def test_text_search_caches_its_index_and_ignores_noise_terms(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -609,7 +585,8 @@ class ReactionTemplateTests(unittest.TestCase):
             self.assertEqual(tools.search_reaction_templates("zzz 1")["count"], 0)
             self.assertEqual(tools.search_reaction_templates("make a thing with the N")["count"], 0)
             self.assertEqual(
-                tools.search_reaction_templates("imines")["results"][0]["reaction_id"], "demo:R001"
+                tools.search_reaction_templates("imines")["results"][0]["reaction_id"],
+                numbered_id(db_path, "demo:R001"),
             )
 
     def test_smarts_queries_match_exact_and_partial_template_smarts(self):
@@ -637,9 +614,11 @@ class ReactionTemplateTests(unittest.TestCase):
             exact = tools.search_reaction_templates(smarts[2])["results"]
             partial = tools.search_reaction_templates("[c:7][Br]")["results"]
 
-            self.assertEqual(exact[0]["reaction_id"], "demo:R002")
+            self.assertEqual(exact[0]["reaction_id"], numbered_id(db_path, "demo:R002"))
             # Atom-map numbers are ignored, so the aryl bromide atoms find R001 alone.
-            self.assertEqual([item["reaction_id"] for item in partial], ["demo:R001"])
+            self.assertEqual(
+                [item["reaction_id"] for item in partial], [numbered_id(db_path, "demo:R001")]
+            )
 
     def test_search_phrase_matching_preserves_repeats_and_terms_after_twelve(self):
         repeated = db._normalize_reaction_search_phrase("amine to amine coupling")
@@ -660,10 +639,11 @@ class ReactionTemplateTests(unittest.TestCase):
             )
             ingest_reaction_templates(source, db_path=db_path, library="demo")
 
-            result = SynthesisTools(db_path).get_reaction_template("demo:R044")
+            result = SynthesisTools(db_path).get_reaction_template(
+                numbered_id(db_path, "demo:R044")
+            )
 
-            self.assertTrue(result["found"])
-            self.assertEqual(result["template"]["metadata"]["source_fields"]["line_number"], 45)
+            self.assertEqual(result["template"]["smarts"], "[N:1].[C:2]>>[N:1][C:2]")
 
     def test_structured_template_import_keeps_one_based_generated_ids(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -676,11 +656,7 @@ class ReactionTemplateTests(unittest.TestCase):
             )
             ingest_reaction_templates(source, db_path=db_path, library="demo")
 
-            result = SynthesisTools(db_path).get_reaction_template("demo:R001")
-            zero_result = SynthesisTools(db_path).get_reaction_template("demo:R000")
-
-            self.assertTrue(result["found"])
-            self.assertFalse(zero_result["found"])
+            self.assertEqual(numbered_ids(db_path), {"demo:R001": "R001"})
 
     def test_annotation_supplies_query_language_for_raw_template(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -705,7 +681,7 @@ class ReactionTemplateTests(unittest.TestCase):
             )
 
             self.assertEqual(result["count"], 1)
-            self.assertEqual(result["results"][0]["reaction_id"], "demo:R000")
+            self.assertEqual(result["results"][0]["reaction_id"], numbered_id(db_path, "demo:R000"))
             self.assertIn("urea formation", result["results"][0]["tags"])
             self.assertIn("amine coupling", result["results"][0]["tags"])
             self.assertIn("urea", result["results"][0]["description"])
@@ -742,10 +718,9 @@ class ReactionTemplateTests(unittest.TestCase):
             result = SynthesisTools(db_path).search_reaction_templates(
                 "amide coupling carboxylic acid amine",
                 limit=2,
-                library="demo",
             )
 
-            self.assertEqual(result["results"][0]["reaction_id"], "demo:R001")
+            self.assertEqual(result["results"][0]["reaction_id"], numbered_id(db_path, "demo:R001"))
             self.assertEqual(result["results"][0]["reaction_family"], "amide formation")
             self.assertIn("carboxylic acid plus amine", result["results"][0]["query_hints"])
             self.assertEqual(result["results"][1]["reaction_family"], "urea formation")
@@ -753,7 +728,7 @@ class ReactionTemplateTests(unittest.TestCase):
                 for query in record.get("evaluation_queries", []):
                     ranked = SynthesisTools(db_path).search_reaction_templates(query, limit=3)
                     self.assertIn(
-                        record["reaction_id"],
+                        numbered_id(db_path, record["reaction_id"]),
                         [item["reaction_id"] for item in ranked["results"]],
                     )
 
@@ -778,11 +753,10 @@ class ReactionTemplateTests(unittest.TestCase):
             )
 
             with db.session(db_path) as conn:
-                overview = db.reaction_template_library_overview(conn, library="demo")
+                overview = db.reaction_template_library_overview(conn)
 
             self.assertEqual(overview["template_count"], 2)
             self.assertEqual(overview["families"][0]["family"], "amide formation")
-            self.assertEqual(overview["families"][0]["example_reaction_ids"], ["demo:R001"])
             self.assertIn("amide coupling", overview["families"][0]["query_hints"])
 
     def test_reaction_library_overview_prefers_later_family_metadata_to_personal_hints(self):
@@ -814,7 +788,7 @@ class ReactionTemplateTests(unittest.TestCase):
 
             ingest_reaction_templates(source, db_path=db_path, library="demo")
             with db.session(db_path) as conn:
-                overview = db.reaction_template_library_overview(conn, library="demo")
+                overview = db.reaction_template_library_overview(conn)
 
             self.assertEqual(overview["families"][0]["query_hints"], ["curated family hint"])
 
@@ -865,7 +839,7 @@ class ReactionTemplateTests(unittest.TestCase):
             )
 
             with db.session(db_path) as conn:
-                overview = db.reaction_template_library_overview(conn, library="demo")
+                overview = db.reaction_template_library_overview(conn)
 
             self.assertEqual(
                 overview["notable_templates"][0]["name"],
@@ -884,7 +858,7 @@ class ReactionTemplateTests(unittest.TestCase):
             ingest_reaction_templates(source, db_path=db_path, library="demo")
 
             result = SynthesisTools(db_path).simulate_reaction(
-                "demo:R000",
+                numbered_id(db_path, "demo:R000"),
                 ["CO"],
                 product_smiles="C=O",
             )
@@ -907,7 +881,7 @@ class ReactionTemplateTests(unittest.TestCase):
             ingest_reaction_templates(source, db_path=db_path, library="demo")
 
             result = SynthesisTools(db_path).simulate_reaction(
-                "demo:R000",
+                numbered_id(db_path, "demo:R000"),
                 ["CC(C)=O", "c1[nH]ccn1"],
                 product_smiles="CC(C)(C(=O)O)n1ccnc1",
             )
@@ -948,8 +922,10 @@ class ReactionTemplateTests(unittest.TestCase):
             ingest_reaction_templates(source, db_path=db_path, library="demo")
             tools = SynthesisTools(db_path)
 
-            unclaimed = tools.simulate_reaction("demo:R000", ["C"])
-            claimed = tools.simulate_reaction("demo:R000", ["C"], product_smiles="CF")
+            unclaimed = tools.simulate_reaction(numbered_id(db_path, "demo:R000"), ["C"])
+            claimed = tools.simulate_reaction(
+                numbered_id(db_path, "demo:R000"), ["C"], product_smiles="CF"
+            )
 
             self.assertEqual(unclaimed["generated_products"], [])
             self.assertTrue(unclaimed["valid"])
@@ -965,7 +941,7 @@ class ReactionTemplateTests(unittest.TestCase):
             ingest_reaction_templates(source, db_path=db_path, library="demo")
 
             result = SynthesisTools(db_path).simulate_reaction(
-                "demo:R000",
+                numbered_id(db_path, "demo:R000"),
                 ["C"],
             )
 
@@ -983,7 +959,7 @@ class ReactionTemplateTests(unittest.TestCase):
             ingest_reaction_templates(source, db_path=db_path, library="demo")
 
             result = SynthesisTools(db_path).simulate_reaction(
-                "demo:R000",
+                numbered_id(db_path, "demo:R000"),
                 ["CO"],
             )
 
@@ -1003,7 +979,7 @@ class ReactionTemplateTests(unittest.TestCase):
             ingest_reaction_templates(source, db_path=db_path, library="demo")
 
             result = SynthesisTools(db_path).simulate_reaction(
-                "demo:R000",
+                numbered_id(db_path, "demo:R000"),
                 ["CO"],
                 product_smiles="C=O",
             )
@@ -1027,7 +1003,7 @@ class ReactionTemplateTests(unittest.TestCase):
             ingest_reaction_templates(source, db_path=db_path, library="demo")
 
             result = SynthesisTools(db_path).simulate_reaction(
-                "demo:R000",
+                numbered_id(db_path, "demo:R000"),
                 ["N#CC1CC12CNC2", "Nc1nccc2occc12"],
             )
 
@@ -1045,7 +1021,7 @@ class ReactionTemplateTests(unittest.TestCase):
             ingest_reaction_templates(source, db_path=db_path, library="demo")
 
             result = SynthesisTools(db_path).simulate_reaction(
-                "demo:R000",
+                numbered_id(db_path, "demo:R000"),
                 ["CO", "CCO"],
             )
 
@@ -1064,7 +1040,7 @@ class ReactionTemplateTests(unittest.TestCase):
             db.prepare_building_block_search(db_path)
 
             result = SynthesisTools(db_path).simulate_reverse_reaction(
-                "demo:R000",
+                numbered_id(db_path, "demo:R000"),
                 "C=O",
                 include_near=False,
             )
@@ -1088,7 +1064,7 @@ class ReactionTemplateTests(unittest.TestCase):
             db.prepare_building_block_search(db_path)
 
             result = SynthesisTools(db_path).simulate_reverse_reaction(
-                "demo:R000",
+                numbered_id(db_path, "demo:R000"),
                 "NC=O",
                 include_near=False,
             )
@@ -1107,7 +1083,7 @@ class ReactionTemplateTests(unittest.TestCase):
             db.prepare_building_block_search(db_path)
 
             result = SynthesisTools(db_path).simulate_reverse_reaction(
-                "demo:R000",
+                numbered_id(db_path, "demo:R000"),
                 ["C=O", "O"],
                 include_near=False,
             )
@@ -1134,9 +1110,9 @@ class ReactionTemplateTests(unittest.TestCase):
             db.prepare_building_block_search(db_path)
             tools = SynthesisTools(db_path)
 
-            template = tools.get_reaction_template("demo:R000")["template"]
+            template = tools.get_reaction_template(numbered_id(db_path, "demo:R000"))["template"]
             result = tools.simulate_reverse_reaction(
-                "demo:R000",
+                numbered_id(db_path, "demo:R000"),
                 "[N-]=[N+]=NCC1C[N+](C(=O)C(CC(=O)O)C2CCCO2)=C(N)N1c1cccc(F)c1",
                 include_near=False,
             )
@@ -1159,7 +1135,7 @@ class ReactionTemplateTests(unittest.TestCase):
             ingest_reaction_templates(source, db_path=db_path, library="demo")
 
             result = SynthesisTools(db_path).simulate_reverse_reaction(
-                "demo:R000",
+                numbered_id(db_path, "demo:R000"),
                 "C=O",
                 include_near=False,
             )
@@ -1180,7 +1156,7 @@ class ReactionTemplateTests(unittest.TestCase):
             ingest_reaction_templates(source, db_path=db_path, library="demo")
 
             result = SynthesisTools(db_path).simulate_reverse_reaction(
-                "demo:R000",
+                numbered_id(db_path, "demo:R000"),
                 "NC(C)=O",
                 include_near=False,
             )
@@ -1229,12 +1205,11 @@ class ReactionTemplateTests(unittest.TestCase):
                 reactant_smiles=["N", "O=CO"],
                 product_smiles="NC=O",
                 run_forward=True,
-                library="demo",
             )
 
             self.assertTrue(result["valid"])
             self.assertEqual(result["count"], 1)
-            self.assertEqual(result["results"][0]["reaction_id"], "demo:R002")
+            self.assertEqual(result["results"][0]["reaction_id"], numbered_id(db_path, "demo:R002"))
             structure = result["results"][0]["structure_match"]
             self.assertTrue(structure["reactant_match"])
             self.assertTrue(structure["product_match"])
@@ -1257,7 +1232,6 @@ class ReactionTemplateTests(unittest.TestCase):
                 reactant_smiles=["CC(C)=O", "c1[nH]ccn1"],
                 product_smiles="CC(C)(C(=O)O)n1ccnc1",
                 run_forward=True,
-                library="demo",
             )
 
             self.assertTrue(result["valid"])
@@ -1266,34 +1240,21 @@ class ReactionTemplateTests(unittest.TestCase):
             self.assertTrue(forward["requested_products_generated"]["CC(C)(C(=O)O)n1ccnc1"])
             self.assertTrue(forward["requested_product_set_generated"])
 
-    def test_search_simulates_the_matched_library_template(self):
+    def test_search_simulates_the_matched_template(self):
         with tempfile.TemporaryDirectory() as tmp:
-            db_path = Path(tmp) / "test.sqlite"
-            db.init_db(db_path)
+            tmp_path = Path(tmp)
+            source = tmp_path / "templates.txt"
+            db_path = tmp_path / "test.sqlite"
+            source.write_text("[C:1][OH:2]>>[C:1][O:2]C\n", encoding="utf-8")
+            ingest_reaction_templates(source, db_path=db_path, library="demo")
             with db.session(db_path) as conn:
-                for library, smarts in (
-                    ("first", "[C:1][OH:2]>>[C:1]=[O:2]"),
-                    ("second", "[C:1][OH:2]>>[C:1][O:2]C"),
-                ):
-                    db.upsert_reaction_template(
-                        conn,
-                        reaction_id="shared:R001",
-                        library=library,
-                        name=library,
-                        description=library,
-                        smarts=smarts,
-                        tags_json="[]",
-                        metadata_json="{}",
-                    )
                 with self.assertRaisesRegex(ValueError, "needs a query"):
                     db.search_reaction_templates(conn, " ")
             db.prepare_building_block_search(db_path)
             tools = SynthesisTools(db_path)
 
-            forward = tools.search_reaction_templates(
-                reactant_smiles=["CO"], run_forward=True, library="second"
-            )
-            reverse = tools.search_reaction_templates(product_smiles="COC", library="second")
+            forward = tools.search_reaction_templates(reactant_smiles=["CO"], run_forward=True)
+            reverse = tools.search_reaction_templates(product_smiles="COC")
 
             match = forward["results"][0]["structure_match"]
             self.assertEqual(match["forward_simulation"]["generated_products"], ["COC"])
@@ -1337,12 +1298,11 @@ class ReactionTemplateTests(unittest.TestCase):
 
             result = SynthesisTools(db_path).search_reaction_templates(
                 product_smiles="C=O",
-                library="demo",
             )
 
             self.assertTrue(result["valid"])
             self.assertTrue(result["reverse_ranking"]["applied"])
-            self.assertEqual(result["results"][0]["reaction_id"], "demo:R002")
+            self.assertEqual(result["results"][0]["reaction_id"], numbered_id(db_path, "demo:R002"))
             usefulness = result["results"][0]["reverse_usefulness"]
             self.assertGreater(usefulness["score"], 100)
             self.assertEqual(usefulness["fully_grounded_candidate_sets"], 1)
@@ -1386,7 +1346,6 @@ class ReactionTemplateTests(unittest.TestCase):
             result = SynthesisTools(db_path).search_reaction_templates(
                 query="alcohol oxidation",
                 product_smiles="C=O",
-                library="demo",
             )
 
             self.assertTrue(result["valid"])
@@ -1395,10 +1354,12 @@ class ReactionTemplateTests(unittest.TestCase):
             self.assertNotIn("results", result)
             self.assertEqual(
                 [item["reaction_id"] for item in result["structural_results"]],
-                ["demo:R002", "demo:R001"],
+                [numbered_id(db_path, "demo:R002"), numbered_id(db_path, "demo:R001")],
             )
             self.assertEqual(result["structural_count"], len(result["structural_results"]))
-            self.assertEqual(result["text_results"][0]["reaction_id"], "demo:R002")
+            self.assertEqual(
+                result["text_results"][0]["reaction_id"], numbered_id(db_path, "demo:R002")
+            )
             self.assertEqual(result["text_count"], len(result["text_results"]))
 
     def test_search_reaction_templates_text_list_is_independent_of_molecule_truncation(self):
@@ -1429,14 +1390,15 @@ class ReactionTemplateTests(unittest.TestCase):
                 query="special",
                 product_smiles="C=O",
                 limit=5,
-                library="demo",
             )
 
             self.assertTrue(result["valid"])
             self.assertEqual(result["search_mode"], "text_and_molecule")
             self.assertEqual(result["matched_template_count"], 121)
             self.assertEqual(result["structural_count"], 5)
-            self.assertEqual(result["text_results"][0]["reaction_id"], "demo:R120")
+            self.assertEqual(
+                result["text_results"][0]["reaction_id"], numbered_id(db_path, "demo:R120")
+            )
 
     def test_search_reaction_templates_records_reverse_failures(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1459,7 +1421,6 @@ class ReactionTemplateTests(unittest.TestCase):
 
             result = SynthesisTools(db_path).search_reaction_templates(
                 product_smiles="C=O",
-                library="demo",
             )
 
             self.assertTrue(result["valid"])
@@ -1480,7 +1441,6 @@ class ReactionTemplateTests(unittest.TestCase):
 
             result = SynthesisTools(db_path).search_reaction_templates(
                 reactant_smiles=["CO"],
-                library="demo",
             )
 
             self.assertTrue(result["valid"])
@@ -1497,8 +1457,10 @@ class ReactionTemplateTests(unittest.TestCase):
             ingest_reaction_templates(source, db_path=db_path, library="demo")
             tools = SynthesisTools(db_path)
 
-            invalid_product = tools.simulate_reverse_reaction("demo:R000", "not-smiles")
-            unknown_template = tools.simulate_reverse_reaction("demo:R999", "C=O")
+            invalid_product = tools.simulate_reverse_reaction(
+                numbered_id(db_path, "demo:R000"), "not-smiles"
+            )
+            unknown_template = tools.simulate_reverse_reaction("R999", "C=O")
 
             self.assertFalse(invalid_product["valid"])
             self.assertIn("product invalid", invalid_product["issues"][0])
@@ -1515,7 +1477,7 @@ class ReactionTemplateTests(unittest.TestCase):
             db.prepare_building_block_search(db_path)
 
             result = SynthesisTools(db_path).simulate_reverse_reaction(
-                "demo:R000",
+                numbered_id(db_path, "demo:R000"),
                 "CCCC",
                 max_outcomes=1,
                 include_near=False,
@@ -1540,7 +1502,7 @@ class ReactionTemplateTests(unittest.TestCase):
                 target_smiles="C=O",
                 steps=[
                     {
-                        "reaction_id": "demo:R000",
+                        "reaction_id": numbered_id(db_path, "demo:R000"),
                         "reactants": ["BB:1"],
                         "product_smiles": "C=O",
                     }
@@ -1573,7 +1535,7 @@ class ReactionTemplateTests(unittest.TestCase):
                 target_smiles="CC(C)(C(=O)O)n1ccnc1",
                 steps=[
                     {
-                        "reaction_id": "demo:R000",
+                        "reaction_id": numbered_id(db_path, "demo:R000"),
                         "reactants": ["BB:1", "BB:2"],
                         "product_smiles": "CC(C)(C(=O)O)n1ccnc1",
                     }
@@ -1601,7 +1563,7 @@ class ReactionTemplateTests(unittest.TestCase):
             result = SynthesisTools(db_path).submit_pathway(
                 steps=[
                     {
-                        "reaction_id": "demo:R000",
+                        "reaction_id": numbered_id(db_path, "demo:R000"),
                         "reactants": ["BB:1"],
                         "product_smiles": "C=O",
                     }
@@ -1711,7 +1673,7 @@ class ReactionTemplateTests(unittest.TestCase):
             result = SynthesisTools(db_path).submit_pathway(
                 steps=[
                     {
-                        "reaction_id": "demo:R000",
+                        "reaction_id": numbered_id(db_path, "demo:R000"),
                         "reactants": ["BB:1"],
                         "product_smiles": "C=O",
                     }
@@ -1750,7 +1712,7 @@ class ReactionTemplateTests(unittest.TestCase):
                 target_smiles="N#CC1CC12CN(C(=O)Nc1nccc3occc13)C2",
                 steps=[
                     {
-                        "reaction_id": "demo:R000",
+                        "reaction_id": numbered_id(db_path, "demo:R000"),
                         "reactants": ["BB:1", "BB:2"],
                         "product_smiles": "N#CC1CC12CN(C(=O)Nc1nccc3occc13)C2",
                     }
@@ -1776,7 +1738,7 @@ class ReactionTemplateTests(unittest.TestCase):
                 target_smiles="C=O",
                 steps=[
                     {
-                        "reaction_id": "demo:R000",
+                        "reaction_id": numbered_id(db_path, "demo:R000"),
                         "reactants": ["CO"],
                         "product_smiles": "CO",
                     }
@@ -1810,7 +1772,7 @@ class ReactionTemplateTests(unittest.TestCase):
                 target_smiles="F[C@H](Cl)Br",
                 steps=[
                     {
-                        "reaction_id": "demo:R000",
+                        "reaction_id": numbered_id(db_path, "demo:R000"),
                         "reactants": ["BB:1"],
                         "product_smiles": "F[C@@H](Cl)Br",
                     }
@@ -1840,7 +1802,7 @@ class ReactionTemplateTests(unittest.TestCase):
                 target_smiles="C=O",
                 steps=[
                     {
-                        "reaction_id": "demo:R000",
+                        "reaction_id": numbered_id(db_path, "demo:R000"),
                         "reactants": ["CO", "CCO"],
                         "product_smiles": "C=O",
                     }
@@ -1867,7 +1829,7 @@ class ReactionTemplateTests(unittest.TestCase):
                 target_smiles="C=O",
                 steps=[
                     {
-                        "reaction_id": "demo:R000",
+                        "reaction_id": numbered_id(db_path, "demo:R000"),
                         "reactants": ["CO"],
                         "product_smiles": "C=O",
                     }

@@ -26,16 +26,14 @@ uv run synclaw ingest-reactions --db var/synclaw.sqlite
 This installs all 501 templates and preserves
 building-block rows and prepared stock indexes. Reimporting replaces every row
 stored under `synformer`, `paroutes`, `ord`, or `nvidia`. Other libraries already in the
-database are retained; they are outside the default union. The import records each source
-file's hash from that manifest, and model runs reject a selected library whose
+database are retained and available alongside them. The import records each source
+file's hash from that manifest, and model runs reject a database whose bundled
 source file, or `families.json`, has changed since, until you reimport.
 
-Select a source union with `--reaction-library synformer paroutes ord nvidia` in
-`run-model` or `mcp serve`; the default is all four. Template search and
-its family overview use the same union, counting each template once, and lookup,
-simulation, and pathway submission reject templates outside it.
+The tools use every template in the database. Build a smaller union by removing
+sources, e.g. `synclaw db remove-reactions paroutes nvidia --db <path>`.
 
-| Selection | Unique templates |
+| Sources in the database | Unique templates |
 | --- | ---: |
 | `synformer` | 114 |
 | `paroutes` | 176 |
@@ -48,12 +46,14 @@ simulation, and pathway submission reject templates outside it.
 
 SMARTS are unchanged from their sources except 18 repaired rules, listed in
 [SMARTS_REPAIRS.md](SMARTS_REPAIRS.md) with their imported strings kept in
-`metadata.smarts_revision`. Prompt hints are generated from the selected records.
+`metadata.smarts_revision`. Prompt hints are generated from the imported records.
 
-Template IDs are `synformer:R...`, `paroutes:PR...`, `ord:R...`, and `nvidia:R...`; lookups match
-these IDs exactly. SynFormer IDs keep the original zero-based line numbers, so
-`synformer:R033` (a duplicate of R032) does not exist. Every ORD record's `metadata.provenance`
-names its source patent and line in Lowe's USPTO grants file.
+Source files name templates `synformer:R...`, `paroutes:PR...`, `ord:R...`, and `nvidia:R...`.
+SynFormer IDs keep the original zero-based line numbers, so `synformer:R033` (a duplicate of
+R032) does not exist. Import renumbers every template in the database `R001` onward in
+SMARTS-hash order and keeps the source ID as `metadata.source_id`; tools see only the numbered
+ID. Every ORD record's `metadata.provenance` names its source patent and line in Lowe's USPTO
+grants file.
 Records carry their provenance, role queries, and execution caveats.
 
 Attribution and licenses are in [synformer/NOTICE.md](synformer/NOTICE.md),

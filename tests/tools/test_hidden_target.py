@@ -26,8 +26,8 @@ TARGET = "CO"  # BB:1
 ANALOGUE = "CCO"  # BB:2
 # Oxidise the target, then reduce it back: a route that only buys the target.
 ROUND_TRIP = [
-    {"reaction_id": "demo:R000", "reactants": ["BB:1"], "product_smiles": "C=O"},
-    {"reaction_id": "demo:R001", "reactants": ["INT:1"], "product_smiles": TARGET},
+    {"reaction_id": "R001", "reactants": ["BB:1"], "product_smiles": "C=O"},
+    {"reaction_id": "R002", "reactants": ["INT:1"], "product_smiles": TARGET},
 ]
 
 
@@ -112,13 +112,13 @@ def test_the_target_cannot_be_a_starting_reactant(db_path: Path) -> None:
     assert unhidden["accepted"] is True and unhidden["final_smiles"] == TARGET
     assert hidden["accepted"] is False
     assert "unknown building block reference: BB:1" in hidden["issues"][0]
-    simulated = _tools(db_path).simulate_reaction("demo:R000", ["BB:1"])
+    simulated = _tools(db_path).simulate_reaction("R001", ["BB:1"])
     assert simulated["valid"] is False
 
 
 def test_reverse_grounding_does_not_offer_the_target(db_path: Path) -> None:
     def grounded(tools: SynthesisTools) -> bool:
-        result = tools.simulate_reverse_reaction("demo:R000", "C=O")
+        result = tools.simulate_reverse_reaction("R001", "C=O")
         return result["reverse_planning_summary"]["has_fully_grounded_candidate"]
 
     assert grounded(_tools(db_path, None)) is True
@@ -282,8 +282,8 @@ def test_fixed_ids_block_reactants_and_reverse_grounding(db_path: Path) -> None:
     assert not tools.submit_pathway(steps=ROUND_TRIP, target_smiles=TARGET)["accepted"]
     raw_steps = [{**ROUND_TRIP[0], "reactants": [TARGET]}, ROUND_TRIP[1]]
     assert not tools.submit_pathway(steps=raw_steps, target_smiles=TARGET)["accepted"]
-    assert not tools.simulate_reaction("demo:R000", ["BB:1"])["valid"]
-    reverse = tools.simulate_reverse_reaction("demo:R000", "C=O")
+    assert not tools.simulate_reaction("R001", ["BB:1"])["valid"]
+    reverse = tools.simulate_reverse_reaction("R001", "C=O")
     assert not reverse["reverse_planning_summary"]["has_fully_grounded_candidate"]
 
 
@@ -340,7 +340,7 @@ def test_similarity_filter_allows_synthesizing_a_hidden_product(tmp_path: Path) 
     tools = SynthesisTools(path, hidden_target_smiles="CO", hidden_similarity=1)
     assert tools.hidden_building_block_ids == {1}
     result = tools.submit_pathway(
-        steps=[{"reaction_id": "demo:R000", "reactants": ["BB:2"], "product_smiles": "CO"}],
+        steps=[{"reaction_id": "R001", "reactants": ["BB:2"], "product_smiles": "CO"}],
         target_smiles="CO",
     )
     assert result["accepted"] and result["similarity_to_target"] == 1

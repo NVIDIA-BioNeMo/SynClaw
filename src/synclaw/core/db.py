@@ -144,7 +144,7 @@ CREATE TABLE IF NOT EXISTS reaction_templates (
     metadata_json TEXT NOT NULL DEFAULT '{}',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
-    UNIQUE(reaction_id, library)
+    UNIQUE(reaction_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_reaction_templates_library ON reaction_templates(library);
@@ -157,8 +157,6 @@ CREATE TABLE IF NOT EXISTS reaction_library_catalog (
     installed_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_reaction_templates_name ON reaction_templates(name);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_reaction_templates_template_library
-    ON reaction_templates(reaction_id, library);
 """
 
 
@@ -311,43 +309,58 @@ def _prepare_building_block_search_in_place(db_path: Path) -> None:
         )
 
 
-def _reaction_library_filter(library: LibrarySelection) -> tuple[str, list[str]]:
-    libraries = normalize_libraries(library)
-    if not libraries:
-        return "1", []
-    return f"library IN ({','.join('?' for _ in libraries)})", list(libraries)
+def require_reaction_templates(conn: sqlite3.Connection) -> None:
+    """Fail loudly unless the database's reaction templates are present, current and numbered.
 
-
-def require_reaction_library(conn: sqlite3.Connection, library: LibrarySelection) -> None:
-    """Fail loudly unless every selected reaction library is present and current.
-
-    A missing library otherwise degrades silently: the family overview is empty
-    and every template search returns zero results with ``valid: true``. An
-    empty selection checks every library in the database.
+    Without templates the family overview is empty and every template search
+    returns zero results with ``valid: true``.
     """
 
-    libraries = normalize_libraries(library)
-    available = _available_reaction_libraries(conn)
-    missing = [name for name in libraries if name not in available]
-    if missing:
-        listed = ", ".join(repr(name) for name in available) if available else "none"
-        bundled = bundled_reaction_library_versions()
-        fixes = []
-        if any(name in bundled for name in missing):
-            fixes.append(
-                "import the bundled sources with `synclaw ingest-reactions --db <path>` from a source "
-                "checkout, or rebuild the prepared database"
-            )
-        fixes += [
-            f"ingest {name!r} with `synclaw ingest-reactions <templates.jsonl> --library {name} --db <path>`"
-            for name in missing
-            if name not in bundled
-        ]
+    libraries = _available_reaction_libraries(conn)
+    if not libraries:
         raise RuntimeError(
-            f"Reaction library {', '.join(repr(name) for name in missing)} has no templates in this database "
-            f"(available: {listed}). To fix, {'; '.join(fixes)}; or select an existing library."
+            "This database has no reaction templates. Import the bundled sources with "
+            "`synclaw ingest-reactions --db <path>` from a source checkout, or a custom file with "
+            "`synclaw ingest-reactions <templates> --library <name> --db <path>`."
         )
-    _require_current_reaction_libraries(conn, libraries or available)
+    _require_current_reaction_libraries(conn, libraries)
+    if any(stored != numbered for stored, numbered, _ in _reaction_template_numbering(conn)):
+        raise RuntimeError(
+            "This database's reaction template IDs are not numbered R001 onward. "
+            "Re-run `synclaw ingest-reactions --db <path>` to renumber them; it reinstalls every "
+            "bundled source, so then drop any you do not use with `synclaw db remove-reactions`."
+        )
+
+
+def _reaction_template_numbering(conn: sqlite3.Connection) -> list[tuple[str, str, int]]:
+    """Pair each template's stored ID with its R001…RN ID and row id.
+
+    Templates are ordered by a hash of their SMARTS, so neither IDs nor ID-order
+    tie-breaks group templates by library.
+    """
+
+    rows = conn.execute("SELECT id, reaction_id, smarts FROM reaction_templates").fetchall()
+    rows.sort(key=lambda row: (hashlib.sha256(row["smarts"].encode()).hexdigest(), row["id"]))
+    width = max(3, len(str(len(rows))))
+    return [
+        (row["reaction_id"], f"R{number:0{width}d}", row["id"])
+        for number, row in enumerate(rows, start=1)
+    ]
+
+
+def number_reaction_templates(conn: sqlite3.Connection) -> None:
+    """Renumber every template R001…RN across all libraries in the database."""
+
+    numbering = _reaction_template_numbering(conn)
+    # Park every row on a unique placeholder first so no new ID collides with an old one.
+    conn.executemany(
+        "UPDATE reaction_templates SET reaction_id = ? WHERE id = ?",
+        [(f"#{row_id}", row_id) for *_, row_id in numbering],
+    )
+    conn.executemany(
+        "UPDATE reaction_templates SET reaction_id = ? WHERE id = ?",
+        [(numbered, row_id) for _, numbered, row_id in numbering],
+    )
 
 
 def _available_reaction_libraries(conn: sqlite3.Connection) -> tuple[str, ...]:
@@ -420,7 +433,7 @@ def replace_reaction_library(
 
 
 def remove_reaction_libraries(conn: sqlite3.Connection, libraries: LibrarySelection) -> int:
-    """Delete templates stored under the given libraries along with their import records."""
+    """Delete these libraries' templates and import records, then renumber the rest."""
 
     names = normalize_libraries(libraries)
     if not names:
@@ -435,6 +448,7 @@ def remove_reaction_libraries(conn: sqlite3.Connection, libraries: LibrarySelect
         )
     except sqlite3.OperationalError:
         pass
+    number_reaction_templates(conn)
     return removed
 
 
@@ -927,38 +941,23 @@ def upsert_reaction_template(
     return False
 
 
-def get_reaction_template(
-    conn: sqlite3.Connection,
-    reaction_id: str,
-    *,
-    library: LibrarySelection = None,
-) -> dict[str, Any] | None:
-    library_where, library_params = _reaction_library_filter(library)
-    cursor = conn.execute(
-        f"""
-        SELECT reaction_id, library, name, description, smarts, tags_json, metadata_json
-        FROM reaction_templates
-        WHERE reaction_id = ? AND {library_where}
-        """,
-        (reaction_id, *library_params),
-    )
-    row = cursor.fetchone()
+_TEMPLATE_COLUMNS = "reaction_id, name, description, smarts, tags_json, metadata_json"
+
+
+def get_reaction_template(conn: sqlite3.Connection, reaction_id: str) -> dict[str, Any] | None:
+    row = conn.execute(
+        f"SELECT {_TEMPLATE_COLUMNS} FROM reaction_templates WHERE reaction_id = ?",
+        (reaction_id,),
+    ).fetchone()
     return _reaction_template_row(row) if row is not None else None
 
 
-def get_reaction_template_by_smarts(
-    conn: sqlite3.Connection,
-    smarts: str,
-    *,
-    library: LibrarySelection = None,
-) -> dict[str, Any] | None:
+def get_reaction_template_by_smarts(conn: sqlite3.Connection, smarts: str) -> dict[str, Any] | None:
     """Return the one template with exactly this SMARTS, or None if none or several match."""
 
-    library_where, library_params = _reaction_library_filter(library)
     rows = conn.execute(
-        "SELECT reaction_id, library, name, description, smarts, tags_json, metadata_json "
-        f"FROM reaction_templates WHERE smarts = ? AND {library_where} LIMIT 2",
-        (str(smarts).strip(), *library_params),
+        f"SELECT {_TEMPLATE_COLUMNS} FROM reaction_templates WHERE smarts = ? LIMIT 2",
+        (str(smarts).strip(),),
     ).fetchall()
     return _reaction_template_row(rows[0]) if len(rows) == 1 else None
 
@@ -967,14 +966,13 @@ def search_reaction_templates(
     conn: sqlite3.Connection,
     query: str,
     limit: int = 20,
-    library: LibrarySelection = None,
 ) -> list[dict[str, Any]]:
     """Rank templates by TF-IDF similarity to a text query."""
 
     text = query.strip()
     if not text or text == "*":
         raise ValueError(f"Reaction template text search needs a query, not {query!r}")
-    index = _reaction_text_index(conn, normalize_libraries(library))
+    index = _reaction_text_index(conn)
     query_terms = set(_text_terms(text))
     query_smarts_terms = set(_smarts_terms(text))
     normalized_query = _normalize_reaction_search_phrase(text)
@@ -1010,7 +1008,6 @@ def search_reaction_templates(
             -match[2],
             -match[1],
             -match[3],
-            match[0]["library"],
             match[0]["reaction_id"],
         )
     )
@@ -1097,7 +1094,7 @@ class _TfIdfVectors:
 
 
 class _ReactionTextIndex:
-    """Text and SMARTS vectors for one library selection, kept apart so SMARTS never shifts text scores."""
+    """Text and SMARTS vectors for the database's templates, kept apart so SMARTS never shifts text scores."""
 
     def __init__(self, rows: list[dict[str, Any]]):
         self.rows = rows
@@ -1105,51 +1102,38 @@ class _ReactionTextIndex:
         self.smarts = _TfIdfVectors([Counter(_smarts_terms(row.get("smarts", ""))) for row in rows])
 
 
-def _reaction_text_index(
-    conn: sqlite3.Connection, libraries: tuple[str, ...]
-) -> _ReactionTextIndex:
+def _reaction_text_index(conn: sqlite3.Connection) -> _ReactionTextIndex:
     database_path = _main_database_path(conn)
     if not database_path or conn.in_transaction:
-        return _ReactionTextIndex(list_reaction_templates(conn, library=libraries))
-    return _cached_reaction_text_index(
-        database_path, libraries, *_reaction_template_revision(conn, libraries)
-    )
+        return _ReactionTextIndex(list_reaction_templates(conn))
+    return _cached_reaction_text_index(database_path, *_reaction_template_revision(conn))
 
 
 @lru_cache(maxsize=16)
 def _cached_reaction_text_index(
     database_path: str,
-    libraries: tuple[str, ...],
     row_count: int,
     newest_update: str,
 ) -> _ReactionTextIndex:
     conn = connect(database_path)
     try:
-        return _ReactionTextIndex(list_reaction_templates(conn, library=libraries))
+        return _ReactionTextIndex(list_reaction_templates(conn))
     finally:
         conn.close()
 
 
-def list_reaction_templates(
-    conn: sqlite3.Connection,
-    library: LibrarySelection = None,
-) -> list[dict[str, Any]]:
-    """Return every template in the selected libraries, in library and ID order."""
+def list_reaction_templates(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    """Return every template in ID order."""
 
-    where, params = _reaction_library_filter(library)
     cursor = conn.execute(
-        f"""
-        SELECT reaction_id, library, name, description, smarts, tags_json, metadata_json
-        FROM reaction_templates
-        WHERE {where}
-        ORDER BY library, reaction_id
-        """,
-        params,
+        f"SELECT {_TEMPLATE_COLUMNS} FROM reaction_templates ORDER BY reaction_id"
     )
     return [_reaction_template_row(row) for row in cursor.fetchall()]
 
 
 def table_counts(db_path: str | Path) -> dict[str, int]:
+    """Row counts of the tables this database has; older databases may lack some."""
+
     tables = [
         "building_blocks",
         "import_errors",
@@ -1157,9 +1141,11 @@ def table_counts(db_path: str | Path) -> dict[str, int]:
         "reaction_library_catalog",
     ]
     with session(db_path) as conn:
+        present = {row[0] for row in conn.execute("SELECT name FROM sqlite_master")}
         return {
             table: int(conn.execute(f"SELECT COUNT(*) AS count FROM {table}").fetchone()["count"])
             for table in tables
+            if table in present
         }
 
 
@@ -1203,22 +1189,22 @@ def _metadata_dict_list(value: Any) -> list[dict[str, Any]]:
 
 
 def _reaction_template_row(row: sqlite3.Row) -> dict[str, Any]:
+    # Provenance and source IDs stay in the database, out of every tool result.
     value = dict(row)
-    for source_key, target_key, default in (
-        ("tags_json", "tags", []),
-        ("metadata_json", "metadata", {}),
-    ):
+    decoded = {}
+    for key, default in (("tags_json", []), ("metadata_json", {})):
         try:
-            value[target_key] = json.loads(value[source_key])
+            decoded[key] = json.loads(value.pop(key))
         except (TypeError, json.JSONDecodeError):
-            value[target_key] = default
+            decoded[key] = default
+    value["tags"] = decoded["tags_json"]
     reactants, products = _split_reaction_smarts(str(value.get("smarts") or ""))
     reactant_count, product_count = reaction_template_arity(str(value.get("smarts") or ""))
     value["reactant_count"] = reactant_count
     value["product_count"] = product_count
     introduces_unmapped_product_atoms = _introduces_unmapped_product_atoms(products)
     value["introduces_unmapped_product_atoms"] = introduces_unmapped_product_atoms
-    metadata = value.get("metadata") if isinstance(value.get("metadata"), dict) else {}
+    metadata = decoded["metadata_json"] if isinstance(decoded["metadata_json"], dict) else {}
     annotation = metadata.get("annotation") if isinstance(metadata.get("annotation"), dict) else {}
     if annotation:
         value["reaction_family"] = str(
@@ -1255,18 +1241,10 @@ def _reaction_template_row(row: sqlite3.Row) -> dict[str, Any]:
     return value
 
 
-def _reaction_template_revision(
-    conn: sqlite3.Connection,
-    libraries: tuple[str, ...],
-) -> tuple[int, str]:
-    where, params = _reaction_library_filter(libraries)
+def _reaction_template_revision(conn: sqlite3.Connection) -> tuple[int, str]:
     row = conn.execute(
-        f"""
-        SELECT COUNT(*) AS row_count, COALESCE(MAX(updated_at), '') AS newest_update
-        FROM reaction_templates
-        WHERE {where}
-        """,
-        params,
+        "SELECT COUNT(*) AS row_count, COALESCE(MAX(updated_at), '') AS newest_update "
+        "FROM reaction_templates"
     ).fetchone()
     return int(row["row_count"]), str(row["newest_update"])
 
@@ -1368,28 +1346,13 @@ def _introduces_unmapped_product_atoms(products: str) -> bool:
 
 def reaction_template_library_overview(
     conn: sqlite3.Connection,
-    library: LibrarySelection = None,
     *,
     max_families: int = 8,
-    examples_per_family: int = 3,
     max_notable_templates: int = 4,
 ) -> dict[str, Any]:
-    selection_where, params = _reaction_library_filter(library)
-    where = f"WHERE {selection_where}"
-    rows = conn.execute(
-        f"""
-        SELECT reaction_id, library, name, description, smarts, tags_json, metadata_json
-        FROM reaction_templates
-        {where}
-        ORDER BY library, reaction_id
-        """,
-        params,
-    ).fetchall()
+    templates = list_reaction_templates(conn)
     grouped: dict[str, dict[str, Any]] = {}
-    templates: list[dict[str, Any]] = []
-    for row in rows:
-        template = _reaction_template_row(row)
-        templates.append(template)
+    for template in templates:
         family = str(template.get("reaction_family") or "unclassified")
         family_metadata = (
             template.get("family_metadata")
@@ -1404,7 +1367,6 @@ def reaction_template_library_overview(
                 "description": str(family_metadata.get("description") or "").strip(),
                 "query_hints": family_query_hints,
                 "count": 0,
-                "example_reaction_ids": [],
             },
         )
         if not group["description"]:
@@ -1412,12 +1374,10 @@ def reaction_template_library_overview(
         if family_query_hints and not group["query_hints"]:
             group["query_hints"] = family_query_hints
         group["count"] += 1
-        if len(group["example_reaction_ids"]) < examples_per_family:
-            group["example_reaction_ids"].append(template["reaction_id"])
     for group in grouped.values():
         if not group["description"] or not group["query_hints"]:
             raise ValueError(
-                f"Reaction library {library!r}, family {group['family']!r}: "
+                f"Reaction family {group['family']!r}: "
                 "missing family_metadata.description or family_metadata.search_terms. "
                 "Import the bundled catalog with `synclaw ingest-reactions --db <path>` and drop unused "
                 "libraries with `synclaw db remove-reactions <name> --db <path>`, "
@@ -1429,8 +1389,7 @@ def reaction_template_library_overview(
         key=lambda item: (-int(item["count"]), str(item["family"])),
     )
     return {
-        "library": library,
-        "template_count": len(rows),
+        "template_count": len(templates),
         "families": families[: max(1, int(max_families))],
         "family_count": len(grouped),
         "notable_templates": _notable_reaction_templates(

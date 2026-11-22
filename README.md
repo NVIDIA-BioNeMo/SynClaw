@@ -156,7 +156,7 @@ planning runs only across stocks built the same way.
 
 ## Reaction Templates
 
-The default library is the union of four bundled sources: SynFormer, PaRoutes, the Open Reaction
+The bundled catalog is the union of four sources: SynFormer, PaRoutes, the Open Reaction
 Database (ORD) and NVIDIA. It holds **501 unique reactions** (114, 176, 203 and 8), and no SMARTS
 appears in more than one source. The `nvidia` templates are generic ones written at NVIDIA and
 curated by chemists. See the [catalog README](data/reaction_templates/README.md) for composition,
@@ -164,17 +164,20 @@ template IDs, attribution and the provenance recorded for each template.
 
 `synclaw ingest-reactions --db var/synclaw.sqlite` installs the bundled catalog. It replaces each
 bundled library in one transaction and leaves building blocks and search indexes alone. Model runs
-and the MCP server refuse a database whose bundled libraries are missing or no longer match this
-version's catalog, and print the command that fixes it. To use your own templates, run
+and the MCP server refuse a database whose bundled libraries no longer match this version's
+catalog, and print the command that fixes it. To use your own templates, run
 `ingest-reactions <file> --library <name> [--annotations <file>]`, which replaces that library.
-Remove one with `synclaw db remove-reactions <name> --db <path>`.
 
-Use e.g. `--reaction-library synformer ord` to select only those two sources. Libraries left out
-are excluded from search and from the family overview even if they are in the database, and the
-selection is a hard boundary: lookup, forward and reverse simulation, and pathway submission
-reject template IDs outside it. All four sources are selected by default.
+Every template in the database is available to the tools. To run with fewer sources, remove the
+others, e.g. `synclaw db remove-reactions paroutes nvidia --db <path>` keeps SynFormer and ORD.
 
-Each template is an executable reaction SMARTS, stored by `(reaction_id, library)`, plus the
+Each import renumbers every template in the database `R001` to `RN`, in an order set by a hash of
+its SMARTS, so IDs carry no library name and neighbouring IDs come from mixed sources. The ID a
+source file uses (e.g. `synformer:R044`) is kept in the template's metadata and never reaches the
+model or MCP clients. IDs therefore belong to one database: importing or removing a library
+renumbers them.
+
+Each template is an executable reaction SMARTS plus the
 natural-language fields the model searches: name, description, reaction family, search terms and
 reactant roles. Bundled sources carry these inline; family descriptions come from
 `data/reaction_templates/families.json`. Raw TXT imports get neutral names and are searchable
@@ -342,7 +345,6 @@ uv run synclaw tool search-building-blocks 'CCO' --limit 5 \
   --db var/synclaw.sqlite
 
 uv run synclaw tool search-reaction-templates 'amide formation' \
-  --library synformer \
   --db var/synclaw.sqlite
 
 uv run synclaw tool similarity \
@@ -353,20 +355,21 @@ uv run synclaw tool mces \
   'CCOc1ccccc1' \
   'CCNc1ccccc1'
 
+# R329 and R401 are SynFormer's R036 and R009 in a database holding all four bundled sources.
 uv run synclaw tool simulate-reaction \
-  --reaction-id synformer:R036 \
+  --reaction-id R329 \
   --reactants-json '["Nc1nccc2occc12","N#CC1CC12CNC2"]' \
   --product-smiles 'N#CC1CC12CN(C(=O)Nc1nccc3occc13)C2' \
   --db var/synclaw.sqlite
 
 uv run synclaw tool simulate-reverse-reaction \
-  --reaction-id synformer:R009 \
+  --reaction-id R401 \
   --product-smiles 'NC=O' \
   --db var/synclaw.sqlite
 
 uv run synclaw tool submit-pathway \
   --target-smiles 'N#CC1CC12CN(C(=O)Nc1nccc3occc13)C2' \
-  --steps-json '[{"reaction_id":"synformer:R036","reactants":["Nc1nccc2occc12","N#CC1CC12CNC2"],"product_smiles":"N#CC1CC12CN(C(=O)Nc1nccc3occc13)C2"}]' \
+  --steps-json '[{"reaction_id":"R329","reactants":["Nc1nccc2occc12","N#CC1CC12CNC2"],"product_smiles":"N#CC1CC12CN(C(=O)Nc1nccc3occc13)C2"}]' \
   --pathway-text 'Use the urea-forming template to couple the heteroaryl amine and bicyclic amine.' \
   --db var/synclaw.sqlite
 ```
@@ -424,7 +427,6 @@ context warnings. A task's own budgets override the matching options below.
 | `--hide-target-building-block` | Treats the target as out of stock, to benchmark exact-match synthesis without the shortcut of buying it. Every building block scored as the target, including its tautomers and isomers of stereo it leaves open, is hidden from search, reverse-step grounding and submission. The model is not told. Other analogues, including stereoisomers that conflict with stereo the target specifies, can still be bought and are scored by similarity. |
 | `--hide-building-block-id ID` | Hides a catalog BB ID the same way. Repeatable, combines with target hiding, and IDs must exist in the database. |
 | `--hide-building-block-similarity CUTOFF` | Also hides every stock entry whose constitutional Morgan/Tanimoto similarity to the target is at or above the cutoff (0 to 1). Implies target hiding. |
-| `--reaction-library` | Restricts the template libraries the tools can use; see [Reaction Templates](#reaction-templates). |
 | `--summary-output` | Writes an evaluated CSV row after the run. |
 
 The trace records hidden building-block IDs, and summaries report `target_hidden_from_stock` and

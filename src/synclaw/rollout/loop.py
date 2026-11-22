@@ -13,7 +13,6 @@ from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any, Protocol
 
-from synclaw.core.libraries import LibrarySelection
 from synclaw.rollout.budget import (
     BudgetFeedbackState,
     BudgetProvider,
@@ -22,7 +21,6 @@ from synclaw.rollout.budget import (
     with_harness_feedback,
 )
 from synclaw.rollout.policy import (
-    DEFAULT_REACTION_LIBRARY,
     PreparedToolCall,
     RolloutPolicyConfig,
     RolloutPolicyState,
@@ -123,14 +121,8 @@ class ToolExecutor(Protocol):
 class LocalToolExecutor:
     """Execute normalized calls through BioNeMo-SynClaw's in-process synthesis tools."""
 
-    def __init__(
-        self,
-        tools: Any,
-        *,
-        reaction_library: LibrarySelection = DEFAULT_REACTION_LIBRARY,
-    ) -> None:
+    def __init__(self, tools: Any) -> None:
         self.tools = tools
-        self.reaction_library = reaction_library
 
     async def execute(
         self,
@@ -155,7 +147,6 @@ class LocalToolExecutor:
                 self.tools,
                 call.name,
                 call.dispatch_arguments,
-                reaction_library=self.reaction_library,
                 target_smiles=target_smiles,
             ),
             duration_seconds=time.perf_counter() - started_at,
@@ -168,7 +159,6 @@ def call_local_tool(
     name: str,
     arguments: dict[str, Any],
     *,
-    reaction_library: LibrarySelection = DEFAULT_REACTION_LIBRARY,
     target_smiles: str | None = None,
 ) -> dict[str, Any]:
     """Validate and dispatch one call to an allowlisted in-process tool."""
@@ -199,7 +189,6 @@ def call_local_tool(
                 reactant_smiles=_optional_str_list(arguments, "reactant_smiles", name),
                 product_smiles=_optional_str_or_str_list(arguments, "product_smiles", name),
                 limit=arguments["limit"],
-                library=reaction_library or None,
                 run_forward=arguments["run_forward"],
             )
         if name == "simulate_reaction":
