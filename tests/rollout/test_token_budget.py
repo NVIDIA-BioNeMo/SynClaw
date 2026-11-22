@@ -823,3 +823,13 @@ def test_each_request_is_clipped_and_recorded_before_it_is_sent(input_tokens, ex
     assert budget_summary_fields(result.state.events)["last_request_output_tokens"] == (
         expected or 0
     )
+
+
+def test_harness_feedback_on_a_tool_result_keeps_every_note_in_a_field():
+    from synclaw.rollout.budget import with_harness_feedback
+
+    messages = [{"role": "tool", "content": json.dumps({"valid": True})}]
+    for field in ("budget", "notice"):
+        once = with_harness_feedback(messages, "first", field=field)
+        twice = with_harness_feedback(once, "second", field=field)
+        assert json.loads(twice[-1]["content"]) == {"valid": True, field: "first\n\nsecond"}

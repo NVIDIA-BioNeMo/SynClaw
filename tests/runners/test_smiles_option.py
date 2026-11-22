@@ -9,7 +9,6 @@ import json
 import pytest
 
 from synclaw.core import db
-from synclaw.rollout import prompts
 from synclaw.runners import model_runner
 from synclaw.tasks.datasets import PROMPT_FINGERPRINT, build_adhoc_task
 
@@ -138,7 +137,7 @@ def test_run_sends_the_smiles_target_to_the_model(tmp_path, monkeypatch) -> None
         str(tmp_path / "trace.jsonl"),
     )
     monkeypatch.setattr(model_runner, "resolve_api_key", lambda *a, **k: "fixture-key")
-    monkeypatch.setattr(prompts, "validate_model_run_database", lambda *a, **k: None)
+    monkeypatch.setattr(db, "validate_model_run_database", lambda *a, **k: None)
     requests = []
 
     def fail_request(**kwargs):

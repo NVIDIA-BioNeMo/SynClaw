@@ -22,7 +22,7 @@ from synclaw.rollout.policy import (
     parse_arguments,
     response_or_chat_tool_choice,
 )
-from synclaw.rollout.prompts import build_initial_messages, validate_model_run_database
+from synclaw.rollout.prompts import build_initial_messages
 from synclaw.runners.model_runner import (
     _HostedTransport,
     add_arguments,
@@ -893,7 +893,7 @@ class ImportAndEvalTests(unittest.TestCase):
             db.init_db(db_path)
 
             with self.assertRaisesRegex(RuntimeError, "Model-run database is not ready"):
-                validate_model_run_database(db_path)
+                db.validate_model_run_database(db_path)
 
     def test_model_runner_rejects_populated_unprepared_database_with_rebuild_command(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -909,7 +909,7 @@ class ImportAndEvalTests(unittest.TestCase):
                 RuntimeError,
                 rf"synclaw db prepare-search --db {db_path}",
             ):
-                validate_model_run_database(db_path)
+                db.validate_model_run_database(db_path)
 
     def test_trace_metrics_count_tool_calls_once_and_invalid_submissions(self):
         events = [

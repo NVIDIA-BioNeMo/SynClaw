@@ -1392,3 +1392,22 @@ def _with_match_metadata(
             "the returned raw or canonical SMILES is accepted by submit_pathway."
         )
     return row
+
+
+def validate_model_run_database(db_path: str | Path) -> None:
+    """Raise unless the database has building blocks, a prepared search index and current templates."""
+
+    with session(db_path) as conn:
+        building_blocks = conn.execute("SELECT COUNT(*) FROM building_blocks").fetchone()[0]
+        reaction_templates = conn.execute("SELECT COUNT(*) FROM reaction_templates").fetchone()[0]
+    if building_blocks <= 0 or reaction_templates <= 0:
+        raise RuntimeError(
+            f"Model-run database is not ready: {db_path} has "
+            f"{building_blocks} building block(s) and {reaction_templates} reaction template(s). "
+            "Run setup/ingestion first or pass --db pointing to a populated database."
+        )
+    require_prepared_building_block_search(db_path)
+    with session(db_path) as conn:
+        require_reaction_templates(conn)
+        # Fail once here rather than at the first query-less template search.
+        reaction_template_library_overview(conn)

@@ -19,7 +19,6 @@ from synclaw.core import db, libraries
 from synclaw.core.libraries import normalize_libraries
 from synclaw.core.reactions import ingest_reaction_libraries, ingest_reaction_templates
 from synclaw.rollout.loop import call_local_tool
-from synclaw.rollout.prompts import validate_model_run_database
 from synclaw.tools.synthesis import SynthesisTools
 
 ASSETS = paths.DATA_DIR / "reaction_templates"
@@ -146,10 +145,10 @@ def test_raw_synformer_rows_require_explicit_annotated_import(tmp_path):
     with db.session(database) as conn:
         assert db.get_reaction_template(conn, "R001")["reaction_family"] == ""
     with pytest.raises(ValueError, match="missing family_metadata.*synclaw ingest-reactions --db"):
-        validate_model_run_database(database)
+        db.validate_model_run_database(database)
 
     ingest_reaction_libraries(database)
-    validate_model_run_database(database)
+    db.validate_model_run_database(database)
     with db.session(database) as conn:
         row = db.get_reaction_template_by_smarts(conn, template["smarts"])
     assert row["reaction_family"] == template["family"]
@@ -286,7 +285,7 @@ def test_lean_search_snapshot_keeps_library_records(catalog_db, tmp_path):
     db.ingest_building_blocks(blocks, catalog_db)
     lean = tmp_path / "lean.sqlite"
     db.prepare_building_block_search(catalog_db, output_path=lean)
-    validate_model_run_database(lean)
+    db.validate_model_run_database(lean)
     with db.session(lean) as conn:
         assert set(db.reaction_library_catalog(conn)) == set(libraries_json()["sources"])
 

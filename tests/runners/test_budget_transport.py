@@ -9,7 +9,6 @@ import json
 import pytest
 
 from synclaw.core import db
-from synclaw.rollout import prompts
 from synclaw.rollout.budget import (
     BudgetFeedbackState,
     ContextBudgetSnapshot,
@@ -669,7 +668,7 @@ def test_hosted_initial_budget_is_system_content_and_resume_preserves_it(
         argv.append("--no-budget-feedback")
     args = parser.parse_args(argv)
     monkeypatch.setattr(model_runner, "resolve_api_key", lambda *args, **kwargs: "fixture-key")
-    monkeypatch.setattr(prompts, "validate_model_run_database", lambda *args, **kwargs: None)
+    monkeypatch.setattr(db, "validate_model_run_database", lambda *args, **kwargs: None)
     requests = []
 
     def fail_request(**kwargs):
@@ -751,7 +750,7 @@ def test_task_budgets_set_the_prompt_request_and_checkpoint(tmp_path, monkeypatc
         ]
     )
     monkeypatch.setattr(model_runner, "resolve_api_key", lambda *args, **kwargs: "fixture-key")
-    monkeypatch.setattr(prompts, "validate_model_run_database", lambda *args, **kwargs: None)
+    monkeypatch.setattr(db, "validate_model_run_database", lambda *args, **kwargs: None)
     requests = []
 
     def fail_request(**kwargs):

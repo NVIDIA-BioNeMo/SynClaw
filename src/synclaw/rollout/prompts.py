@@ -1,14 +1,12 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Canonical prompts and task preparation for every BioNeMo-SynClaw rollout transport."""
+"""Canonical prompts for every BioNeMo-SynClaw rollout transport."""
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
-from synclaw.core import db
 from synclaw.rollout.budget import limit_sentences
 from synclaw.rollout.policy import RolloutPolicyConfig
 from synclaw.tasks.datasets import PROMPT_FINGERPRINT
@@ -63,25 +61,7 @@ def build_initial_messages(
     ]
 
 
-def validate_model_run_database(db_path: str | Path) -> None:
-    with db.session(db_path) as conn:
-        building_blocks = conn.execute("SELECT COUNT(*) FROM building_blocks").fetchone()[0]
-        reaction_templates = conn.execute("SELECT COUNT(*) FROM reaction_templates").fetchone()[0]
-    if building_blocks <= 0 or reaction_templates <= 0:
-        raise RuntimeError(
-            f"Model-run database is not ready: {db_path} has "
-            f"{building_blocks} building block(s) and {reaction_templates} reaction template(s). "
-            "Run setup/ingestion first or pass --db pointing to a populated database."
-        )
-    db.require_prepared_building_block_search(db_path)
-    with db.session(db_path) as conn:
-        db.require_reaction_templates(conn)
-        # Fail once here rather than at the first query-less template search.
-        db.reaction_template_library_overview(conn)
-
-
 __all__ = [
     "build_initial_messages",
     "require_current_prompt_text",
-    "validate_model_run_database",
 ]
