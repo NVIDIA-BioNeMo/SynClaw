@@ -12,6 +12,7 @@ import re
 import time
 import urllib.error
 import urllib.request
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -171,7 +172,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--max-turns", type=_positive_int, default=policy.DEFAULT_MAX_TURNS)
     parser.add_argument(
         "--max-tool-calls",
-        type=int,
+        type=_non_negative_int,
         default=policy.DEFAULT_MAX_TOOL_CALLS,
         help=(
             "Soft total tool-call budget; when reached, request one final submit_pathway turn "
@@ -180,7 +181,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--turn-warning-remaining",
-        type=int,
+        type=_non_negative_int,
         default=policy.DEFAULT_TURN_WARNING_REMAINING,
         help=(
             "Warn the model when this many assistant turns remain, before the final turn's own "
@@ -190,7 +191,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--same-pathway-finish-after",
-        type=int,
+        type=_non_negative_int,
         default=policy.DEFAULT_SAME_PATHWAY_FINISH_AFTER,
         help=(
             "After this many consecutive accepted submit_pathway calls with the same route, "
@@ -253,10 +254,10 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         type=int,
         help="Optional model sampling seed for reproducible requests when supported",
     )
-    parser.add_argument("--retries", type=int, default=3)
+    parser.add_argument("--retries", type=_non_negative_int, default=3)
     parser.add_argument(
         "--request-timeout",
-        type=float,
+        type=_positive_float,
         default=120.0,
         help="Per-chat-completion request timeout in seconds",
     )
@@ -371,7 +372,6 @@ def run_model_from_args(args: argparse.Namespace) -> dict[str, Any]:
         else None
     )
 
-    budget_checkpoint: dict[str, Any] = {}
     try:
         policy_config = policy.RolloutPolicyConfig(
             max_turns=args.max_turns,
@@ -399,81 +399,30 @@ def run_model_from_args(args: argparse.Namespace) -> dict[str, Any]:
     except ValueError as exc:
         raise RuntimeError(f"Task {task['task_id']!r}: {exc}") from exc
     if resume_checkpoint_path is not None and resume_checkpoint_path.exists():
-        checkpoint = load_checkpoint(resume_checkpoint_path)
-        budget_checkpoint = checkpoint
-        budget_feedback = BudgetFeedbackState.from_checkpoint(
-            checkpoint.get("budget_feedback_state")
-        )
-        if not checkpoint_matches_run(checkpoint, args, task, policy_config):
-            raise RuntimeError(
-                f"Checkpoint {resume_checkpoint_path} does not match this model/provider/task run"
-            )
+        state = _restored_run_state(resume_checkpoint_path, args, task, policy_config, trace_path)
         checkpoint_path = resume_checkpoint_path
-        checkpoint_trace_path = Path(str(checkpoint.get("trace_path") or trace_path))
-        if not checkpoint_trace_path.exists():
-            raise RuntimeError(
-                f"Checkpoint {resume_checkpoint_path} expects trace {checkpoint_trace_path}, which does not exist"
-            )
-        trace_events = list(db.iter_jsonl(checkpoint_trace_path))
-        messages = checkpoint.get("messages") or []
-        responses_pending_input = checkpoint.get("responses_pending_input") or []
-        responses_input_history = checkpoint.get("responses_input_history") or []
-        anthropic_system = normalize_anthropic_system(checkpoint.get("anthropic_system"))
-        anthropic_messages = checkpoint.get("anthropic_messages") or []
-        anthropic_tool_results = checkpoint.get("anthropic_tool_results") or []
-        if (
-            not isinstance(messages, list)
-            or not isinstance(responses_pending_input, list)
-            or not isinstance(responses_input_history, list)
-            or not isinstance(anthropic_system, list)
-            or not isinstance(anthropic_messages, list)
-            or not isinstance(anthropic_tool_results, list)
-        ):
-            raise RuntimeError(
-                f"Checkpoint conversation state is malformed: {resume_checkpoint_path}"
-            )
-        responses_previous_id = checkpoint.get("responses_previous_id")
-        policy_state = policy.RolloutPolicyState.from_checkpoint(checkpoint)
-        start_turn_index = int(checkpoint.get("next_turn_index") or 0)
-        session_started_at = float(checkpoint.get("session_started_at") or session_started_at)
-        session_started_monotonic = time.monotonic() - float(
-            checkpoint.get("runtime_seconds") or 0.0
-        )
     else:
-        trace_events: list[dict[str, Any]] = []
-        messages = prompts.build_initial_messages(task=task, config=policy_config)
-        budget_feedback = initialize_budget_feedback(policy_config)
-        responses_previous_id: str | None = None
-        responses_pending_input: list[dict[str, Any]] = [dict(item) for item in messages]
-        responses_input_history: list[dict[str, Any]] = [dict(item) for item in messages]
-        anthropic_system, anthropic_messages = build_anthropic_initial_state(messages)
-        anthropic_tool_results: list[dict[str, Any]] = []
-        policy_state = policy.RolloutPolicyState()
-        start_turn_index = 0
+        state = _fresh_run_state(task, policy_config, session_started_at, session_started_monotonic)
+    trace_events = state.trace_events
+    trace = _TraceFile(trace_path, trace_events, on_disk=state.trace_on_disk)
 
     transport = _HostedTransport(
         args=args,
         config=policy_config,
         api_key=api_key,
-        responses_previous_id=responses_previous_id,
-        responses_pending_input=responses_pending_input,
-        responses_input_history=responses_input_history,
-        anthropic_system=anthropic_system,
-        anthropic_messages=anthropic_messages,
-        anthropic_tool_results=anthropic_tool_results,
         chat_tool_schemas=chat_tool_schemas,
         responses_tool_schemas=responses_tool_schemas,
         messages_tool_schemas=messages_tool_schemas,
-        budget_estimator=budget_checkpoint.get("token_budget_estimator"),
+        **state.transport_state,
     )
     rollout_state = RolloutState(
-        messages=messages,
+        messages=state.messages,
         events=trace_events,
-        policy=policy_state,
-        assistant_turns=sum(message.get("role") == "assistant" for message in messages),
-        budget_feedback=budget_feedback,
+        policy=state.policy_state,
+        assistant_turns=sum(message.get("role") == "assistant" for message in state.messages),
+        budget_feedback=state.budget_feedback,
     )
-    checkpoint_next_turn_index = start_turn_index
+    checkpoint_next_turn_index = state.start_turn_index
 
     def checkpoint_payload(next_turn_index: int) -> dict[str, Any]:
         return {
@@ -499,45 +448,47 @@ def run_model_from_args(args: argparse.Namespace) -> dict[str, Any]:
             "toxicity_watchlist": str(tools.screen.config.watchlist.resolve()),
             "toxicity_threshold": tools.screen.config.threshold,
             "trace_path": str(trace_path),
-            "session_started_at": session_started_at,
-            "runtime_seconds": time.monotonic() - session_started_monotonic,
+            "trace_event_count": len(trace_events),
+            "session_started_at": state.session_started_at,
+            "runtime_seconds": time.monotonic() - state.session_started_monotonic,
             "next_turn_index": next_turn_index,
-            "messages": messages,
+            "messages": state.messages,
             **transport.checkpoint_fields(),
-            **policy_state.checkpoint_fields(),
+            **state.policy_state.checkpoint_fields(),
         }
 
     def persist_state(next_turn_index: int | None = None) -> None:
         nonlocal checkpoint_next_turn_index
         if next_turn_index is not None:
             checkpoint_next_turn_index = next_turn_index
-        write_trace(trace_path, trace_events)
+        trace.flush()
         if checkpoint_path is not None:
             write_checkpoint(checkpoint_path, checkpoint_payload(checkpoint_next_turn_index))
 
     def finish_run(submission: dict[str, Any] | None) -> dict[str, Any]:
-        runtime_seconds = time.monotonic() - session_started_monotonic
+        runtime_seconds = time.monotonic() - state.session_started_monotonic
         append_run_summary_event(
             trace_events,
             args=args,
             config=policy_config,
             task=task,
             submission=submission,
-            session_started_at=session_started_at,
+            session_started_at=state.session_started_at,
             runtime_seconds=runtime_seconds,
-            invalid_submissions=policy_state.invalid_submissions,
-            low_similarity_submissions=policy_state.low_similarity_submissions,
+            invalid_submissions=state.policy_state.invalid_submissions,
+            low_similarity_submissions=state.policy_state.low_similarity_submissions,
         )
-        write_trace(trace_path, trace_events)
+        trace.flush()
         delete_checkpoint(checkpoint_path)
         return summarize_run(
             args,
             policy_config,
             task,
             trace_path,
+            trace_events,
             submission,
-            invalid_submissions=policy_state.invalid_submissions,
-            low_similarity_submissions=policy_state.low_similarity_submissions,
+            invalid_submissions=state.policy_state.invalid_submissions,
+            low_similarity_submissions=state.policy_state.low_similarity_submissions,
             runtime_seconds=runtime_seconds,
         )
 
@@ -549,7 +500,7 @@ def run_model_from_args(args: argparse.Namespace) -> dict[str, Any]:
                 "target_smiles": task["target_smiles"],
                 "payload": dict(message),
             }
-            for message in messages
+            for message in state.messages
         )
         if _hide_target(args) or _hidden_ids(args):
             trace_events.insert(
@@ -565,7 +516,7 @@ def run_model_from_args(args: argparse.Namespace) -> dict[str, Any]:
             trace_events.insert(0, target_screen_event)
         persist_state(0)
     else:
-        persist_state(start_turn_index)
+        persist_state(state.start_turn_index)
 
     try:
         result = asyncio.run(
@@ -573,7 +524,7 @@ def run_model_from_args(args: argparse.Namespace) -> dict[str, Any]:
                 task=RolloutTask(
                     task_id=str(task["task_id"]),
                     target_smiles=str(task["target_smiles"]),
-                    initial_messages=tuple(messages[:2]),
+                    initial_messages=tuple(state.messages[:2]),
                 ),
                 config=policy_config,
                 transport=transport,
@@ -581,13 +532,13 @@ def run_model_from_args(args: argparse.Namespace) -> dict[str, Any]:
                 tool_executor=LocalToolExecutor(tools),
                 tool_schemas=transport.tool_schemas,
                 state=rollout_state,
-                start_turn_index=start_turn_index,
+                start_turn_index=state.start_turn_index,
                 event_callback=lambda _event, turn: persist_state(turn),
             )
         )
         return finish_run(result.submission)
     except RuntimeError as exc:
-        runtime_seconds = time.monotonic() - session_started_monotonic
+        runtime_seconds = time.monotonic() - state.session_started_monotonic
         trace_events.append(
             {
                 "event_type": "run_error",
@@ -605,6 +556,170 @@ def run_model_from_args(args: argparse.Namespace) -> dict[str, Any]:
         if checkpoint_path is not None:
             raise RuntimeError(f"{exc} Checkpoint saved to {checkpoint_path}") from exc
         raise
+
+
+@dataclass(slots=True)
+class _RunState:
+    """What a run starts from: a fresh conversation or one restored from a checkpoint."""
+
+    messages: list[dict[str, Any]]
+    trace_events: list[dict[str, Any]]
+    policy_state: policy.RolloutPolicyState
+    budget_feedback: BudgetFeedbackState
+    start_turn_index: int
+    session_started_at: float
+    session_started_monotonic: float
+    # The conversation state each API mode keeps, as ``_HostedTransport`` keyword arguments.
+    transport_state: dict[str, Any]
+    # How many leading trace events the trace file already holds; None means rewrite it.
+    trace_on_disk: int | None = None
+
+
+def _fresh_run_state(
+    task: dict[str, Any],
+    config: policy.RolloutPolicyConfig,
+    session_started_at: float,
+    session_started_monotonic: float,
+) -> _RunState:
+    messages = prompts.build_initial_messages(task=task, config=config)
+    anthropic_system, anthropic_messages = build_anthropic_initial_state(messages)
+    return _RunState(
+        messages=messages,
+        trace_events=[],
+        policy_state=policy.RolloutPolicyState(),
+        budget_feedback=initialize_budget_feedback(config),
+        start_turn_index=0,
+        session_started_at=session_started_at,
+        session_started_monotonic=session_started_monotonic,
+        transport_state={
+            "responses_previous_id": None,
+            "responses_pending_input": [dict(item) for item in messages],
+            "responses_input_history": [dict(item) for item in messages],
+            "anthropic_system": anthropic_system,
+            "anthropic_messages": anthropic_messages,
+            "anthropic_tool_results": [],
+            "budget_estimator": None,
+        },
+    )
+
+
+def _restored_run_state(
+    checkpoint_path: Path,
+    args: argparse.Namespace,
+    task: dict[str, Any],
+    config: policy.RolloutPolicyConfig,
+    trace_path: Path,
+) -> _RunState:
+    """Restore a run from its checkpoint and the trace the checkpoint recorded.
+
+    Raises:
+        RuntimeError: The checkpoint is for a different run, or its trace or conversation
+            state is missing or malformed.
+    """
+
+    checkpoint = load_checkpoint(checkpoint_path)
+    if not checkpoint_matches_run(checkpoint, args, task, config):
+        raise RuntimeError(
+            f"Checkpoint {checkpoint_path} does not match this model/provider/task run"
+        )
+    recorded_trace_path = Path(str(checkpoint.get("trace_path") or trace_path))
+    if not recorded_trace_path.exists():
+        raise RuntimeError(
+            f"Checkpoint {checkpoint_path} expects trace {recorded_trace_path}, which does not exist"
+        )
+    trace_events, intact = _read_trace(recorded_trace_path)
+    covered = checkpoint.get("trace_event_count")
+    if isinstance(covered, int) and 0 <= covered < len(trace_events):
+        # A crash can leave the trace ahead of the checkpoint; the resumed turn will redo those.
+        trace_events, intact = trace_events[:covered], False
+    messages = checkpoint.get("messages") or []
+    pending_input = checkpoint.get("responses_pending_input") or []
+    input_history = checkpoint.get("responses_input_history") or []
+    anthropic_system = normalize_anthropic_system(checkpoint.get("anthropic_system"))
+    anthropic_messages = checkpoint.get("anthropic_messages") or []
+    anthropic_tool_results = checkpoint.get("anthropic_tool_results") or []
+    if not all(
+        isinstance(value, list)
+        for value in (
+            messages,
+            pending_input,
+            input_history,
+            anthropic_system,
+            anthropic_messages,
+            anthropic_tool_results,
+        )
+    ):
+        raise RuntimeError(f"Checkpoint conversation state is malformed: {checkpoint_path}")
+    return _RunState(
+        messages=messages,
+        trace_events=trace_events,
+        policy_state=policy.RolloutPolicyState.from_checkpoint(checkpoint),
+        budget_feedback=BudgetFeedbackState.from_checkpoint(
+            checkpoint.get("budget_feedback_state")
+        ),
+        start_turn_index=int(checkpoint.get("next_turn_index") or 0),
+        session_started_at=float(checkpoint.get("session_started_at") or time.time()),
+        session_started_monotonic=time.monotonic()
+        - float(checkpoint.get("runtime_seconds") or 0.0),
+        transport_state={
+            "responses_previous_id": checkpoint.get("responses_previous_id"),
+            "responses_pending_input": pending_input,
+            "responses_input_history": input_history,
+            "anthropic_system": anthropic_system,
+            "anthropic_messages": anthropic_messages,
+            "anthropic_tool_results": anthropic_tool_results,
+            "budget_estimator": checkpoint.get("token_budget_estimator"),
+        },
+        trace_on_disk=(
+            len(trace_events)
+            if intact and recorded_trace_path.resolve() == trace_path.resolve()
+            else None
+        ),
+    )
+
+
+def _read_trace(path: Path) -> tuple[list[dict[str, Any]], bool]:
+    """Read a trace file; the flag is False if its last line was cut short by a crash.
+
+    Raises:
+        RuntimeError: A line before the last one is not valid JSON.
+    """
+
+    text = path.read_text(encoding="utf-8")
+    lines = text.splitlines()
+    events: list[dict[str, Any]] = []
+    for number, line in enumerate(lines, start=1):
+        if not line.strip():
+            continue
+        try:
+            events.append(json.loads(line))
+        except json.JSONDecodeError as exc:
+            if number == len(lines):
+                return events, False
+            raise RuntimeError(f"Trace {path} is corrupt at line {number}") from exc
+    return events, text.endswith("\n") or not text
+
+
+class _TraceFile:
+    """The run's trace on disk, appended to as events arrive instead of rewritten each time."""
+
+    def __init__(
+        self, path: Path, events: list[dict[str, Any]], *, on_disk: int | None = None
+    ) -> None:
+        self.path = path
+        self.events = events
+        self._on_disk = on_disk
+
+    def flush(self) -> None:
+        """Write the events not yet on disk; the first flush of a new trace replaces the file."""
+
+        if self._on_disk is None:
+            write_trace(self.path, self.events)
+        elif self._on_disk < len(self.events):
+            with self.path.open("a", encoding="utf-8") as handle:
+                for event in self.events[self._on_disk :]:
+                    handle.write(json.dumps(event, sort_keys=True) + "\n")
+        self._on_disk = len(self.events)
 
 
 class _HostedTransport:
@@ -895,6 +1010,20 @@ def _positive_int(value: str) -> int:
     result = int(value)
     if result <= 0:
         raise argparse.ArgumentTypeError("must be a positive integer")
+    return result
+
+
+def _non_negative_int(value: str) -> int:
+    result = int(value)
+    if result < 0:
+        raise argparse.ArgumentTypeError("must be a non-negative integer")
+    return result
+
+
+def _positive_float(value: str) -> float:
+    result = float(value)
+    if result <= 0:
+        raise argparse.ArgumentTypeError("must be a positive number")
     return result
 
 
@@ -1504,32 +1633,74 @@ def refuse_target(
     }
 
 
+def _run_summary_fields(
+    args: argparse.Namespace,
+    config: policy.RolloutPolicyConfig,
+    task: dict[str, Any],
+    trace_events: list[dict[str, Any]],
+    submission: dict[str, Any] | None,
+    *,
+    invalid_submissions: int,
+    low_similarity_submissions: int,
+    runtime_seconds: float,
+) -> dict[str, Any]:
+    """The fields the trace's ``run_summary`` event and the returned summary share."""
+
+    return {
+        "model": args.model,
+        "provider": args.provider,
+        "api_mode": args.api_mode,
+        **policy.request_summary_fields(args, config),
+        "excluded_tools": sorted(config.excluded_tools),
+        **latest_response_metadata(trace_events),
+        "task_id": task["task_id"],
+        "runtime_seconds": runtime_seconds,
+        **policy.submission_summary_fields(submission, task["target_smiles"]),
+        "invalid_submissions": invalid_submissions,
+        "low_similarity_submissions": low_similarity_submissions,
+        **token_usage.aggregate_token_usage_from_events(trace_events),
+        **budget_summary_fields(trace_events),
+        **toxicity_summary(args, trace_events),
+    }
+
+
 def summarize_run(
     args: argparse.Namespace,
     config: policy.RolloutPolicyConfig,
     task: dict[str, Any],
     trace_path: Path,
+    trace_events: list[dict[str, Any]],
     submission: dict[str, Any] | None,
-    invalid_submissions: int = 0,
-    low_similarity_submissions: int = 0,
-    runtime_seconds: float | None = None,
+    *,
+    invalid_submissions: int,
+    low_similarity_submissions: int,
+    runtime_seconds: float,
 ) -> dict[str, Any]:
     """Build a run's summary; with ``--summary-output`` also write the evaluated summary CSV."""
 
-    summary = summarize(task, args.model, trace_path, submission)
-    summary["provider"] = args.provider
-    summary["api_mode"] = args.api_mode
-    summary["invalid_submissions"] = invalid_submissions
-    summary["low_similarity_submissions"] = low_similarity_submissions
-    summary["runtime_seconds"] = runtime_seconds
-    summary.update(policy.request_summary_fields(args, config))
-    summary["excluded_tools"] = sorted(config.excluded_tools)
-    trace_events = list(db.iter_jsonl(trace_path))
-    summary.update(latest_response_metadata(trace_events))
-    summary.update(token_usage.aggregate_token_usage_from_events(trace_events))
-    summary.update(budget_summary_fields(trace_events))
-    summary.update(hidden_target_summary_fields(trace_events))
-    summary.update(toxicity_summary(args, trace_events))
+    summary = {
+        **_run_summary_fields(
+            args,
+            config,
+            task,
+            trace_events,
+            submission,
+            invalid_submissions=invalid_submissions,
+            low_similarity_submissions=low_similarity_submissions,
+            runtime_seconds=runtime_seconds,
+        ),
+        "target_smiles": task["target_smiles"],
+        "trace": str(trace_path),
+        "reaction_valid": submission.get("reaction_validation") == "valid" if submission else None,
+        "issues": submission.get("issues") if submission else None,
+        "direct_building_block_ref": (
+            submission.get("direct_building_block_ref") if submission else None
+        ),
+        "referenced_building_block_ids": (
+            submission.get("referenced_building_block_ids") if submission else None
+        ),
+        **hidden_target_summary_fields(trace_events),
+    }
     summary_output = getattr(args, "summary_output", None)
     if summary_output:
         from synclaw.evaluation.evaluate import evaluate_trace_file, write_summary_csv
@@ -1571,29 +1742,23 @@ def append_run_summary_event(
 ) -> None:
     """Append the closing ``run_summary`` event to the trace."""
 
-    usage = token_usage.aggregate_token_usage_from_events(trace_events)
-    response_metadata = latest_response_metadata(trace_events)
     trace_events.append(
         {
             "event_type": "run_summary",
             "target_smiles": task["target_smiles"],
             "payload": {
-                "model": args.model,
-                "provider": args.provider,
-                "api_mode": args.api_mode,
-                **policy.request_summary_fields(args, config),
-                "excluded_tools": sorted(config.excluded_tools),
-                **response_metadata,
-                "task_id": task["task_id"],
-                "runtime_seconds": runtime_seconds,
+                **_run_summary_fields(
+                    args,
+                    config,
+                    task,
+                    trace_events,
+                    submission,
+                    invalid_submissions=invalid_submissions,
+                    low_similarity_submissions=low_similarity_submissions,
+                    runtime_seconds=runtime_seconds,
+                ),
                 "started_at_unix": session_started_at,
                 "completed_at_unix": session_started_at + runtime_seconds,
-                **policy.submission_summary_fields(submission, task["target_smiles"]),
-                "invalid_submissions": invalid_submissions,
-                "low_similarity_submissions": low_similarity_submissions,
-                **usage,
-                **budget_summary_fields(trace_events),
-                **toxicity_summary(args, trace_events),
             },
         }
     )
@@ -1614,33 +1779,6 @@ def latest_response_metadata(events: list[dict[str, Any]]) -> dict[str, Any]:
         if payload.get("system_fingerprint") is not None:
             result["system_fingerprint"] = payload["system_fingerprint"]
     return result
-
-
-def summarize(
-    task: dict[str, Any],
-    model: str,
-    trace_path: Path,
-    submission: dict[str, Any] | None,
-) -> dict[str, Any]:
-    """The submission-derived part of a run's summary."""
-
-    reaction_valid = submission.get("reaction_validation") == "valid" if submission else None
-    submission_fields = policy.submission_summary_fields(submission, task["target_smiles"])
-    return {
-        "model": model,
-        "task_id": task["task_id"],
-        "target_smiles": task["target_smiles"],
-        "trace": str(trace_path),
-        **submission_fields,
-        "reaction_valid": reaction_valid,
-        "issues": submission.get("issues") if submission else None,
-        "direct_building_block_ref": submission.get("direct_building_block_ref")
-        if submission
-        else None,
-        "referenced_building_block_ids": submission.get("referenced_building_block_ids")
-        if submission
-        else None,
-    }
 
 
 if __name__ == "__main__":
