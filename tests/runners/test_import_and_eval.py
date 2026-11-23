@@ -1028,19 +1028,27 @@ class ImportAndEvalTests(unittest.TestCase):
         tools = filter_chat_tool_schemas(set())
         forced = {"type": "function", "function": {"name": "submit_pathway"}}
         self.assertEqual(
-            submit_tool_choice(forced_submit_requested=True, has_submission=False, tools=tools),
+            submit_tool_choice(
+                forced_submit_requested=True, has_accepted_submission=False, tools=tools
+            ),
             forced,
         )
         self.assertEqual(
-            submit_tool_choice(forced_submit_requested=True, has_submission=True, tools=tools),
+            submit_tool_choice(
+                forced_submit_requested=True, has_accepted_submission=True, tools=tools
+            ),
             "auto",
         )
         self.assertEqual(
-            submit_tool_choice(forced_submit_requested=False, has_submission=False, tools=tools),
+            submit_tool_choice(
+                forced_submit_requested=False, has_accepted_submission=False, tools=tools
+            ),
             "auto",
         )
         self.assertEqual(
-            submit_tool_choice(forced_submit_requested=True, has_submission=False, tools=[]),
+            submit_tool_choice(
+                forced_submit_requested=True, has_accepted_submission=False, tools=[]
+            ),
             "auto",
         )
 

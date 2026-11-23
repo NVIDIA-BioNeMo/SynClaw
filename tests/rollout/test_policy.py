@@ -13,6 +13,7 @@ from synclaw.rollout.policy import (
     handle_tool_result,
     prepare_tool_call,
     submission_summary_fields,
+    submit_tool_choice,
     task_budget_config,
     turn_reminders,
 )
@@ -58,7 +59,6 @@ def test_policy_checkpoint_fields_round_trip() -> None:
     assert fields["consecutive_non_tool_turns_after_tools"] == 2
     assert fields["forced_submit_requested"] is True
     assert fields["last_submission"] == {"accepted": False}
-    assert state.has_submission is True
     assert fields["best_accepted_similarity"] == 0.75
 
 
@@ -172,7 +172,7 @@ def test_repair_reminders_name_no_optional_tool() -> None:
         "target, and verify "
     ) in low.repair
     assert invalid_state.invalid_submissions == 1
-    assert invalid_state.has_submission is True
+    assert invalid_state.has_accepted_submission is False
 
 
 def test_low_similarity_sequence_tracks_best_route_and_allows_finish_token() -> None:
@@ -574,3 +574,24 @@ def test_an_equally_unscored_later_submission_does_not_replace_the_best() -> Non
     assert not is_better_accepted_submission(False, None, False, None)
     assert is_better_accepted_submission(False, 0.4, False, None)
     assert not is_better_accepted_submission(False, None, False, 0.4)
+
+
+def test_forced_submit_stays_forced_after_a_rejected_submission() -> None:
+    config = _config(max_turns=5)
+    state = RolloutPolicyState()
+    handle_tool_result(
+        config,
+        state,
+        name="submit_pathway",
+        arguments={},
+        result={"accepted": False, "error_message": "bad"},
+        target_smiles="CCO",
+    )
+    assert turn_reminders(config, state, turn_index=4)
+    tools = [{"type": "function", "function": {"name": "submit_pathway"}}]
+    choice = submit_tool_choice(
+        forced_submit_requested=state.forced_submit_requested,
+        has_accepted_submission=state.has_accepted_submission,
+        tools=tools,
+    )
+    assert choice == {"type": "function", "function": {"name": "submit_pathway"}}

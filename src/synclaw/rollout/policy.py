@@ -288,8 +288,8 @@ class RolloutPolicyState:
         }
 
     @property
-    def has_submission(self) -> bool:
-        return self.last_submission is not None
+    def has_accepted_submission(self) -> bool:
+        return self.best_accepted_submission is not None
 
     def selected_submission(
         self,
@@ -670,14 +670,18 @@ def tool_limit_finish_reason(state: RolloutPolicyState) -> str:
 def submit_tool_choice(
     *,
     forced_submit_requested: bool,
-    has_submission: bool,
+    has_accepted_submission: bool,
     tools: list[dict[str, Any]],
 ) -> Any:
-    """The chat-style ``tool_choice``; Responses transports convert it before sending."""
+    """The chat-style ``tool_choice``; Responses transports convert it before sending.
+
+    Forces ``submit_pathway`` only while the model has no accepted route, so a rejected
+    submission does not let it answer in prose at the final turn.
+    """
 
     if (
         not forced_submit_requested
-        or has_submission
+        or has_accepted_submission
         or not tool_schema_contains_name(tools, "submit_pathway")
     ):
         return "auto"

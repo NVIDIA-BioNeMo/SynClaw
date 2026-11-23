@@ -407,7 +407,7 @@ async def run_rollout(
             )
         tool_choice = submit_tool_choice(
             forced_submit_requested=state.policy.forced_submit_requested,
-            has_submission=state.policy.has_submission,
+            has_accepted_submission=state.policy.has_accepted_submission,
             tools=list(tool_schemas),
         )
         # Clip and record each request's output cap before sending it, so a failed request keeps its budget.
