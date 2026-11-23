@@ -74,8 +74,16 @@ def test_task_set_selection_is_unchanged(tmp_path) -> None:
 def test_empty_taskset_is_an_error_not_the_default(tmp_path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
 
-    with pytest.raises(OSError):
+    with pytest.raises(RuntimeError, match="Cannot load the task"):
         model_runner.resolve_run_task(_args("--taskset", ""))
+
+
+def test_a_task_index_past_the_end_is_a_clean_error(tmp_path) -> None:
+    taskset = tmp_path / "tasks.jsonl"
+    taskset.write_text("")
+
+    with pytest.raises(RuntimeError, match="No task at index 3"):
+        model_runner.resolve_run_task(_args("--taskset", str(taskset), "--task-index", "3"))
 
 
 @pytest.mark.parametrize(

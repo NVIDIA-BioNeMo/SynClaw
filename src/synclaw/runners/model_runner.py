@@ -46,6 +46,8 @@ ANTHROPIC_VERSION = "2023-06-01"
 
 
 def attach_response_usage(message: dict[str, Any], response: dict[str, Any]) -> None:
+    """Copy a response's usage onto the message, with normalized counts and whether the output cap was hit."""
+
     usage = response.get("usage")
     if not isinstance(usage, dict):
         return
@@ -65,6 +67,8 @@ def attach_response_usage(message: dict[str, Any], response: dict[str, Any]) -> 
 
 
 def retry_delay_seconds(attempt: int, body: str = "", headers: Any = None) -> float:
+    """Seconds to wait before a retry: exponential backoff raised to the server's Retry-After (header, or "wait N seconds" in the body), capped at 120."""
+
     retry_after = None
     if headers is not None:
         try:
@@ -92,6 +96,8 @@ def _hidden_ids(args: argparse.Namespace) -> frozenset[int]:
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
+    """Add the run-model flags, including the shared rollout and toxicity flags, to ``parser``."""
+
     parser.add_argument(
         "--provider",
         choices=providers.provider_names(),
@@ -162,7 +168,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--prompt-version", help="Optional prompt or harness label stored in --summary-output"
     )
-    parser.add_argument("--max-turns", type=int, default=policy.DEFAULT_MAX_TURNS)
+    parser.add_argument("--max-turns", type=_positive_int, default=policy.DEFAULT_MAX_TURNS)
     parser.add_argument(
         "--max-tool-calls",
         type=int,
@@ -298,6 +304,8 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run one task from the command line and print its JSON summary; returns the exit status."""
+
     parser = argparse.ArgumentParser()
     add_arguments(parser)
     args = parser.parse_args(argv)
@@ -310,6 +318,17 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def run_model_from_args(args: argparse.Namespace) -> dict[str, Any]:
+    """Run one task against a hosted model and return its summary.
+
+    Resolves provider defaults, the task and the API key, then refuses a flagged target before any
+    model request. It resumes from a checkpoint when one is given or already exists, runs the
+    rollout, writes the trace, and removes the checkpoint on success. On a ``RuntimeError`` it
+    records a ``run_error`` event and keeps the checkpoint so the run can be resumed.
+
+    Raises:
+        RuntimeError: Bad settings, a missing key or endpoint, an unusable task, or a failed run.
+    """
+
     session_started_at = time.time()
     session_started_monotonic = time.monotonic()
     apply_provider_defaults(args)
@@ -353,23 +372,28 @@ def run_model_from_args(args: argparse.Namespace) -> dict[str, Any]:
     )
 
     budget_checkpoint: dict[str, Any] = {}
-    policy_config = policy.RolloutPolicyConfig(
-        max_turns=args.max_turns,
-        max_tool_calls=int(args.max_tool_calls or 0),
-        max_tokens=args.max_tokens,
-        max_model_len=getattr(args, "max_model_len", None),
-        context_safety_margin_fraction=getattr(
-            args, "context_safety_margin_fraction", policy.DEFAULT_CONTEXT_SAFETY_MARGIN_FRACTION
-        ),
-        budget_feedback=getattr(args, "budget_feedback", True),
-        stop_condition=getattr(args, "stop_condition", policy.DEFAULT_STOP_CONDITION),
-        turn_warning_remaining=args.turn_warning_remaining,
-        same_pathway_finish_after=int(args.same_pathway_finish_after or 0),
-        max_low_similarity_submissions=args.max_low_similarity_submissions,
-        excluded_tools=frozenset(excluded_tools),
-        context_warning_remaining_fraction=args.context_warning_remaining_fraction,
-        context_critical_remaining_fraction=args.context_critical_remaining_fraction,
-    )
+    try:
+        policy_config = policy.RolloutPolicyConfig(
+            max_turns=args.max_turns,
+            max_tool_calls=int(args.max_tool_calls or 0),
+            max_tokens=args.max_tokens,
+            max_model_len=getattr(args, "max_model_len", None),
+            context_safety_margin_fraction=getattr(
+                args,
+                "context_safety_margin_fraction",
+                policy.DEFAULT_CONTEXT_SAFETY_MARGIN_FRACTION,
+            ),
+            budget_feedback=getattr(args, "budget_feedback", True),
+            stop_condition=getattr(args, "stop_condition", policy.DEFAULT_STOP_CONDITION),
+            turn_warning_remaining=args.turn_warning_remaining,
+            same_pathway_finish_after=int(args.same_pathway_finish_after or 0),
+            max_low_similarity_submissions=args.max_low_similarity_submissions,
+            excluded_tools=frozenset(excluded_tools),
+            context_warning_remaining_fraction=args.context_warning_remaining_fraction,
+            context_critical_remaining_fraction=args.context_critical_remaining_fraction,
+        )
+    except ValueError as exc:
+        raise RuntimeError(str(exc)) from exc
     try:
         policy_config = policy.task_budget_config(task, policy_config)
     except ValueError as exc:
@@ -415,7 +439,6 @@ def run_model_from_args(args: argparse.Namespace) -> dict[str, Any]:
         session_started_monotonic = time.monotonic() - float(
             checkpoint.get("runtime_seconds") or 0.0
         )
-        write_trace(trace_path, trace_events)
     else:
         trace_events: list[dict[str, Any]] = []
         messages = prompts.build_initial_messages(task=task, config=policy_config)
@@ -492,12 +515,7 @@ def run_model_from_args(args: argparse.Namespace) -> dict[str, Any]:
         if checkpoint_path is not None:
             write_checkpoint(checkpoint_path, checkpoint_payload(checkpoint_next_turn_index))
 
-    def finish_run(
-        submission: dict[str, Any] | None,
-        submission_arguments: dict[str, Any] | None,
-        *,
-        reason: str,
-    ) -> dict[str, Any]:
+    def finish_run(submission: dict[str, Any] | None) -> dict[str, Any]:
         runtime_seconds = time.monotonic() - session_started_monotonic
         append_run_summary_event(
             trace_events,
@@ -567,11 +585,7 @@ def run_model_from_args(args: argparse.Namespace) -> dict[str, Any]:
                 event_callback=lambda _event, turn: persist_state(turn),
             )
         )
-        return finish_run(
-            result.submission,
-            result.submission_arguments,
-            reason=result.reason,
-        )
+        return finish_run(result.submission)
     except RuntimeError as exc:
         runtime_seconds = time.monotonic() - session_started_monotonic
         trace_events.append(
@@ -950,9 +964,13 @@ def resolve_run_task(args: argparse.Namespace) -> dict[str, Any]:
     task_index = getattr(args, "task_index", None)
     smiles = getattr(args, "smiles", None)
     if smiles is None:
-        return load_task(
-            DEFAULT_TASKSET if taskset is None else taskset, 0 if task_index is None else task_index
-        )
+        try:
+            return load_task(
+                DEFAULT_TASKSET if taskset is None else taskset,
+                0 if task_index is None else task_index,
+            )
+        except (OSError, ValueError) as exc:
+            raise RuntimeError(f"Cannot load the task: {exc}") from exc
     if taskset is not None or task_index is not None:
         raise RuntimeError("--smiles cannot be combined with --taskset or --task-index")
     try:
@@ -962,6 +980,13 @@ def resolve_run_task(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def load_task(path: str, index: int) -> dict[str, Any]:
+    """Return row ``index`` of a task-set JSONL file, checked against this build's prompt text.
+
+    Raises:
+        ValueError: The file has no such row.
+        RuntimeError: The task's prompt text predates this build.
+    """
+
     with Path(path).open("r", encoding="utf-8") as handle:
         for row_index, line in enumerate(handle):
             if row_index == index:
@@ -970,7 +995,44 @@ def load_task(path: str, index: int) -> dict[str, Any]:
 
 
 def resolve_task_db_path(db_arg: str | Path | None) -> Path:
+    """The ``--db`` path, or the default database path."""
+
     return Path(db_arg) if db_arg else paths.DEFAULT_DB_PATH
+
+
+def _post_json(
+    url: str,
+    payload: dict[str, Any],
+    headers: dict[str, str],
+    *,
+    api_name: str,
+    retries: int,
+    request_timeout: float,
+) -> dict[str, Any]:
+    """POST ``payload`` as JSON and return the decoded reply, retrying transient failures."""
+
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={**headers, "Content-Type": "application/json", "Accept": "application/json"},
+        method="POST",
+    )
+    for attempt in range(retries + 1):
+        try:
+            with urllib.request.urlopen(request, timeout=request_timeout) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="replace")
+            if exc.code in RETRYABLE_HTTP_CODES and attempt < retries:
+                time.sleep(retry_delay_seconds(attempt, body=body, headers=exc.headers))
+                continue
+            raise RuntimeError(f"{api_name} API HTTP {exc.code}: {body}") from exc
+        except (TimeoutError, urllib.error.URLError) as exc:
+            if attempt < retries:
+                time.sleep(retry_delay_seconds(attempt))
+                continue
+            raise RuntimeError(f"{api_name} API request timed out or failed: {exc}") from exc
+    raise RuntimeError(f"{api_name} API request failed after retries")
 
 
 def chat_completion(
@@ -990,6 +1052,8 @@ def chat_completion(
     tools: list[dict[str, Any]],
     auth_header: str | None = None,
 ) -> dict[str, Any]:
+    """Send one Chat Completions request and return the decoded reply."""
+
     payload = {
         "model": model,
         "messages": messages,
@@ -1005,35 +1069,19 @@ def chat_completion(
         payload["seed"] = sampling_seed
     if reasoning_effort:
         payload["reasoning_effort"] = reasoning_effort
-    request = urllib.request.Request(
+    return _post_json(
         f"{base_url.rstrip('/')}/chat/completions",
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            **providers.auth_headers(api_key, auth_header or "bearer"),
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        },
-        method="POST",
+        payload,
+        providers.auth_headers(api_key, auth_header or "bearer"),
+        api_name="Chat Completions",
+        retries=retries,
+        request_timeout=request_timeout,
     )
-    for attempt in range(retries + 1):
-        try:
-            with urllib.request.urlopen(request, timeout=request_timeout) as response:
-                return json.loads(response.read().decode("utf-8"))
-        except urllib.error.HTTPError as exc:
-            body = exc.read().decode("utf-8", errors="replace")
-            if exc.code in RETRYABLE_HTTP_CODES and attempt < retries:
-                time.sleep(retry_delay_seconds(attempt, body=body, headers=exc.headers))
-                continue
-            raise RuntimeError(f"Chat Completions API HTTP {exc.code}: {body}") from exc
-        except (TimeoutError, urllib.error.URLError) as exc:
-            if attempt < retries:
-                time.sleep(retry_delay_seconds(attempt))
-                continue
-            raise RuntimeError(f"Chat Completions API request timed out or failed: {exc}") from exc
-    raise RuntimeError("Chat Completions API request failed after retries")
 
 
 def anthropic_system_block(content: str) -> list[dict[str, Any]]:
+    """The system prompt as one cached Messages text block (an empty prompt gives no blocks)."""
+
     if not content:
         return []
     return [
@@ -1046,6 +1094,8 @@ def anthropic_system_block(content: str) -> list[dict[str, Any]]:
 
 
 def normalize_anthropic_system(system: Any) -> list[dict[str, Any]]:
+    """Accept a system prompt as a string or a list of blocks and return a list of blocks."""
+
     if isinstance(system, str):
         return anthropic_system_block(system)
     if isinstance(system, list):
@@ -1056,6 +1106,8 @@ def normalize_anthropic_system(system: Any) -> list[dict[str, Any]]:
 def build_anthropic_initial_state(
     messages: list[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Split the initial chat messages into a Messages ``system`` and its conversation."""
+
     system: list[dict[str, Any]] = []
     conversation: list[dict[str, Any]] = []
     for message in messages:
@@ -1097,6 +1149,8 @@ def anthropic_completion(
     tools: list[dict[str, Any]],
     auth_header: str | None = None,
 ) -> dict[str, Any]:
+    """Send one Messages API request and return the decoded reply."""
+
     system_blocks = normalize_anthropic_system(system)
     payload: dict[str, Any] = {
         "model": model,
@@ -1115,33 +1169,17 @@ def anthropic_completion(
         payload["top_p"] = top_p
     if tool_choice is not None:
         payload["tool_choice"] = tool_choice
-    request = urllib.request.Request(
+    return _post_json(
         messages_url,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
+        payload,
+        {
             **providers.auth_headers(api_key, auth_header or "x-api-key"),
             "anthropic-version": ANTHROPIC_VERSION,
-            "Content-Type": "application/json",
-            "Accept": "application/json",
         },
-        method="POST",
+        api_name="Messages",
+        retries=retries,
+        request_timeout=request_timeout,
     )
-    for attempt in range(retries + 1):
-        try:
-            with urllib.request.urlopen(request, timeout=request_timeout) as response:
-                return json.loads(response.read().decode("utf-8"))
-        except urllib.error.HTTPError as exc:
-            body = exc.read().decode("utf-8", errors="replace")
-            if exc.code in RETRYABLE_HTTP_CODES and attempt < retries:
-                time.sleep(retry_delay_seconds(attempt, body=body, headers=exc.headers))
-                continue
-            raise RuntimeError(f"Messages API HTTP {exc.code}: {body}") from exc
-        except (TimeoutError, urllib.error.URLError) as exc:
-            if attempt < retries:
-                time.sleep(retry_delay_seconds(attempt))
-                continue
-            raise RuntimeError(f"Messages API request timed out or failed: {exc}") from exc
-    raise RuntimeError("Messages API request failed after retries")
 
 
 def responses_completion(
@@ -1162,6 +1200,8 @@ def responses_completion(
     tools: list[dict[str, Any]],
     auth_header: str | None = None,
 ) -> dict[str, Any]:
+    """Send one Responses API request and return the decoded reply."""
+
     payload: dict[str, Any] = {
         "model": model,
         "input": input_items,
@@ -1181,35 +1221,19 @@ def responses_completion(
         payload["store"] = True
     if reasoning_effort:
         payload["reasoning"] = {"effort": reasoning_effort}
-    request = urllib.request.Request(
+    return _post_json(
         responses_url,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            **providers.auth_headers(api_key, auth_header or "bearer"),
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        },
-        method="POST",
+        payload,
+        providers.auth_headers(api_key, auth_header or "bearer"),
+        api_name="Responses",
+        retries=retries,
+        request_timeout=request_timeout,
     )
-    for attempt in range(retries + 1):
-        try:
-            with urllib.request.urlopen(request, timeout=request_timeout) as response:
-                return json.loads(response.read().decode("utf-8"))
-        except urllib.error.HTTPError as exc:
-            body = exc.read().decode("utf-8", errors="replace")
-            if exc.code in RETRYABLE_HTTP_CODES and attempt < retries:
-                time.sleep(retry_delay_seconds(attempt, body=body, headers=exc.headers))
-                continue
-            raise RuntimeError(f"Responses API HTTP {exc.code}: {body}") from exc
-        except (TimeoutError, urllib.error.URLError) as exc:
-            if attempt < retries:
-                time.sleep(retry_delay_seconds(attempt))
-                continue
-            raise RuntimeError(f"Responses API request timed out or failed: {exc}") from exc
-    raise RuntimeError("Responses API request failed after retries")
 
 
 def responses_finish_reason(response: dict[str, Any]) -> str | None:
+    """Why an incomplete Responses reply stopped (for example ``max_output_tokens``), or None when it completed."""
+
     if str(response.get("status") or "").strip().lower() != "incomplete":
         return None
     details = response.get("incomplete_details")
@@ -1219,6 +1243,8 @@ def responses_finish_reason(response: dict[str, Any]) -> str | None:
 
 
 def responses_to_chat_message(response: dict[str, Any]) -> dict[str, Any]:
+    """Convert a Responses reply into the chat-style assistant message the rollout loop uses, keeping the raw output for replay."""
+
     output = response.get("output") or []
     content_parts: list[str] = []
     reasoning_parts: list[str] = []
@@ -1270,6 +1296,8 @@ def responses_to_chat_message(response: dict[str, Any]) -> dict[str, Any]:
 
 
 def anthropic_response_to_chat_message(response: dict[str, Any]) -> dict[str, Any]:
+    """Convert a Messages reply into the chat-style assistant message the rollout loop uses, keeping the raw content for replay."""
+
     content = response.get("content") or []
     content_parts: list[str] = []
     reasoning_parts: list[str] = []
@@ -1336,6 +1364,8 @@ def resolve_api_key(provider: str, api_key_env: str, *, use_preset_keys: bool = 
 
 
 def resolve_token_param(base_url: str, token_param: str) -> str:
+    """The chat token-limit parameter: under ``auto``, ``max_completion_tokens`` for api.openai.com and ``max_tokens`` elsewhere."""
+
     if token_param != "auto":
         return token_param
     if "api.openai.com" in base_url:
@@ -1344,12 +1374,16 @@ def resolve_token_param(base_url: str, token_param: str) -> str:
 
 
 def write_trace(path: Path, events: list[dict[str, Any]]) -> None:
+    """Rewrite the trace file with every event so far, one JSON object per line."""
+
     with path.open("w", encoding="utf-8") as handle:
         for event in events:
             handle.write(json.dumps(event, sort_keys=True) + "\n")
 
 
 def write_checkpoint(path: Path, checkpoint: dict[str, Any]) -> None:
+    """Write ``checkpoint`` atomically, through a temporary file."""
+
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = path.with_name(f"{path.name}.tmp")
     tmp_path.write_text(json.dumps(checkpoint, indent=2, sort_keys=True), encoding="utf-8")
@@ -1357,6 +1391,8 @@ def write_checkpoint(path: Path, checkpoint: dict[str, Any]) -> None:
 
 
 def load_checkpoint(path: Path) -> dict[str, Any]:
+    """Read a checkpoint file, which must hold a JSON object."""
+
     with path.open("r", encoding="utf-8") as handle:
         checkpoint = json.load(handle)
     if not isinstance(checkpoint, dict):
@@ -1365,6 +1401,8 @@ def load_checkpoint(path: Path) -> dict[str, Any]:
 
 
 def delete_checkpoint(path: Path | None) -> None:
+    """Remove a checkpoint and its temporary file, if they exist."""
+
     if path is None:
         return
     try:
@@ -1383,19 +1421,21 @@ def checkpoint_matches_run(
     task: dict[str, Any],
     config: policy.RolloutPolicyConfig,
 ) -> bool:
+    """Whether a checkpoint came from a run with these model, endpoint, task, budget and screening settings, so resuming it is safe."""
+
     if checkpoint.get("responses_state_mode") != getattr(args, "responses_state_mode", None):
         return False
     # A different endpoint cannot continue the server-side state (``responses_previous_id``)
     # or the conversation the checkpoint recorded.
-    for field, default in (
-        *((name, None) for name in providers.ENDPOINT_FIELDS),
-        ("auth_header", None),
-        ("reasoning_effort", None),
-        ("temperature", None),
-        ("top_p", None),
-        ("sampling_seed", None),
+    for field in (
+        *providers.ENDPOINT_FIELDS,
+        "auth_header",
+        "reasoning_effort",
+        "temperature",
+        "top_p",
+        "sampling_seed",
     ):
-        if field in checkpoint and checkpoint.get(field) != getattr(args, field, default):
+        if field in checkpoint and checkpoint[field] != getattr(args, field, None):
             return False
     # The restored system prompt states these budgets, and enforcement, including the stop
     # condition, must keep them.
@@ -1428,6 +1468,8 @@ def checkpoint_matches_run(
 
 
 def run_excluded_tools(args: argparse.Namespace, task: dict[str, Any]) -> set[str]:
+    """The tools to hide: the ``--exclude-tool`` values plus the task's own ``excluded_tools``."""
+
     return contracts.task_excluded_tools(
         task, contracts.normalize_excluded_tools(getattr(args, "exclude_tool", []) or [])
     )
@@ -1436,6 +1478,8 @@ def run_excluded_tools(args: argparse.Namespace, task: dict[str, Any]) -> set[st
 def refuse_target(
     args: argparse.Namespace, task: dict[str, Any], event: dict[str, Any], mode: str
 ) -> dict[str, Any]:
+    """Record a refused target and return its summary, without sending any model request."""
+
     trace_path = Path(args.trace)
     trace_path.parent.mkdir(parents=True, exist_ok=True)
     write_trace(trace_path, [event])
@@ -1470,6 +1514,8 @@ def summarize_run(
     low_similarity_submissions: int = 0,
     runtime_seconds: float | None = None,
 ) -> dict[str, Any]:
+    """Build a run's summary; with ``--summary-output`` also write the evaluated summary CSV."""
+
     summary = summarize(task, args.model, trace_path, submission)
     summary["provider"] = args.provider
     summary["api_mode"] = args.api_mode
@@ -1523,6 +1569,8 @@ def append_run_summary_event(
     invalid_submissions: int,
     low_similarity_submissions: int,
 ) -> None:
+    """Append the closing ``run_summary`` event to the trace."""
+
     usage = token_usage.aggregate_token_usage_from_events(trace_events)
     response_metadata = latest_response_metadata(trace_events)
     trace_events.append(
@@ -1574,6 +1622,8 @@ def summarize(
     trace_path: Path,
     submission: dict[str, Any] | None,
 ) -> dict[str, Any]:
+    """The submission-derived part of a run's summary."""
+
     reaction_valid = submission.get("reaction_validation") == "valid" if submission else None
     submission_fields = policy.submission_summary_fields(submission, task["target_smiles"])
     return {
