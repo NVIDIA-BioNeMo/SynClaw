@@ -176,9 +176,9 @@ def _compact_simulate_reverse_reaction(result: dict[str, Any]) -> dict[str, Any]
         ],
     )
     output.update(_problems(result))
-    # The reverse view keeps what a planner needs from the template, not its SMARTS or hints.
+    # The reverse view keeps the template's identity, family and pattern, not its search hints.
     output["template_summary"] = _compact_template(
-        result.get("template"), fields=("reaction_id", "reaction_family", "description")
+        result.get("template"), fields=("reaction_id", "reaction_family", "description", "smarts")
     )
     if isinstance(result.get("reverse_planning_summary"), dict):
         output["reverse_planning_summary"] = {
@@ -215,10 +215,9 @@ def _compact_template(template: Any, fields: tuple[str, ...] = _TEMPLATE_FIELDS)
     output = _copy_keys(template, list(fields))
     roles = template.get("reactant_roles")
     if isinstance(roles, list):
-        # Roles are listed in reactant order, so position and atom maps add nothing.
+        # Role names in reactant order; each role's pattern is that reactant's part of ``smarts``.
         output["reactant_roles"] = [
-            _copy_keys(role, ["role", "smarts"]) if isinstance(role, dict) else role
-            for role in roles
+            role.get("role") if isinstance(role, dict) else role for role in roles
         ]
     if template.get("introduces_unmapped_product_atoms"):
         output["introduces_unmapped_product_atoms"] = True
@@ -230,15 +229,9 @@ def _summarize_template(template: Any) -> Any:
 
     if not isinstance(template, dict):
         return template
-    output = _copy_keys(template, ["reaction_id", "name", "reaction_family", "smarts"])
-    roles = template.get("reactant_roles")
-    if isinstance(roles, list):
-        # Role SMARTS are the reactant side of smarts, in this order.
-        output["reactant_roles"] = [
-            role.get("role") if isinstance(role, dict) else role for role in roles
-        ]
-    if template.get("introduces_unmapped_product_atoms"):
-        output["introduces_unmapped_product_atoms"] = True
+    output = _compact_template(
+        template, fields=("reaction_id", "name", "reaction_family", "smarts")
+    )
     structure = template.get("structure_match")
     if isinstance(structure, dict):
         # Every hit matches all supplied molecules, so only the score and any forward run differ.

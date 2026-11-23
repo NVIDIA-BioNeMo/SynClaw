@@ -94,7 +94,8 @@ def test_reaction_template_search_returns_short_hits():
     }
     assert simulated["template"]["description"] == "Couples amines and carboxylic acids."
     assert simulated["template"]["execution_hints"] == ["Coupling reagent is implicit."]
-    assert simulated["template"]["reactant_roles"][1] == {"role": "acid", "smarts": "[C:2](=O)O"}
+    # Role names only: each role's pattern is already that reactant's part of the template SMARTS.
+    assert simulated["template"]["reactant_roles"] == ["amine", "acid"]
 
 
 def test_submit_pathway_compaction_keeps_validation_summary_without_verbose_echoes():
@@ -450,18 +451,19 @@ def test_compaction_trims_template_detail_and_echoed_routes():
         "reactant_roles": ["aryl bromide"],
         "structure_match": {"score": 10.0},
     }
-    assert simulated["template"] == {"reactant_roles": [{"role": "aryl bromide", "smarts": "Br-c"}]}
+    assert simulated["template"] == {"reactant_roles": ["aryl bromide"]}
     assert unmatched["template"] == {
         "reaction_id": "ord:R011",
-        "reactant_roles": [{"role": "aryl bromide", "smarts": "Br-c"}],
+        "reactant_roles": ["aryl bromide"],
     }
     assert accepted == {"accepted": True, "final_smiles": "CCO"}
     assert similarity["left"] == {"valid": True, "canonical_smiles": "CCO"}
     assert reverse["building_block_match_summary"] == {"exact_match_count": 0}
-    # The reverse view keeps the template's identity and family, not its SMARTS or search hints.
+    # The reverse view keeps the template's identity, family and SMARTS, not its search hints.
     assert reverse["template_summary"] == {
         "reaction_id": "ord:R011",
         "reaction_family": "aryl coupling",
+        "smarts": "Br-c>>c",
     }
     assert reverse["candidate_reactant_sets"] == [
         {
