@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import urllib.request
 from pathlib import Path
@@ -10,7 +11,7 @@ from typing import Any
 
 import pytest
 
-from synclaw.core import db
+from synclaw.core import db, reactions
 
 # Isolate tests from the user's screen config and real watchlist. Screening tests
 # opt in explicitly; other tests exercise the default without requiring downloads.
@@ -71,3 +72,29 @@ def bundled_ids(bundled_db: Path) -> dict[str, str]:
     """Map bundled source IDs, as the data notes name them, to the database's numbered IDs."""
 
     return numbered_ids(bundled_db)
+
+
+def prepare_minimal_model_db(db_path: Path) -> None:
+    """Build a one-template, one-building-block database a model run can start from."""
+
+    templates = db_path.with_name("templates.jsonl")
+    bbs = db_path.with_name("bbs.txt")
+    templates.write_text(
+        json.dumps(
+            {
+                "reaction_id": "R000",
+                "smarts": "[C:1][O:2]>>[C:1]=[O:2]",
+                "family": "oxidation",
+                "family_metadata": {
+                    "description": "Fixture alcohol-to-carbonyl transformation.",
+                    "search_terms": ["alcohol oxidation"],
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    bbs.write_text("SMILES\nCO\n", encoding="utf-8")
+    reactions.ingest_reaction_templates(templates, db_path=db_path, library="demo")
+    db.ingest_building_blocks(bbs, db_path)
+    db.prepare_building_block_search(db_path)
