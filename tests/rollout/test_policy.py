@@ -561,3 +561,16 @@ def test_a_stop_at_the_tool_call_limit_is_reported_as_the_tool_limit() -> None:
     decision = handle_no_tool_response(config, state, content="That is my best route.")
 
     assert decision.finish_reason == "tool_limit_best_accepted_submission"
+
+
+def test_a_zero_low_similarity_cap_is_rejected_not_clamped() -> None:
+    with pytest.raises(ValueError, match="max_low_similarity_submissions must be at least 1"):
+        RolloutPolicyConfig(max_low_similarity_submissions=0)
+
+
+def test_an_equally_unscored_later_submission_does_not_replace_the_best() -> None:
+    from synclaw.rollout.policy import is_better_accepted_submission
+
+    assert not is_better_accepted_submission(False, None, False, None)
+    assert is_better_accepted_submission(False, 0.4, False, None)
+    assert not is_better_accepted_submission(False, None, False, 0.4)

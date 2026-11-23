@@ -20,7 +20,7 @@ from synclaw.rollout.loop import call_local_tool
 from synclaw.rollout.policy import (
     coerce_tool_arguments,
     parse_arguments,
-    response_or_chat_tool_choice,
+    submit_tool_choice,
 )
 from synclaw.rollout.prompts import build_initial_messages
 from synclaw.runners.model_runner import (
@@ -47,7 +47,6 @@ from synclaw.tools.contracts import (
     TOOL_SCHEMAS,
     filter_chat_tool_schemas,
     filter_messages_tool_schemas,
-    filter_responses_tool_schemas,
     normalize_excluded_tools,
 )
 from synclaw.tools.synthesis import SynthesisTools
@@ -1025,41 +1024,23 @@ class ImportAndEvalTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "Cannot exclude required tool"):
             normalize_excluded_tools(["submit_pathway"])
 
-    def test_forced_submit_tool_choice_only_for_responses_and_chat_without_prior_submission(self):
+    def test_forced_submit_tool_choice_only_without_prior_submission(self):
+        tools = filter_chat_tool_schemas(set())
+        forced = {"type": "function", "function": {"name": "submit_pathway"}}
         self.assertEqual(
-            response_or_chat_tool_choice(
-                api_mode="responses",
-                forced_submit_requested=True,
-                has_submission=False,
-                tools=filter_responses_tool_schemas(set()),
-            ),
-            {"type": "function", "name": "submit_pathway"},
+            submit_tool_choice(forced_submit_requested=True, has_submission=False, tools=tools),
+            forced,
         )
         self.assertEqual(
-            response_or_chat_tool_choice(
-                api_mode="chat",
-                forced_submit_requested=True,
-                has_submission=False,
-                tools=filter_chat_tool_schemas(set()),
-            ),
-            {"type": "function", "function": {"name": "submit_pathway"}},
-        )
-        self.assertEqual(
-            response_or_chat_tool_choice(
-                api_mode="messages",
-                forced_submit_requested=True,
-                has_submission=False,
-                tools=filter_messages_tool_schemas(set()),
-            ),
+            submit_tool_choice(forced_submit_requested=True, has_submission=True, tools=tools),
             "auto",
         )
         self.assertEqual(
-            response_or_chat_tool_choice(
-                api_mode="responses",
-                forced_submit_requested=True,
-                has_submission=True,
-                tools=filter_responses_tool_schemas(set()),
-            ),
+            submit_tool_choice(forced_submit_requested=False, has_submission=False, tools=tools),
+            "auto",
+        )
+        self.assertEqual(
+            submit_tool_choice(forced_submit_requested=True, has_submission=False, tools=[]),
             "auto",
         )
 

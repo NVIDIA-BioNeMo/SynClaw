@@ -41,9 +41,6 @@ DEFAULT_SAME_PATHWAY_FINISH_AFTER = 5
 DEFAULT_MAX_LOW_SIMILARITY_SUBMISSIONS: int | None = None
 DEFAULT_CONTEXT_WARNING_REMAINING_FRACTION = 0.5
 DEFAULT_CONTEXT_CRITICAL_REMAINING_FRACTION = 0.25
-# The context length a deployment serves and enforces when it names none of its own.
-# RolloutPolicyConfig itself still defaults to no context limit.
-DEFAULT_MAX_MODEL_LEN = 262_144
 # What an "inf" task budget becomes; an unlimited max_model_len is handled separately.
 _UNLIMITED_BUDGET_VALUES: dict[str, int | None] = {
     "max_turns": None,
@@ -95,8 +92,7 @@ def meets_submission_floor(
     return (
         identical_to_target is True
         or stop_condition <= 0
-        or similarity is not None
-        and float(similarity) >= stop_condition
+        or (similarity is not None and float(similarity) >= stop_condition)
     )
 
 
@@ -132,6 +128,13 @@ class RolloutPolicyConfig:
             raise ValueError("An unlimited output cap needs a known context limit to clip it")
         if self.max_turns is None and self.max_model_len is None:
             raise ValueError("Unlimited turns need a known context limit to end the rollout")
+        if (
+            self.max_low_similarity_submissions is not None
+            and self.max_low_similarity_submissions < 1
+        ):
+            raise ValueError(
+                "max_low_similarity_submissions must be at least 1, or None for no cap"
+            )
         if not 0 <= self.context_safety_margin_fraction < 1:
             raise ValueError("context_safety_margin_fraction must be at least 0 and below 1")
         if (
@@ -469,7 +472,7 @@ def prepare_tool_call(
     argument_error: str | None = None
     try:
         arguments = parse_arguments(raw_arguments)
-    except (TypeError, ValueError, json.JSONDecodeError) as exc:
+    except (TypeError, ValueError) as exc:
         arguments = {}
         argument_error = f"Could not parse tool arguments as a JSON object: {exc}"
     dispatch_arguments = dict(arguments)
@@ -585,46 +588,13 @@ def handle_tool_result(
             )
         if (
             config.max_low_similarity_submissions is not None
-            and state.low_similarity_submissions >= max(1, config.max_low_similarity_submissions)
+            and state.low_similarity_submissions >= config.max_low_similarity_submissions
         ):
             return ToolResultDecision(
                 terminal_submission=state.best_accepted_submission,
             )
-        if config.model_stops:
-            # The validator's result reports acceptance, similarity and exact identity.
-            state.forced_submit_requested = False
-            state.consecutive_non_tool_turns_after_tools = 0
-            return ToolResultDecision()
-        finish_clause = ""
-        if (
-            config.same_pathway_finish_after > 0
-            and state.repeated_submission_count >= config.same_pathway_finish_after
-            and state.best_accepted_submission is not None
-        ):
-            finish_clause = (
-                " If you absolutely cannot improve on a previously submitted pathway, "
-                "finish by responding with <FINISH>."
-            )
-        if config.stop_condition == "exact" and similarity == 1.0:
-            lead = (
-                "The validator accepted that pathway, but its product did not establish an "
-                "exact match to the target. "
-                f"Its similarity_to_target was {similarity}; even 1.0 does not establish "
-                f"molecular identity. {PERSISTENCE_GUARANTEE_SENTENCE} "
-                "Try to identify an exact synthesis."
-            )
-            goal = "an exact synthesis route"
-        else:
-            lead = (
-                "The validator accepted that pathway, but its similarity_to_target was "
-                f"{similarity}. {PERSISTENCE_GUARANTEE_SENTENCE} "
-                "Try to improve the analogue or identify an exact synthesis."
-            )
-            goal = "a higher-similarity route"
-        repair = (
-            f"{lead} Consider near building-block analogues. Compare the similarity of candidate products to the target, "
-            f"and verify {goal} before submitting again.{finish_clause}"
-        )
+        # When the model ends the rollout, the validator's result is the whole response.
+        repair = None if config.model_stops else _accepted_repair(config, state, similarity)
     else:
         state.invalid_submissions += 1
         if state.tool_limit_finalization_requested or tool_budget_exhausted:
@@ -633,23 +603,60 @@ def handle_tool_result(
                 terminal_submission=state.best_accepted_submission,
                 terminal_due_to_tool_limit=True,
             )
-        error_message = result.get("error_message") or json.dumps(
-            result.get("issues", []), sort_keys=True
-        )
-        # When the model ends the rollout, the rejected result's error_message is the whole response.
-        repair = (
-            (
-                f"Invalid submission #{state.invalid_submissions}: {error_message} "
-                "Repair it using the tools. Empty steps are valid only with a grounded building_block. "
-                "Verify each step's claimed product, then submit a verified pathway or direct-purchase "
-                "building block."
-            )
-            if not config.model_stops
-            else None
-        )
+        repair = None if config.model_stops else _rejected_repair(state, result)
     state.forced_submit_requested = False
-    state.consecutive_non_tool_turns_after_tools = 0
     return ToolResultDecision(repair=repair)
+
+
+def _accepted_repair(
+    config: RolloutPolicyConfig, state: RolloutPolicyState, similarity: float | None
+) -> str:
+    """Coaching after an accepted submission that did not end the rollout."""
+
+    finish_clause = ""
+    if (
+        config.same_pathway_finish_after > 0
+        and state.repeated_submission_count >= config.same_pathway_finish_after
+        and state.best_accepted_submission is not None
+    ):
+        finish_clause = (
+            " If you absolutely cannot improve on a previously submitted pathway, "
+            "finish by responding with <FINISH>."
+        )
+    if config.stop_condition == "exact" and similarity == 1.0:
+        lead = (
+            "The validator accepted that pathway, but its product did not establish an "
+            "exact match to the target. "
+            f"Its similarity_to_target was {similarity}; even 1.0 does not establish "
+            f"molecular identity. {PERSISTENCE_GUARANTEE_SENTENCE} "
+            "Try to identify an exact synthesis."
+        )
+        goal = "an exact synthesis route"
+    else:
+        lead = (
+            "The validator accepted that pathway, but its similarity_to_target was "
+            f"{similarity}. {PERSISTENCE_GUARANTEE_SENTENCE} "
+            "Try to improve the analogue or identify an exact synthesis."
+        )
+        goal = "a higher-similarity route"
+    return (
+        f"{lead} Consider near building-block analogues. Compare the similarity of candidate products to the target, "
+        f"and verify {goal} before submitting again.{finish_clause}"
+    )
+
+
+def _rejected_repair(state: RolloutPolicyState, result: dict[str, Any]) -> str:
+    """Repair guidance after a rejected submission."""
+
+    error_message = result.get("error_message") or json.dumps(
+        result.get("issues", []), sort_keys=True
+    )
+    return (
+        f"Invalid submission #{state.invalid_submissions}: {error_message} "
+        "Repair it using the tools. Empty steps are valid only with a grounded building_block. "
+        "Verify each step's claimed product, then submit a verified pathway or direct-purchase "
+        "building block."
+    )
 
 
 def tool_limit_finish_reason(state: RolloutPolicyState) -> str:
@@ -660,24 +667,21 @@ def tool_limit_finish_reason(state: RolloutPolicyState) -> str:
     )
 
 
-def response_or_chat_tool_choice(
+def submit_tool_choice(
     *,
-    api_mode: str,
     forced_submit_requested: bool,
     has_submission: bool,
     tools: list[dict[str, Any]],
 ) -> Any:
+    """The chat-style ``tool_choice``; Responses transports convert it before sending."""
+
     if (
         not forced_submit_requested
         or has_submission
         or not tool_schema_contains_name(tools, "submit_pathway")
     ):
         return "auto"
-    if api_mode == "responses":
-        return {"type": "function", "name": "submit_pathway"}
-    if api_mode == "chat":
-        return {"type": "function", "function": {"name": "submit_pathway"}}
-    return "auto"
+    return {"type": "function", "function": {"name": "submit_pathway"}}
 
 
 def tool_schema_contains_name(tools: list[dict[str, Any]], name: str) -> bool:
@@ -739,14 +743,16 @@ def coerce_tool_arguments(
     coerced = dict(arguments)
     coercions: list[dict[str, Any]] = []
     if name == "simulate_reaction":
-        _coerce_json_string_array_field(coerced, "reactants", "reactants", coercions)
+        _coerce_json_string_array_field(coerced, "reactants", coercions)
     elif name == "simulate_reverse_reaction":
-        _coerce_json_string_array_field(coerced, "product_smiles", "product_smiles", coercions)
+        _coerce_json_string_array_field(coerced, "product_smiles", coercions)
     elif name == "search_reaction_templates":
-        _coerce_json_string_array_field(coerced, "reactant_smiles", "reactant_smiles", coercions)
-        _coerce_json_string_array_field(coerced, "product_smiles", "product_smiles", coercions)
+        _coerce_json_string_array_field(coerced, "reactant_smiles", coercions)
+        _coerce_json_string_array_field(coerced, "product_smiles", coercions)
     elif name == "submit_pathway":
-        _coerce_json_string_object_array_field(coerced, "steps", "steps", coercions)
+        _coerce_json_string_field(
+            coerced, "steps", coercions, item_type=dict, coercion="json_string_to_object_array"
+        )
         steps = coerced.get("steps")
         if isinstance(steps, list):
             copied_steps: list[Any] = []
@@ -756,10 +762,7 @@ def coerce_tool_arguments(
                     copied_step = dict(step)
                     before = copied_step.get("reactants")
                     _coerce_json_string_array_field(
-                        copied_step,
-                        "reactants",
-                        f"steps[{index}].reactants",
-                        coercions,
+                        copied_step, "reactants", coercions, field_path=f"steps[{index}].reactants"
                     )
                     changed = changed or copied_step.get("reactants") is not before
                     copied_steps.append(copied_step)
@@ -770,12 +773,17 @@ def coerce_tool_arguments(
     return coerced, coercions
 
 
-def _coerce_json_string_object_array_field(
+def _coerce_json_string_field(
     arguments: dict[str, Any],
     key: str,
-    field_path: str,
     coercions: list[dict[str, Any]],
+    *,
+    item_type: type,
+    coercion: str,
+    field_path: str | None = None,
 ) -> None:
+    """Replace a JSON-encoded list of ``item_type`` items in ``arguments[key]`` with the list."""
+
     value = arguments.get(key)
     if not isinstance(value, str):
         return
@@ -786,13 +794,13 @@ def _coerce_json_string_object_array_field(
         parsed = json.loads(text)
     except json.JSONDecodeError:
         return
-    if not isinstance(parsed, list) or not all(isinstance(item, dict) for item in parsed):
+    if not isinstance(parsed, list) or not all(isinstance(item, item_type) for item in parsed):
         return
     arguments[key] = parsed
     coercions.append(
         {
-            "field": field_path,
-            "coercion": "json_string_to_object_array",
+            "field": field_path or key,
+            "coercion": coercion,
             "raw_value": value,
             "coerced_value": parsed,
         }
@@ -802,29 +810,17 @@ def _coerce_json_string_object_array_field(
 def _coerce_json_string_array_field(
     arguments: dict[str, Any],
     key: str,
-    field_path: str,
     coercions: list[dict[str, Any]],
+    *,
+    field_path: str | None = None,
 ) -> None:
-    value = arguments.get(key)
-    if not isinstance(value, str):
-        return
-    text = value.strip()
-    if not text.startswith("["):
-        return
-    try:
-        parsed = json.loads(text)
-    except json.JSONDecodeError:
-        return
-    if not isinstance(parsed, list) or not all(isinstance(item, str) for item in parsed):
-        return
-    arguments[key] = parsed
-    coercions.append(
-        {
-            "field": field_path,
-            "coercion": "json_string_to_array",
-            "raw_value": value,
-            "coerced_value": parsed,
-        }
+    _coerce_json_string_field(
+        arguments,
+        key,
+        coercions,
+        item_type=str,
+        coercion="json_string_to_array",
+        field_path=field_path,
     )
 
 
@@ -850,11 +846,9 @@ def is_retryable_tool_error(result: dict[str, Any]) -> bool:
 
 
 def is_better_submission_similarity(candidate: float | None, incumbent: float | None) -> bool:
-    if incumbent is None:
-        return True
     if candidate is None:
         return False
-    return float(candidate) > float(incumbent)
+    return incumbent is None or float(candidate) > float(incumbent)
 
 
 def is_better_accepted_submission(
