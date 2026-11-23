@@ -377,10 +377,7 @@ def test_simulate_reaction_compaction_returns_one_product_listing():
         },
     )
 
-    assert {key: value for key, value in single.items() if value != []} == {
-        "valid": True,
-        "generated_products": ["CCO", "CCN"],
-    }
+    assert single == {"generated_products": ["CCO", "CCN"]}
     assert "generated_products" not in coproducts
     assert len(coproducts["generated_product_sets"]) == 10
     assert coproducts["generated_product_set_count"] == 12
@@ -498,8 +495,9 @@ def test_truncated_issues_report_how_many_there_were():
         {"accepted": False, "issues": issues, "steps": [{"valid": False, "issues": issues}]},
     )
 
-    assert compact["issues"] == issues[:8] and compact["issue_count"] == 12
-    assert compact["steps"][0]["issues"] == issues[:8] and compact["steps"][0]["issue_count"] == 12
+    kept = issues[:6] + issues[-2:]  # the last issues are a pathway's decisive ones
+    assert compact["issues"] == kept and compact["issue_count"] == 12
+    assert compact["steps"][0]["issues"] == kept and compact["steps"][0]["issue_count"] == 12
     assert "issue_count" not in compact_tool_result(
         "submit_pathway", {"accepted": False, "issues": issues[:3]}
     )
@@ -541,3 +539,23 @@ def test_ungrounded_reactants_keep_their_step_and_reference():
     assert compact["ungrounded_reactants"] == [
         {"step_index": 2, "ref": "CCO", "smiles": "CCO", "source": "smiles", "issue": "x"}
     ]
+
+
+def test_a_rejected_mces_call_says_why_and_that_it_can_be_retried():
+    from synclaw.rollout.policy import tool_argument_error
+
+    compact = compact_tool_result(
+        "mces", tool_argument_error("mces", "mces is missing required argument 'smiles_b'", {})
+    )
+
+    assert compact["issues"] == ["mces is missing required argument 'smiles_b'"]
+    assert compact["retryable"] is True and compact["error"] == "invalid_tool_call"
+
+
+def test_a_successful_simulation_omits_valid_and_empty_reactant_lists():
+    compact = compact_tool_result(
+        "simulate_reaction",
+        {"valid": True, "reaction_id": "R1", "resolved_reactants": [], "generated_products": ["C"]},
+    )
+
+    assert "valid" not in compact and "resolved_reactants" not in compact

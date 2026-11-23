@@ -533,7 +533,7 @@ async def run_rollout(
                 "model_result": model_result,
                 "model_result_compaction": {
                     "full_json_bytes": compact_json_size(result),
-                    "model_json_bytes": compact_json_size(model_result),
+                    "model_json_bytes": len(result_json),
                 },
                 "duration_seconds": round(execution.duration_seconds, 6),
                 "outcome": execution.outcome,
