@@ -29,7 +29,7 @@ from synclaw.core import db
 from synclaw.core.toxicity import ToxicityConfig
 from synclaw.rollout.loop import call_local_tool
 from synclaw.tools.compaction import compact_tool_result
-from synclaw.tools.contracts import TOOL_SCHEMAS
+from synclaw.tools.contracts import TOOL_ARGUMENT_DEFAULTS, TOOL_SCHEMAS
 from synclaw.tools.synthesis import SynthesisTools
 
 if TYPE_CHECKING:
@@ -124,10 +124,10 @@ class AsyncToolExecutor:
         self._tool_worker_config = tool_worker_config
         self._tools = tools
         self._shutdown = False
-        # A replacement pool counts as working once it has served a call; one that breaks
-        # before then means workers fail at startup, so restarting again would only loop.
-        self._pool_proven = True
-        self._unusable: RuntimeError | None = None
+        # Replacement workers report startup failures here, as the first pool's do at prestart.
+        self._startup_reports: Any | None = None
+        # Set once replacement workers fail at startup; restarting again would only loop.
+        self._unusable: str | None = None
         self._pool_lock = threading.Lock()
         if self._uses_process_pool:
             if tool_worker_config is None:
@@ -219,8 +219,9 @@ class AsyncToolExecutor:
         """Swap in a fresh pool once, however many in-flight calls saw the same breakage.
 
         Returns the error for the caller: a retryable ``ToolWorkerPoolBroken`` after a
-        restart, or a final error when the server is shutting down or a restarted pool broke
-        before serving any call.
+        restart, or a final error when the server is shutting down or replacement workers
+        reported that they fail at startup. A worker crashed by a call is restarted however
+        often that recurs, so one bad input cannot take the server down for every client.
         """
 
         with self._pool_lock:
@@ -228,26 +229,39 @@ class AsyncToolExecutor:
                 return RuntimeError(
                     f"The MCP server is shutting down; the call did not run. ({exc})"
                 )
-            if self._worker_pool is broken:
-                if not self._pool_proven:
-                    self._unusable = RuntimeError(
-                        "BioNeMo-SynClaw chemistry workers failed again right after a restart, "
-                        "so they likely fail at startup; see the server log and restart the "
-                        f"server. ({exc})"
+            if self._worker_pool is broken and self._unusable is None:
+                if startup_error := self._replacement_startup_error():
+                    self._unusable = (
+                        f"BioNeMo-SynClaw chemistry workers fail at startup ({startup_error}); "
+                        "fix the cause and restart the server."
                     )
                 else:
                     # The server now runs other threads, so fork could copy a held lock into
                     # the child; spawn starts each replacement worker from a clean interpreter.
-                    self._worker_pool = self._new_process_pool("spawn")
-                    self._pool_proven = False
+                    reports = multiprocessing.get_context("spawn").Queue()
+                    self._worker_pool = self._new_process_pool("spawn", reports)
+                    self._startup_reports = reports
                     broken.shutdown(wait=False, cancel_futures=True)
                     print(f"synclaw_mcp_worker_pool_restarted ({exc})", file=sys.stderr, flush=True)
             if self._unusable is not None:
-                return self._unusable
+                return RuntimeError(self._unusable)
         return ToolWorkerPoolBroken(
             "A chemistry worker terminated unexpectedly during this call; "
             f"the worker pool was restarted, so retry the call. ({exc})"
         )
+
+    def _replacement_startup_error(self) -> str | None:
+        """The first startup failure a replacement worker reported, if any."""
+
+        error = None
+        while self._startup_reports is not None:
+            try:
+                pid, error_type, error_message = self._startup_reports.get_nowait()
+            except queue.Empty:
+                break
+            if error_type and error is None:
+                error = f"worker {pid}: {error_type}: {error_message}"
+        return error
 
     async def execute(self, tool_name: str, /, **kwargs: Any) -> dict[str, Any]:
         """Run one tool call and return the compacted result rollouts show the model.
@@ -301,7 +315,7 @@ class AsyncToolExecutor:
     async def _execute_new(self, tool_name: str, kwargs: dict[str, Any]) -> dict[str, Any]:
         async with self._semaphore:
             if self._unusable is not None:
-                raise self._unusable
+                raise RuntimeError(self._unusable)
             loop = asyncio.get_running_loop()
             pool = self._worker_pool
             if not self._uses_process_pool:
@@ -309,12 +323,9 @@ class AsyncToolExecutor:
                     pool, call_local_tool, self._tools, tool_name, kwargs
                 )
             try:
-                result = await loop.run_in_executor(pool, _invoke_tool_process, tool_name, kwargs)
+                return await loop.run_in_executor(pool, _invoke_tool_process, tool_name, kwargs)
             except BrokenProcessPool as exc:
                 raise self._replace_broken_pool(pool, exc) from exc
-            if pool is self._worker_pool:
-                self._pool_proven = True
-            return result
 
 
 def _annotation(schema: dict[str, Any]) -> Any:
@@ -337,9 +348,10 @@ def _register_tool(
     required = set(parameters.get("required") or ())
 
     async def call(**arguments: Any) -> dict:
-        # An omitted optional argument arrives as None; dropping it lets the contract default apply.
+        # An omitted optional argument arrives as None; the contract default takes its place, so a
+        # call that spells out a default shares its result with one that leaves it out.
         given = {key: value for key, value in arguments.items() if value is not None}
-        return await executor.execute(name, **given)
+        return await executor.execute(name, **{**TOOL_ARGUMENT_DEFAULTS.get(name, {}), **given})
 
     call.__name__ = call.__qualname__ = name
     call.__signature__ = inspect.Signature(  # type: ignore[attr-defined]
