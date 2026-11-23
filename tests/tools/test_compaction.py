@@ -489,3 +489,55 @@ def test_submit_pathway_compaction_shows_whether_the_product_is_the_exact_target
     # Similarity 1.0 can still miss the target, e.g. as the other stereoisomer.
     assert compact["similarity_to_target"] == 1.0
     assert compact["identical_to_target"] is False
+
+
+def test_truncated_issues_report_how_many_there_were():
+    issues = [f"issue {index}" for index in range(12)]
+    compact = compact_tool_result(
+        "submit_pathway",
+        {"accepted": False, "issues": issues, "steps": [{"valid": False, "issues": issues}]},
+    )
+
+    assert compact["issues"] == issues[:8] and compact["issue_count"] == 12
+    assert compact["steps"][0]["issues"] == issues[:8] and compact["steps"][0]["issue_count"] == 12
+    assert "issue_count" not in compact_tool_result(
+        "submit_pathway", {"accepted": False, "issues": issues[:3]}
+    )
+
+
+def test_a_reaction_that_never_ran_reports_no_products():
+    rejected = compact_tool_result(
+        "simulate_reaction", {"valid": False, "issues": ["reactant 1 is not valid SMILES"]}
+    )
+    ran_empty = compact_tool_result("simulate_reaction", {"valid": True, "generated_products": []})
+
+    assert "generated_products" not in rejected
+    assert ran_empty["generated_products"] == []
+
+
+def test_a_successful_reverse_simulation_omits_valid_and_issues_like_the_other_tools():
+    ok = compact_tool_result(
+        "simulate_reverse_reaction", {"valid": True, "issues": [], "reaction_id": "R1"}
+    )
+    failed = compact_tool_result(
+        "simulate_reverse_reaction", {"valid": False, "issues": ["no match"], "reaction_id": "R1"}
+    )
+
+    assert "valid" not in ok and "issues" not in ok
+    assert failed["valid"] is False and failed["issues"] == ["no match"]
+
+
+def test_ungrounded_reactants_keep_their_step_and_reference():
+    compact = compact_tool_result(
+        "submit_pathway",
+        {
+            "accepted": False,
+            "ungrounded_reactants": [
+                {"step_index": 2, "ref": "CCO", "smiles": "CCO", "source": "smiles", "issue": "x"}
+            ],
+        },
+    )
+
+    assert compact["ungrounded_reactants"] == [
+        {"step_index": 2, "ref": "CCO", "smiles": "CCO", "source": "smiles", "issue": "x"}
+    ]
