@@ -77,10 +77,14 @@ def download_public_data(
 
     for item in selected:
         destination = root / item.path
-        # An existing file is kept only if it is the pinned one; a partial or older copy is fetched again.
-        if not force and destination.exists() and _sha256(destination.read_bytes()) == item.sha256:
+        if destination.exists() and not force:
+            # A file that differs from the pin may hold local edits (such as watchlist additions),
+            # so it is reported rather than replaced; --force replaces it.
+            matches = _sha256(destination.read_bytes()) == item.sha256
             skipped += 1
-            files.append(_file_result(item, destination, status="skipped"))
+            files.append(
+                _file_result(item, destination, status="skipped" if matches else "modified")
+            )
             continue
 
         destination.parent.mkdir(parents=True, exist_ok=True)

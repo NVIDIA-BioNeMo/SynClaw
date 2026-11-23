@@ -235,6 +235,7 @@ class AsyncToolExecutor:
                         f"BioNeMo-SynClaw chemistry workers fail at startup ({startup_error}); "
                         "fix the cause and restart the server."
                     )
+                    broken.shutdown(wait=False, cancel_futures=True)
                 else:
                     # The server now runs other threads, so fork could copy a held lock into
                     # the child; spawn starts each replacement worker from a clean interpreter.
