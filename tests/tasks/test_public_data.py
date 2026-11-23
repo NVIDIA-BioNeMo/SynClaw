@@ -5,9 +5,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 from pathlib import Path
 from unittest.mock import patch
+
+import pytest
 
 from synclaw.core.toxicity import DEFAULT_WATCHLIST
 from synclaw.tasks import public_data
@@ -19,8 +22,36 @@ def test_the_watchlist_downloads_where_the_toxicity_screen_reads_it() -> None:
     assert by_name["reasyn-mols-to-filter"].path == DEFAULT_WATCHLIST
 
 
-def test_a_repeated_name_downloads_once_and_leaves_no_partial_file(tmp_path: Path) -> None:
+def _pin(monkeypatch: pytest.MonkeyPatch, name: str, content: bytes) -> None:
+    pinned = tuple(
+        public_data.PublicDataFile(
+            **{**item.__dict__, "sha256": hashlib.sha256(content).hexdigest()}
+        )
+        if item.name == name
+        else item
+        for item in public_data.PUBLIC_DATA_FILES
+    )
+    monkeypatch.setattr(public_data, "PUBLIC_DATA_FILES", pinned)
+
+
+def test_the_downloads_are_the_chembl_targets_and_the_watchlist() -> None:
+    names = {item["name"] for item in public_data.list_public_data_files()}
+
+    assert names == {"synformer-chembl-1k", "reasyn-mols-to-filter"}
+
+
+def test_every_download_is_pinned_to_a_commit() -> None:
+    for item in public_data.PUBLIC_DATA_FILES:
+        commit = item.url.split("/")[5]
+        assert len(commit) == 40 and int(commit, 16) >= 0, item.name
+        assert len(item.sha256) == 64, item.name
+
+
+def test_a_repeated_name_downloads_once_and_leaves_no_partial_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     calls: list[str] = []
+    _pin(monkeypatch, "synformer-chembl-1k", b"CCO\nCCN\n")
 
     def fake_urlopen(url: str, timeout: float) -> io.BytesIO:
         calls.append(url)
@@ -38,3 +69,34 @@ def test_a_repeated_name_downloads_once_and_leaves_no_partial_file(tmp_path: Pat
     written = tmp_path / "data/synformer_test_sets/chembl_filtered_1k.txt"
     assert written.read_bytes() == b"CCO\nCCN\n"
     assert not list(written.parent.glob(".*.download"))
+
+
+def test_a_download_that_does_not_match_its_pin_is_refused(tmp_path: Path) -> None:
+    with (
+        patch(
+            "synclaw.tasks.public_data.urllib.request.urlopen",
+            return_value=io.BytesIO(b"changed upstream\n"),
+        ),
+        pytest.raises(RuntimeError, match="not the pinned"),
+    ):
+        public_data.download_public_data(dest_root=tmp_path, names=["synformer-chembl-1k"])
+
+    assert not (tmp_path / "data/synformer_test_sets/chembl_filtered_1k.txt").exists()
+
+
+def test_an_existing_file_is_kept_only_if_it_matches_the_pin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _pin(monkeypatch, "synformer-chembl-1k", b"CCO\n")
+    target = tmp_path / "data/synformer_test_sets/chembl_filtered_1k.txt"
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b"CC")  # a partial earlier download
+
+    with patch(
+        "synclaw.tasks.public_data.urllib.request.urlopen", return_value=io.BytesIO(b"CCO\n")
+    ):
+        first = public_data.download_public_data(dest_root=tmp_path, names=["synformer-chembl-1k"])
+    second = public_data.download_public_data(dest_root=tmp_path, names=["synformer-chembl-1k"])
+
+    assert (first["downloaded"], second["skipped"]) == (1, 1)
+    assert target.read_bytes() == b"CCO\n"
