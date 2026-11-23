@@ -306,12 +306,16 @@ class RolloutPolicyState:
 
 @dataclass(frozen=True, slots=True)
 class NoToolDecision:
+    """What to do after a reply with no tool call: end the rollout or send a reminder."""
+
     finish_reason: str | None = None
     reminder: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class PreparedToolCall:
+    """One model tool call after cleanup, with its trace payload."""
+
     call_id: str
     name: str
     arguments: dict[str, Any]
@@ -322,6 +326,13 @@ class PreparedToolCall:
 
 @dataclass(frozen=True, slots=True)
 class ToolResultDecision:
+    """What a tool result implies.
+
+    ``repair`` is a message to send the model. ``terminal_submission`` ends the rollout,
+    ``terminal_due_to_tool_limit`` says the tool-call limit was the reason, and
+    ``meets_floor`` says the submission met the stop condition.
+    """
+
     repair: str | None = None
     terminal_submission: dict[str, Any] | None = None
     terminal_due_to_tool_limit: bool = False
@@ -421,6 +432,26 @@ def handle_no_tool_response(
     *,
     content: str,
 ) -> NoToolDecision:
+    """Decide what to do after a reply with no tool call.
+
+    In the default stop modes the rollout does not end on such a reply unless the model
+    wrote ``<FINISH>`` after an accepted route or the tool-call limit was already reached.
+    Otherwise the model is reminded. The first replies get "Continue"; once
+    ``force_submit_after_non_tool_turns`` of them have come in a row (any tool result
+    resets the count), the forced-submit flag is set and the reminder asks for
+    ``submit_pathway``. While the flag is set, every further reply gets that reminder again.
+    With ``stop_condition="model"`` a reply ends the rollout, after at most one request to
+    submit when no route is accepted.
+
+    Args:
+        config: Rollout settings.
+        state: Policy state, updated in place (the counter and the forced-submit flags).
+        content: The reply's text.
+
+    Returns:
+        A finish reason that ends the rollout, or a reminder to send before the next turn.
+    """
+
     if state.best_accepted_submission is not None and "<FINISH>" in content:
         return NoToolDecision(finish_reason="finish_token_best_accepted_submission")
     if state.forced_submit_requested and state.tool_limit_finalization_requested:
@@ -471,6 +502,23 @@ def prepare_tool_call(
     raw_tool_call: dict[str, Any],
     event_index: int,
 ) -> PreparedToolCall:
+    """Clean up and normalize one raw tool call.
+
+    Strips tokenizer artifacts from the name and parses the arguments; a parse failure is
+    kept as ``argument_error`` and the call gets empty arguments. A ``submit_pathway`` call
+    loses the ``target_smiles`` and ``final_smiles`` it may not set. JSON-encoded lists are
+    parsed and argument defaults applied.
+
+    Args:
+        raw_name: The tool name as the model wrote it.
+        raw_arguments: A JSON object string or a dict.
+        raw_tool_call: The provider's call object, kept in the trace.
+        event_index: Names a call that carries no id of its own.
+
+    Returns:
+        The prepared call, including the payload for its trace event.
+    """
+
     name = clean_tool_name(raw_name)
     argument_error: str | None = None
     try:
@@ -663,6 +711,8 @@ def _rejected_repair(state: RolloutPolicyState, result: dict[str, Any]) -> str:
 
 
 def tool_limit_finish_reason(state: RolloutPolicyState) -> str:
+    """The finish reason when the tool-call limit ends the rollout."""
+
     return (
         "tool_limit_best_accepted_submission"
         if state.best_accepted_submission is not None
@@ -692,6 +742,8 @@ def submit_tool_choice(
 
 
 def tool_schema_contains_name(tools: list[dict[str, Any]], name: str) -> bool:
+    """Whether ``tools`` declares ``name``, in the chat (``function.name``) or Responses layout."""
+
     for tool in tools:
         function = tool.get("function")
         if isinstance(function, dict) and function.get("name") == name:
@@ -702,6 +754,13 @@ def tool_schema_contains_name(tools: list[dict[str, Any]], name: str) -> bool:
 
 
 def pathway_submission_signature(arguments: dict[str, Any] | None) -> str | None:
+    """A canonical string for a submitted pathway, or None if it cannot be normalized.
+
+    Two submissions with the same signature are the same pathway; the policy uses it to
+    count repeats. A purchase is identified by its building block, a route by each step's
+    product, reactants and reaction id.
+    """
+
     if not isinstance(arguments, dict):
         return None
     building_block = arguments.get("building_block")
@@ -729,6 +788,15 @@ def pathway_submission_signature(arguments: dict[str, Any] | None) -> str | None
 
 
 def parse_arguments(raw: Any) -> dict[str, Any]:
+    """Return tool arguments as a dict.
+
+    Accepts a dict, an empty value (giving ``{}``) or a JSON object string.
+
+    Raises:
+        TypeError: ``raw`` is neither a string nor a dict.
+        ValueError: The string is not a JSON object.
+    """
+
     if isinstance(raw, dict):
         return raw
     if not raw:
@@ -740,6 +808,8 @@ def parse_arguments(raw: Any) -> dict[str, Any]:
 
 
 def clean_tool_name(name: Any) -> str:
+    """Drop everything from the first ``<|`` on, which some models append to a tool name."""
+
     text = "" if name is None else str(name)
     return text.split("<|", 1)[0]
 
@@ -747,6 +817,12 @@ def clean_tool_name(name: Any) -> str:
 def coerce_tool_arguments(
     name: str, arguments: dict[str, Any]
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Parse the JSON-encoded lists some models send as strings for a tool's list arguments.
+
+    Returns:
+        The arguments with those lists parsed, and a record of each coercion for the trace.
+    """
+
     coerced = dict(arguments)
     coercions: list[dict[str, Any]] = []
     if name == "simulate_reaction":
@@ -832,6 +908,11 @@ def _coerce_json_string_array_field(
 
 
 def tool_argument_error(name: str, message: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    """The result returned in place of running a tool whose arguments could not be used.
+
+    It is marked retryable; for ``submit_pathway`` it is also a rejected submission.
+    """
+
     result: dict[str, Any] = {
         "valid": False,
         "error": "invalid_tool_call",
@@ -849,10 +930,14 @@ def tool_argument_error(name: str, message: str, arguments: dict[str, Any]) -> d
 
 
 def is_retryable_tool_error(result: dict[str, Any]) -> bool:
+    """Whether a tool result is an error the model can fix by calling again."""
+
     return bool(result.get("retryable") and result.get("error"))
 
 
 def is_better_submission_similarity(candidate: float | None, incumbent: float | None) -> bool:
+    """Whether ``candidate`` beats ``incumbent``. A score beats none, ties keep the incumbent."""
+
     if candidate is None:
         return False
     return incumbent is None or float(candidate) > float(incumbent)
@@ -876,8 +961,16 @@ def is_below_persistence_floor(
     similarity: float | None,
     stop_condition: StopCondition,
 ) -> bool:
+    """Whether the best accepted route is weak enough to tell a model that stops it can do better.
+
+    ``exact`` counts any scored route; a similarity threshold counts routes below it, and
+    0 never does. ``model`` never does: nothing coaches the model in that mode.
+    """
+
     # An identity match already terminates the rollout. A continuing exact-mode
     # rollout therefore still needs improvement, even at fingerprint similarity 1.
+    if stop_condition == "model":
+        return False
     if stop_condition == "exact":
         return similarity is not None
     return (
@@ -908,7 +1001,12 @@ def _submission_fingerprint_similarity(
     target_smiles: str | None,
     key: str,
 ) -> float | None:
-    """Return the stored ``{key}_to_target`` score, or recompute ``chem.similarity``'s ``key``."""
+    """Return the stored ``{key}_to_target`` score, or recompute ``chem.similarity``'s ``key``.
+
+    Unlike identity, the stored score is trusted, not recomputed: the validator computed it
+    against the same target during the rollout, so it is what the rollout was scored on.
+    Only a result without one is recomputed.
+    """
 
     if not submission or submission.get("accepted") is not True or not target_smiles:
         return None
@@ -928,6 +1026,8 @@ def submission_constitutional_similarity_to_target(
     submission: dict[str, Any] | None,
     target_smiles: str | None,
 ) -> float | None:
+    """The stereo-ignoring Morgan/Tanimoto similarity of an accepted submission to the target."""
+
     return _submission_fingerprint_similarity(
         submission, target_smiles, "constitutional_similarity"
     )
@@ -977,6 +1077,11 @@ def selected_submission_event(
     submission_arguments: dict[str, Any] | None = None,
     reason: str,
 ) -> dict[str, Any] | None:
+    """Build the trace event recording which submission was selected and why.
+
+    Returns None when there is no submission.
+    """
+
     if submission is None:
         return None
     model_result = compact_tool_result("submit_pathway", submission)

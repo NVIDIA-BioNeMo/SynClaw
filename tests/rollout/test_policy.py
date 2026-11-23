@@ -595,3 +595,12 @@ def test_forced_submit_stays_forced_after_a_rejected_submission() -> None:
         tools=tools,
     )
     assert choice == {"type": "function", "function": {"name": "submit_pathway"}}
+
+
+def test_no_persistence_coaching_in_model_stop_mode() -> None:
+    from synclaw.rollout.policy import is_below_persistence_floor
+
+    assert is_below_persistence_floor(0.4, "model") is False
+    assert is_below_persistence_floor(0.4, "exact") is True
+    assert is_below_persistence_floor(0.4, 0.8) is True
+    assert is_below_persistence_floor(0.9, 0.8) is False

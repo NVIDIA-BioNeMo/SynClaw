@@ -176,7 +176,10 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         "--turn-warning-remaining",
         type=int,
         default=policy.DEFAULT_TURN_WARNING_REMAINING,
-        help="Warn the model when this many assistant turns remain; set 0 to disable",
+        help=(
+            "Warn the model when this many assistant turns remain, before the final turn's own "
+            "reminder; values below 2 never fire. Set 0 to disable"
+        ),
     )
     parser.add_argument(
         "--force-submit-after-non-tool-turns",
