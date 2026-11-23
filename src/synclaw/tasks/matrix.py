@@ -58,7 +58,7 @@ from synclaw.tasks.targets import (
     REACTION_FILE,
     REACTION_ID_FILE,
     line_offsets,
-    read_smiles_lines,
+    read_smiles_file,
 )
 
 COLUMN_FILE = "columns.npz"
@@ -87,12 +87,28 @@ def _pool_context():
     return mp.get_context("spawn")
 
 
-def _sha256(path: Path, chunk: int = 1 << 20) -> str:
-    digest = hashlib.sha256()
+def sha256_file(path: Path) -> str:
+    """Hex SHA-256 of a file's bytes."""
     with open(path, "rb") as handle:
-        while block := handle.read(chunk):
-            digest.update(block)
-    return digest.hexdigest()
+        return hashlib.file_digest(handle, "sha256").hexdigest()
+
+
+def check_multicomponent_policy(policy: str) -> None:
+    """Raise ``ValueError`` unless ``policy`` is one of ``MULTICOMPONENT_POLICIES``."""
+    if policy not in MULTICOMPONENT_POLICIES:
+        raise ValueError(f"multicomponent must be one of {MULTICOMPONENT_POLICIES}")
+
+
+def major_component(mol: Any) -> Any:
+    """The component the ``major`` policy keeps: most heavy atoms, ties broken by canonical SMILES.
+
+    Ties are common (about a quarter of the multi-component rows in eMolecules), so they are broken
+    by canonical SMILES rather than by component order.
+    """
+    from rdkit import Chem
+
+    components = Chem.GetMolFrags(mol, asMols=True)
+    return min(components, key=lambda part: (-part.GetNumHeavyAtoms(), Chem.MolToSmiles(part)))
 
 
 # --------------------------------------------------------------------------- templates
@@ -173,13 +189,6 @@ def write_templates(records: Sequence[dict[str, Any]], out_dir: Path) -> dict[st
 # --------------------------------------------------------------------------- building blocks
 
 
-def _largest_component(smiles: str, Chem: Any) -> str:
-    """The component with the most atoms, matching how a major-component policy picks one."""
-    parts = [Chem.MolFromSmiles(part) for part in smiles.split(".")]
-    best = max((p for p in parts if p is not None), key=lambda m: m.GetNumAtoms(), default=None)
-    return "" if best is None else Chem.MolToSmiles(best, canonical=True, isomericSmiles=True)
-
-
 def _canonicalize(task: tuple[list[str], str, str]) -> list[tuple[str, str]]:
     """Canonicalize a chunk, returning (smiles, status) per row.
 
@@ -203,15 +212,11 @@ def _canonicalize(task: tuple[list[str], str, str]) -> list[tuple[str, str]]:
                 for atom in mol.GetAtoms():
                     atom.SetAtomMapNum(0)
         canonical = Chem.MolToSmiles(mol, canonical=True, isomericSmiles=True)
-        if "." in canonical:
+        if "." in canonical and multicomponent != "keep":
             if multicomponent == "drop":
                 out.append(("", "multicomponent"))
                 continue
-            if multicomponent == "major":
-                canonical = _largest_component(canonical, Chem)
-                if not canonical:
-                    out.append(("", "invalid"))
-                    continue
+            canonical = Chem.MolToSmiles(major_component(mol), canonical=True, isomericSmiles=True)
         out.append((canonical, "ok"))
     return out
 
@@ -398,7 +403,7 @@ def fill_matrix(
     limit: int | None = None,
 ) -> dict[str, Any]:
     """Fill `matrix.npy` from the catalog files already written into `directory`."""
-    smiles = read_smiles_lines(directory / BUILDING_BLOCK_FILE)
+    smiles = read_smiles_file(directory / BUILDING_BLOCK_FILE)
     if limit is not None:
         smiles = smiles[:limit]
         # The matrix rows must line up with the block file, so shorten it to what was used.
@@ -473,8 +478,7 @@ def build_matrix_directory(
     common_reagents: bool = True,
 ) -> dict[str, Any]:
     """Write a complete reactant-template matrix directory and return its manifest."""
-    if multicomponent not in MULTICOMPONENT_POLICIES:
-        raise ValueError(f"multicomponent must be one of {MULTICOMPONENT_POLICIES}")
+    check_multicomponent_policy(multicomponent)
     if atom_maps not in ATOM_MAP_POLICIES:
         raise ValueError(f"atom_maps must be one of {ATOM_MAP_POLICIES}")
 
@@ -532,7 +536,7 @@ def build_matrix_directory(
         "rdkit_version": str(rdBase.rdkitVersion),
         "libraries": list(selected),
         "building_blocks_source": str(building_blocks),
-        "building_blocks_sha256": _sha256(building_blocks),
+        "building_blocks_sha256": sha256_file(building_blocks),
         "common_reagents": None if reagents is None else str(reagents),
         "multicomponent_policy": multicomponent,
         "atom_map_policy": atom_maps,

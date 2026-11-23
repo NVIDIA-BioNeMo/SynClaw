@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import gzip
-import hashlib
 import json
 import os
 import re
@@ -22,7 +21,7 @@ from typing import Any
 # InChIKey per molecule, which this catalog-sized stream discards.
 from rdkit import Chem, RDLogger, rdBase
 
-from synclaw.tasks.matrix import MULTICOMPONENT_POLICIES
+from synclaw.tasks.matrix import check_multicomponent_policy, major_component, sha256_file
 
 EMOLECULES_DOWNLOAD_ROOT = "https://downloads.emolecules.com/orderbb"
 _RELEASE_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -52,7 +51,7 @@ def prepare_emolecules_building_blocks(
     ``drop`` them.
     """
 
-    _check_policy(multicomponent)
+    check_multicomponent_policy(multicomponent)
     if _RELEASE_PATTERN.fullmatch(release) is None:
         raise RuntimeError("eMolecules release must use YYYY-MM-DD format")
 
@@ -70,10 +69,10 @@ def prepare_emolecules_building_blocks(
         downloaded = True
         _emit(progress, phase="downloaded", path=str(archive_path), url=url)
     else:
-        _validate_gzip(archive_path)
         _emit(progress, phase="reused_archive", path=str(archive_path), url=url)
 
-    source_sha256 = _sha256(archive_path)
+    # A manifest that matches this archive's hash means it was already read in full and converted.
+    source_sha256 = sha256_file(archive_path)
     if (
         not force
         and output_path.exists()
@@ -92,6 +91,8 @@ def prepare_emolecules_building_blocks(
             "conversion_status": "reused",
         }
 
+    if not downloaded:
+        _validate_gzip(archive_path)  # A download was validated before it replaced the archive.
     stats = convert_emolecules_parent_archive(
         archive_path,
         output_path,
@@ -105,7 +106,7 @@ def prepare_emolecules_building_blocks(
         "source_archive": str(archive_path),
         "source_sha256": source_sha256,
         "output": str(output_path),
-        "output_sha256": _sha256(output_path),
+        "output_sha256": sha256_file(output_path),
         "invalid_output": str(invalid_path),
         "generated_at": datetime.now(UTC).isoformat(),
         "rdkit_version": str(rdBase.rdkitVersion),
@@ -136,12 +137,12 @@ def convert_emolecules_parent_archive(
     to a component that is already a row counts as a duplicate.
     """
 
-    _check_policy(multicomponent)
+    check_multicomponent_policy(multicomponent)
     source = Path(archive_path)
     destination = Path(output_path)
     invalid_destination = Path(invalid_path)
-    # No pre-scan here: callers validate the archive once on download or reuse, and
-    # the streaming read below raises on a bad CRC of its own accord.
+    # No pre-scan here: callers validate the archive before converting it, and the streaming
+    # read below raises on a bad CRC of its own accord.
     destination.parent.mkdir(parents=True, exist_ok=True)
     invalid_destination.parent.mkdir(parents=True, exist_ok=True)
 
@@ -206,12 +207,7 @@ def convert_emolecules_parent_archive(
                             multicomponent_dropped += 1
                             continue
                         if multicomponent == "major":
-                            # Ties are common (about a quarter of multi-component rows), so
-                            # break them by canonical SMILES rather than by source order.
-                            mol = min(
-                                components,
-                                key=lambda part: (-part.GetNumHeavyAtoms(), Chem.MolToSmiles(part)),
-                            )
+                            mol = major_component(mol)
                 canonical_smiles = Chem.MolToSmiles(
                     mol,
                     canonical=True,
@@ -270,11 +266,6 @@ def _validate_gzip(path: Path) -> None:
         raise RuntimeError(f"Invalid or incomplete gzip archive at {path}: {exc}") from exc
 
 
-def _check_policy(multicomponent: str) -> None:
-    if multicomponent not in MULTICOMPONENT_POLICIES:
-        raise RuntimeError(f"multicomponent must be one of {MULTICOMPONENT_POLICIES}")
-
-
 def _manifest_matches(
     manifest_path: Path, *, source_sha256: str, output_path: Path, multicomponent: str
 ) -> bool:
@@ -284,17 +275,9 @@ def _manifest_matches(
         return False
     return (
         manifest.get("source_sha256") == source_sha256
-        and manifest.get("multicomponent", "keep") == multicomponent
-        and manifest.get("output_sha256") == _sha256(output_path)
+        and manifest.get("multicomponent") == multicomponent
+        and manifest.get("output_sha256") == sha256_file(output_path)
     )
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _write_json_atomic(path: Path, value: dict[str, Any]) -> None:

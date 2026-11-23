@@ -131,8 +131,17 @@ def test_budget_sets_accept_inf_and_flags(text, expected):
         ("budget_feedback=no", "true or false"),
         ("max_turns", "name=value"),
         ("max_context=1000", "Unknown task budget"),
+        ("max_turn=inf2", "Unknown task budget"),  # the name is checked before the value
+        ("max_turns=40,max_turns=5", "more than once"),
     ],
 )
 def test_bad_budget_sets_are_refused(text, message):
     with pytest.raises(ValueError, match=message):
         parse_budget_set(text)
+
+
+def test_task_rows_carry_only_fields_something_reads():
+    task = build_llm_task("CCO", task_id="t", dataset="d", source_file="f")
+
+    assert not {"expected_final_tool", "expected_submission", "scoring"} & set(task)
+    assert task["question"] == "Target molecule: CCO"
