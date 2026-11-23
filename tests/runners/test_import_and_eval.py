@@ -860,7 +860,6 @@ class ImportAndEvalTests(unittest.TestCase):
         self.assertEqual(args.max_turns, 80)
         self.assertEqual(args.max_tool_calls, 150)
         self.assertEqual(args.turn_warning_remaining, 3)
-        self.assertEqual(args.force_submit_after_non_tool_turns, 2)
         self.assertEqual(args.same_pathway_finish_after, 5)
 
     def test_model_runner_openai_provider_defaults(self):

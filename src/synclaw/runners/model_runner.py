@@ -182,17 +182,6 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
-        "--force-submit-after-non-tool-turns",
-        type=int,
-        default=policy.DEFAULT_FORCE_SUBMIT_AFTER_NON_TOOL_TURNS,
-        help=(
-            "After this many consecutive assistant turns without a tool call, reply 'Call "
-            "submit_pathway now' and, if no route is accepted yet, require a submit_pathway call "
-            "on the next request. The rollout does not end. Ignored with --stop-condition model; "
-            "set 0 to disable"
-        ),
-    )
-    parser.add_argument(
         "--same-pathway-finish-after",
         type=int,
         default=policy.DEFAULT_SAME_PATHWAY_FINISH_AFTER,
@@ -374,7 +363,6 @@ def run_model_from_args(args: argparse.Namespace) -> dict[str, Any]:
         budget_feedback=getattr(args, "budget_feedback", True),
         stop_condition=getattr(args, "stop_condition", policy.DEFAULT_STOP_CONDITION),
         turn_warning_remaining=args.turn_warning_remaining,
-        force_submit_after_non_tool_turns=args.force_submit_after_non_tool_turns,
         same_pathway_finish_after=int(args.same_pathway_finish_after or 0),
         max_low_similarity_submissions=args.max_low_similarity_submissions,
         excluded_tools=frozenset(excluded_tools),

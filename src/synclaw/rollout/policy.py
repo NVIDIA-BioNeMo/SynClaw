@@ -36,7 +36,6 @@ DEFAULT_MAX_TOKENS = 32768
 DEFAULT_CONTEXT_SAFETY_MARGIN_FRACTION = 1 / 32
 MIN_CONTEXT_SAFETY_MARGIN_TOKENS = 512
 DEFAULT_TURN_WARNING_REMAINING = 3
-DEFAULT_FORCE_SUBMIT_AFTER_NON_TOOL_TURNS = 2
 DEFAULT_SAME_PATHWAY_FINISH_AFTER = 5
 DEFAULT_MAX_LOW_SIMILARITY_SUBMISSIONS: int | None = None
 DEFAULT_CONTEXT_WARNING_REMAINING_FRACTION = 0.5
@@ -118,7 +117,6 @@ class RolloutPolicyConfig:
     # "model": no submission ends it and nothing coaches; a reply without a tool call ends it.
     stop_condition: StopCondition = DEFAULT_STOP_CONDITION
     turn_warning_remaining: int = DEFAULT_TURN_WARNING_REMAINING
-    force_submit_after_non_tool_turns: int = DEFAULT_FORCE_SUBMIT_AFTER_NON_TOOL_TURNS
     same_pathway_finish_after: int = DEFAULT_SAME_PATHWAY_FINISH_AFTER
     max_low_similarity_submissions: int | None = DEFAULT_MAX_LOW_SIMILARITY_SUBMISSIONS
     excluded_tools: frozenset[str] = frozenset()
@@ -224,7 +222,6 @@ class RolloutPolicyState:
     """Mutable policy state with a stable checkpoint representation."""
 
     total_tool_calls: int = 0
-    consecutive_non_tool_turns_after_tools: int = 0
     forced_submit_requested: bool = False
     # The one request to submit when the model stops without an accepted route; unlike
     # forced_submit_requested, a later submission does not clear it.
@@ -247,9 +244,6 @@ class RolloutPolicyState:
     def from_checkpoint(cls, checkpoint: dict[str, Any]) -> RolloutPolicyState:
         return cls(
             total_tool_calls=int(checkpoint.get("total_tool_calls") or 0),
-            consecutive_non_tool_turns_after_tools=int(
-                checkpoint.get("consecutive_non_tool_turns_after_tools") or 0
-            ),
             forced_submit_requested=bool(checkpoint.get("forced_submit_requested")),
             model_stop_submit_requested=bool(checkpoint.get("model_stop_submit_requested")),
             tool_limit_finalization_requested=bool(
@@ -272,7 +266,6 @@ class RolloutPolicyState:
     def checkpoint_fields(self) -> dict[str, Any]:
         return {
             "total_tool_calls": self.total_tool_calls,
-            "consecutive_non_tool_turns_after_tools": (self.consecutive_non_tool_turns_after_tools),
             "forced_submit_requested": self.forced_submit_requested,
             "model_stop_submit_requested": self.model_stop_submit_requested,
             "tool_limit_finalization_requested": self.tool_limit_finalization_requested,
@@ -436,16 +429,14 @@ def handle_no_tool_response(
 
     In the default stop modes the rollout does not end on such a reply unless the model
     wrote ``<FINISH>`` after an accepted route or the tool-call limit was already reached.
-    Otherwise the model is reminded. The first replies get "Continue"; once
-    ``force_submit_after_non_tool_turns`` of them have come in a row (any tool result
-    resets the count), the forced-submit flag is set and the reminder asks for
-    ``submit_pathway``. While the flag is set, every further reply gets that reminder again.
+    Otherwise the model is reminded: "Continue" normally, or, once the final turn or the
+    tool-call limit has set the forced-submit flag, a request for ``submit_pathway``.
     With ``stop_condition="model"`` a reply ends the rollout, after at most one request to
     submit when no route is accepted.
 
     Args:
         config: Rollout settings.
-        state: Policy state, updated in place (the counter and the forced-submit flags).
+        state: Policy state, updated in place in model-stop mode (the forced-submit flags).
         content: The reply's text.
 
     Returns:
@@ -474,25 +465,15 @@ def handle_no_tool_response(
                 "Call submit_pathway now with your best route."
             )
         )
-    state.consecutive_non_tool_turns_after_tools += 1
     persistence_suffix = ""
-    if is_below_persistence_floor(
-        state.best_accepted_similarity,
-        config.stop_condition,
-    ):
+    if is_below_persistence_floor(state.best_accepted_similarity, config.stop_condition):
         persistence_suffix = f" {NON_TOOL_PERSISTENCE_GUARANTEE_SENTENCE}"
-    if (
-        config.force_submit_after_non_tool_turns > 0
-        and state.consecutive_non_tool_turns_after_tools >= config.force_submit_after_non_tool_turns
-    ):
-        state.forced_submit_requested = True
-        reminder = f"Call submit_pathway now with your best route.{persistence_suffix}"
-    else:
-        reminder = (
+    return NoToolDecision(
+        reminder=(
             "Continue. Use additional tools if they are useful, and finish by calling "
             f"submit_pathway when the route is ready.{persistence_suffix}"
         )
-    return NoToolDecision(reminder=reminder)
+    )
 
 
 def prepare_tool_call(
@@ -568,7 +549,6 @@ def handle_tool_result(
 ) -> ToolResultDecision:
     """Apply one result in model-emitted order and decide repair or termination."""
 
-    state.consecutive_non_tool_turns_after_tools = 0
     state.total_tool_calls += 1
     tool_budget_exhausted = (
         config.max_tool_calls > 0 and state.total_tool_calls >= config.max_tool_calls
