@@ -26,7 +26,6 @@ from synclaw.tasks.datasets import (
     build_llm_task,
     generate_llm_taskset,
 )
-from synclaw.tasks.public_data import list_public_data_files
 from synclaw.tools.contracts import (
     TOOL_SCHEMAS,
     filter_chat_tool_schemas,
@@ -601,14 +600,6 @@ class ImportAndEvalTests(unittest.TestCase):
             self.assertEqual(lines[0], "source_summary_file,model,accepted,similarity_to_target")
             self.assertIn("model-a,True,", lines[1])
             self.assertIn("model-b,,0.9", lines[2])
-
-    def test_public_data_manifest_lists_expected_assets(self):
-        files = list_public_data_files()
-        names = {item["name"] for item in files}
-
-        self.assertIn("synformer-reaction-templates", names)
-        self.assertIn("synformer-chembl-1k", names)
-        self.assertIn("synformer-enamine-real-1k", names)
 
     def test_model_runner_rejects_empty_model_run_database(self):
         with tempfile.TemporaryDirectory() as tmp:

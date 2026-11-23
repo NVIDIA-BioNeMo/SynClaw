@@ -17,36 +17,34 @@ from synclaw.core.toxicity import DEFAULT_WATCHLIST
 
 @dataclass(frozen=True)
 class PublicDataFile:
+    """One downloadable file, pinned to an upstream commit and its expected SHA-256."""
+
     name: str
     url: str
     path: Path
     description: str
+    sha256: str
 
+
+# Neither upstream repository publishes tags or releases, so each URL is pinned to the last
+# commit that changed the file; the SHA-256 is checked on every download.
+_SYNFORMER = "https://raw.githubusercontent.com/wenhao-gao/synformer"
+_REASYN = "https://raw.githubusercontent.com/NVIDIA-BioNeMo/ReaSyn"
 
 PUBLIC_DATA_FILES: tuple[PublicDataFile, ...] = (
     PublicDataFile(
-        name="synformer-reaction-templates",
-        url="https://raw.githubusercontent.com/wenhao-gao/synformer/main/data/rxn_templates/comprehensive.txt",
-        path=Path("data/reaction_templates/synformer_comprehensive.txt"),
-        description="SynFormer comprehensive reaction SMARTS templates.",
-    ),
-    PublicDataFile(
         name="synformer-chembl-1k",
-        url="https://raw.githubusercontent.com/wenhao-gao/synformer/main/data/chembl_filtered_1k.txt",
+        url=f"{_SYNFORMER}/bef02bc4481adf3ed792090fc6169331d4d0553a/data/chembl_filtered_1k.txt",
         path=Path("data/synformer_test_sets/chembl_filtered_1k.txt"),
         description="SynFormer public ChEMBL 1k target set.",
-    ),
-    PublicDataFile(
-        name="synformer-enamine-real-1k",
-        url="https://raw.githubusercontent.com/wenhao-gao/synformer/main/data/enamine_smiles_1k.txt",
-        path=Path("data/synformer_test_sets/enamine_smiles_1k.txt"),
-        description="SynFormer public Enamine REAL 1k target-molecule set.",
+        sha256="3319bebde9ca9fa0529c6b127a9d7c1b91388d4254cc52de98ec1cfa12d3138e",
     ),
     PublicDataFile(
         name="reasyn-mols-to-filter",
-        url="https://raw.githubusercontent.com/NVIDIA-BioNeMo/ReaSyn/reasyn_v2/data/mols_to_filter.txt",
+        url=f"{_REASYN}/7c2384798fc2385634331d06d47a6164065c65a4/data/mols_to_filter.txt",
         path=DEFAULT_WATCHLIST,
         description="ReaSyn dangerous-molecule watchlist for the toxicity screen.",
+        sha256="f112aba85b7c6031f03de5d190bbc4cab13898044a2b33638f0531e97fc70da8",
     ),
 )
 
@@ -58,6 +56,7 @@ def list_public_data_files() -> list[dict[str, str]]:
             "url": item.url,
             "path": str(item.path),
             "description": item.description,
+            "sha256": item.sha256,
         }
         for item in PUBLIC_DATA_FILES
     ]
@@ -78,7 +77,8 @@ def download_public_data(
 
     for item in selected:
         destination = root / item.path
-        if destination.exists() and not force:
+        # An existing file is kept only if it is the pinned one; a partial or older copy is fetched again.
+        if not force and destination.exists() and _sha256(destination.read_bytes()) == item.sha256:
             skipped += 1
             files.append(_file_result(item, destination, status="skipped"))
             continue
@@ -86,6 +86,10 @@ def download_public_data(
         destination.parent.mkdir(parents=True, exist_ok=True)
         with urllib.request.urlopen(item.url, timeout=timeout) as response:
             data = response.read()
+        if (digest := _sha256(data)) != item.sha256:
+            raise RuntimeError(
+                f"{item.name} from {item.url} has SHA-256 {digest}, not the pinned {item.sha256}"
+            )
         # Written aside and moved into place, so an interrupted download leaves no partial file
         # that a later run would skip as already downloaded.
         temporary = destination.with_name(f".{destination.name}.download")
@@ -122,6 +126,10 @@ def _file_result(item: PublicDataFile, destination: Path, *, status: str) -> dic
         "path": str(destination),
         "url": item.url,
         "size_bytes": len(data),
-        "sha256": hashlib.sha256(data).hexdigest(),
+        "sha256": _sha256(data),
         "line_count": len(data.splitlines()),
     }
+
+
+def _sha256(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
