@@ -125,6 +125,17 @@ def test_resume_into_a_different_trace_path_writes_the_whole_trace(run, tmp_path
     assert len(writes) == 2
 
 
+def test_resume_refuses_a_trace_with_fewer_events_than_the_checkpoint_covers(run, tmp_path) -> None:
+    args, _ = run
+    _run_expecting_failure(args)
+    trace = tmp_path / "trace.jsonl"
+    lines = trace.read_text().splitlines()
+    trace.write_text("\n".join(lines[:-1]) + "\n")  # the last covered event is gone
+
+    with pytest.raises(RuntimeError, match="was damaged or replaced"):
+        model_runner.run_model_from_args(args)
+
+
 def test_the_checkpoint_records_how_many_trace_events_it_covers(run, tmp_path) -> None:
     args, _ = run
     _run_expecting_failure(args)

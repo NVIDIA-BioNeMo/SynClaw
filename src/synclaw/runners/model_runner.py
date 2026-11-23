@@ -629,7 +629,12 @@ def _restored_run_state(
         )
     trace_events, intact = _read_trace(recorded_trace_path)
     covered = checkpoint.get("trace_event_count")
-    if isinstance(covered, int) and 0 <= covered < len(trace_events):
+    if isinstance(covered, int) and covered > len(trace_events):
+        raise RuntimeError(
+            f"Trace {recorded_trace_path} holds {len(trace_events)} events but checkpoint "
+            f"{checkpoint_path} covers {covered}; the trace was damaged or replaced"
+        )
+    if isinstance(covered, int) and covered < len(trace_events):
         # A crash can leave the trace ahead of the checkpoint; the resumed turn will redo those.
         trace_events, intact = trace_events[:covered], False
     messages = checkpoint.get("messages") or []
