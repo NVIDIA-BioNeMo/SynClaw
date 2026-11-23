@@ -84,19 +84,22 @@ def test_a_download_that_does_not_match_its_pin_is_refused(tmp_path: Path) -> No
     assert not (tmp_path / "data/synformer_test_sets/chembl_filtered_1k.txt").exists()
 
 
-def test_an_existing_file_is_kept_only_if_it_matches_the_pin(
+def test_an_existing_file_that_differs_from_the_pin_is_reported_not_replaced(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _pin(monkeypatch, "synformer-chembl-1k", b"CCO\n")
     target = tmp_path / "data/synformer_test_sets/chembl_filtered_1k.txt"
     target.parent.mkdir(parents=True)
-    target.write_bytes(b"CC")  # a partial earlier download
+    target.write_bytes(b"CCO\nlocal edit\n")
 
+    kept = public_data.download_public_data(dest_root=tmp_path, names=["synformer-chembl-1k"])
     with patch(
         "synclaw.tasks.public_data.urllib.request.urlopen", return_value=io.BytesIO(b"CCO\n")
     ):
-        first = public_data.download_public_data(dest_root=tmp_path, names=["synformer-chembl-1k"])
-    second = public_data.download_public_data(dest_root=tmp_path, names=["synformer-chembl-1k"])
+        forced = public_data.download_public_data(
+            dest_root=tmp_path, names=["synformer-chembl-1k"], force=True
+        )
 
-    assert (first["downloaded"], second["skipped"]) == (1, 1)
+    assert kept["files"][0]["status"] == "modified"
+    assert forced["files"][0]["status"] == "downloaded"
     assert target.read_bytes() == b"CCO\n"

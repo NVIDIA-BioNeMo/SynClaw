@@ -522,6 +522,7 @@ def test_flush_appends_only_the_new_events(tmp_path) -> None:
         ("", [], True),
         ('{"n": 1}\n{"n": 2', [{"n": 1}], False),  # cut short mid-event
         ('{"n": 1}\n{"n": 2}', [{"n": 1}, {"n": 2}], False),  # complete event, no newline
+        ('{"n": 1}\n{"n": 2\n\n', [{"n": 1}], False),  # cut short, then blank lines
     ],
 )
 def test_read_trace_flags_a_last_line_cut_short_by_a_crash(tmp_path, text, events, intact) -> None:

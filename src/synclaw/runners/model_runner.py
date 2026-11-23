@@ -670,6 +670,7 @@ def _read_trace(path: Path) -> tuple[list[dict[str, Any]], bool]:
 
     text = path.read_text(encoding="utf-8")
     lines = text.splitlines()
+    last = max((number for number, line in enumerate(lines, start=1) if line.strip()), default=0)
     events: list[dict[str, Any]] = []
     for number, line in enumerate(lines, start=1):
         if not line.strip():
@@ -677,7 +678,7 @@ def _read_trace(path: Path) -> tuple[list[dict[str, Any]], bool]:
         try:
             events.append(json.loads(line))
         except json.JSONDecodeError as exc:
-            if number == len(lines):
+            if number == last:
                 return events, False
             raise RuntimeError(f"Trace {path} is corrupt at line {number}") from exc
     return events, text.endswith("\n") or not text
