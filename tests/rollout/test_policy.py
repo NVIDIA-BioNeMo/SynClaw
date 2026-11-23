@@ -593,6 +593,25 @@ def test_forced_submit_stays_forced_after_a_rejected_submission() -> None:
     )
     assert choice == {"type": "function", "function": {"name": "submit_pathway"}}
 
+    # The forced request yields a submission, and any submission result clears the flag.
+    handle_tool_result(
+        config,
+        state,
+        name="submit_pathway",
+        arguments={},
+        result={"accepted": False, "error_message": "still bad"},
+        target_smiles="CCO",
+    )
+    assert state.forced_submit_requested is False
+    assert (
+        submit_tool_choice(
+            forced_submit_requested=state.forced_submit_requested,
+            has_accepted_submission=state.has_accepted_submission,
+            tools=tools,
+        )
+        == "auto"
+    )
+
 
 def test_no_persistence_coaching_in_model_stop_mode() -> None:
     from synclaw.rollout.policy import is_below_persistence_floor

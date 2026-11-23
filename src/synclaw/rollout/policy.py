@@ -706,7 +706,8 @@ def submit_tool_choice(
     has_accepted_submission: bool,
     tools: list[dict[str, Any]],
 ) -> Any:
-    """The chat-style ``tool_choice``; Responses transports convert it before sending.
+    """The chat-style ``tool_choice``; the Responses transport converts it before sending,
+    and the Messages transport does not send one.
 
     Forces ``submit_pathway`` only while the model has no accepted route, so a rejected
     submission does not let it answer in prose at the final turn.
