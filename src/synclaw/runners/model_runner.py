@@ -295,20 +295,6 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def main(argv: list[str] | None = None) -> int:
-    """Run one task from the command line and print its JSON summary; returns the exit status."""
-
-    parser = argparse.ArgumentParser()
-    add_arguments(parser)
-    args = parser.parse_args(argv)
-    try:
-        result = run_model_from_args(args)
-    except RuntimeError as exc:
-        parser.exit(1, f"error: {exc}\n")
-    print(json.dumps(result, indent=2, sort_keys=True))
-    return 0
-
-
 def run_model_from_args(args: argparse.Namespace) -> dict[str, Any]:
     """Run one task against a hosted model and return its summary.
 
@@ -1786,7 +1772,3 @@ def latest_response_metadata(events: list[dict[str, Any]]) -> dict[str, Any]:
         if payload.get("system_fingerprint") is not None:
             result["system_fingerprint"] = payload["system_fingerprint"]
     return result
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
