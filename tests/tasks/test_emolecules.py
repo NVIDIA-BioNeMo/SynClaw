@@ -122,7 +122,7 @@ class EmoleculesTests(unittest.TestCase):
                     + stats["duplicate_rows"]
                     + stats["multicomponent_dropped"],
                 )
-            with self.assertRaises(RuntimeError):
+            with self.assertRaises(ValueError):
                 convert_emolecules_parent_archive(
                     source, root / "x.txt", invalid_path=root / "x.tsv", multicomponent="bogus"
                 )
@@ -186,11 +186,16 @@ class EmoleculesTests(unittest.TestCase):
                     release="2026-07-01",
                     source_url=fixture.as_uri(),
                 )
-            second = prepare_emolecules_building_blocks(
-                dest_root=root / "destination",
-                release="2026-07-01",
-                source_url=fixture.as_uri(),
-            )
+            # A matching manifest proves the archive was read in full, so it is not read again.
+            with patch(
+                "synclaw.tasks.emolecules._validate_gzip",
+                side_effect=AssertionError("reused archive was decompressed again"),
+            ):
+                second = prepare_emolecules_building_blocks(
+                    dest_root=root / "destination",
+                    release="2026-07-01",
+                    source_url=fixture.as_uri(),
+                )
 
             output = Path(first["output"])
             manifest = output.with_name("emolecules_parent_2026-07-01_manifest.json")

@@ -6,10 +6,13 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from synclaw.core.toxicity import DEFAULT_WATCHLIST
 
 
 @dataclass(frozen=True)
@@ -42,7 +45,7 @@ PUBLIC_DATA_FILES: tuple[PublicDataFile, ...] = (
     PublicDataFile(
         name="reasyn-mols-to-filter",
         url="https://raw.githubusercontent.com/NVIDIA-BioNeMo/ReaSyn/reasyn_v2/data/mols_to_filter.txt",
-        path=Path("var/safety/mols_to_filter.txt"),
+        path=DEFAULT_WATCHLIST,
         description="ReaSyn dangerous-molecule watchlist for the toxicity screen.",
     ),
 )
@@ -83,7 +86,14 @@ def download_public_data(
         destination.parent.mkdir(parents=True, exist_ok=True)
         with urllib.request.urlopen(item.url, timeout=timeout) as response:
             data = response.read()
-        destination.write_bytes(data)
+        # Written aside and moved into place, so an interrupted download leaves no partial file
+        # that a later run would skip as already downloaded.
+        temporary = destination.with_name(f".{destination.name}.download")
+        try:
+            temporary.write_bytes(data)
+            os.replace(temporary, destination)
+        finally:
+            temporary.unlink(missing_ok=True)
         downloaded += 1
         files.append(_file_result(item, destination, status="downloaded"))
 
@@ -101,24 +111,17 @@ def _select_files(names: list[str] | None) -> list[PublicDataFile]:
     unknown = sorted(set(names) - set(by_name))
     if unknown:
         raise RuntimeError(f"Unknown public data file(s): {', '.join(unknown)}")
-    return [by_name[name] for name in names]
+    return [by_name[name] for name in dict.fromkeys(names)]
 
 
 def _file_result(item: PublicDataFile, destination: Path, *, status: str) -> dict[str, Any]:
-    size_bytes = destination.stat().st_size if destination.exists() else 0
-    digest = hashlib.sha256(destination.read_bytes()).hexdigest() if destination.exists() else None
-    line_count = _count_lines(destination) if destination.exists() else None
+    data = destination.read_bytes()
     return {
         "name": item.name,
         "status": status,
         "path": str(destination),
         "url": item.url,
-        "size_bytes": size_bytes,
-        "sha256": digest,
-        "line_count": line_count,
+        "size_bytes": len(data),
+        "sha256": hashlib.sha256(data).hexdigest(),
+        "line_count": len(data.splitlines()),
     }
-
-
-def _count_lines(path: Path) -> int:
-    with path.open("rb") as handle:
-        return sum(1 for _ in handle)

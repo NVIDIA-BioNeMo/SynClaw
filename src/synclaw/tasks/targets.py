@@ -171,9 +171,10 @@ def load_matrix_dir(directory: str | Path) -> MatrixDir:
     )
 
 
-def read_smiles_lines(path: Path) -> list[str]:
-    """Read a 'SMILES'-headed building-block file into a list of SMILES."""
-    lines = [line.strip() for line in open(path)]
+def read_smiles_file(path: str | Path) -> list[str]:
+    """Read a one-SMILES-per-line file, skipping blank lines and an optional ``SMILES`` header."""
+    with Path(path).open(encoding="utf-8") as handle:
+        lines = [line.strip() for line in handle]
     if lines and lines[0].upper() == "SMILES":
         lines = lines[1:]
     return [line for line in lines if line]

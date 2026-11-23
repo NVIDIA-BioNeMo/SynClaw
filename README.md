@@ -240,8 +240,8 @@ Each task contains:
 - `target_smiles` and `canonical_target_smiles`
 - a natural-language synthesis-planning prompt
 - `excluded_tools` (empty by default) and the resulting `available_tools`
-- the expected `submit_pathway` schema
-- scoring hints for exact target or close analogue synthesis
+- any per-task budget overrides (see `--budget-set` below)
+- `prompt_fingerprint`, which a run checks against its own prompt text
 
 **Mixed tool sets.** A task's `excluded_tools` are hidden from the model and blocked at dispatch,
 on top of any `--exclude-tool` on the run. Repeat `--tool-exclusion-set` to give each task one
