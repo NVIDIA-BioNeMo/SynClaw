@@ -4,9 +4,11 @@
 """Provider endpoints and credential lookup, loaded from data rather than code.
 
 `providers.json` ships beside this module as package data. Each preset names an
-API mode, its endpoints and the environment variables that may hold its key; the
-command-line flags (`--api-mode`, `--base-url`, `--responses-url`,
-`--messages-url`, `--api-key-env`, `--auth-header`) override any of them, so the `custom` preset
+API mode and may give its endpoints, its Responses state mode and the environment
+variables that may hold its key; an endpoint left out is empty, the state mode
+defaults to ``previous_id``, and no key variables means no key is needed. The
+command-line flags (`--api-mode`, `--base-url`, `--responses-url`, `--messages-url`,
+`--api-key-env`, `--auth-header`) override any of them, so the `custom` preset
 reaches any other hosted endpoint without editing the table.
 
 Read through `importlib.resources` rather than a `__file__` walk, so the table is
@@ -21,10 +23,18 @@ from dataclasses import dataclass
 from functools import lru_cache
 from importlib import resources
 from pathlib import Path
+from typing import Any
 
 CONFIG_RESOURCE = "providers.json"
 
-ENDPOINT_FIELDS = ("base_url", "responses_url", "messages_url")
+# Each API mode and the preset field holding its endpoint.
+ENDPOINT_FIELD_BY_API_MODE = {
+    "chat": "base_url",
+    "responses": "responses_url",
+    "messages": "messages_url",
+}
+ENDPOINT_FIELDS = tuple(ENDPOINT_FIELD_BY_API_MODE.values())
+RESPONSES_STATE_MODES = ("previous_id", "full")
 AUTH_HEADERS = ("bearer", "x-api-key")
 
 
@@ -33,15 +43,17 @@ class ProviderPreset:
     """Endpoint and credential defaults for one provider."""
 
     api_mode: str
-    base_url: str
-    responses_url: str
-    messages_url: str
-    responses_state_mode: str
+    base_url: str = ""
+    responses_url: str = ""
+    messages_url: str = ""
+    responses_state_mode: str = "previous_id"
     api_key_envs: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
 class ProviderConfig:
+    """The provider table: every preset and the one used when no ``--provider`` is given."""
+
     default_provider: str
     providers: dict[str, ProviderPreset]
 
@@ -62,17 +74,7 @@ def load_provider_config(path: str | Path | None = None) -> ProviderConfig:
         raw = json.loads(
             resources.files("synclaw").joinpath(CONFIG_RESOURCE).read_text(encoding="utf-8")
         )
-    providers = {
-        name: ProviderPreset(
-            api_mode=entry["api_mode"],
-            base_url=entry["base_url"],
-            responses_url=entry["responses_url"],
-            messages_url=entry["messages_url"],
-            responses_state_mode=entry["responses_state_mode"],
-            api_key_envs=tuple(entry.get("api_key_envs") or ()),
-        )
-        for name, entry in raw["providers"].items()
-    }
+    providers = {name: _preset(name, entry) for name, entry in raw["providers"].items()}
     if raw["default_provider"] not in providers:
         raise RuntimeError(
             f"default_provider {raw['default_provider']!r} is not in the provider table"
@@ -83,21 +85,33 @@ def load_provider_config(path: str | Path | None = None) -> ProviderConfig:
     )
 
 
+def _preset(name: str, entry: dict[str, Any]) -> ProviderPreset:
+    api_mode = entry.get("api_mode")
+    if api_mode not in ENDPOINT_FIELD_BY_API_MODE:
+        raise RuntimeError(
+            f"Provider {name!r}: api_mode must be one of {tuple(ENDPOINT_FIELD_BY_API_MODE)}, "
+            f"not {api_mode!r}"
+        )
+    state_mode = entry.get("responses_state_mode", "previous_id")
+    if state_mode not in RESPONSES_STATE_MODES:
+        raise RuntimeError(
+            f"Provider {name!r}: responses_state_mode must be one of {RESPONSES_STATE_MODES}, "
+            f"not {state_mode!r}"
+        )
+    return ProviderPreset(
+        api_mode=api_mode,
+        responses_state_mode=state_mode,
+        api_key_envs=tuple(entry.get("api_key_envs") or ()),
+        **{field: entry.get(field, "") for field in ENDPOINT_FIELDS},
+    )
+
+
 def provider_names() -> tuple[str, ...]:
     return tuple(load_provider_config().providers)
 
 
 def default_provider() -> str:
     return load_provider_config().default_provider
-
-
-def first_env(names: tuple[str, ...] | list[str]) -> str | None:
-    """Return the value of the first set, non-empty environment variable."""
-
-    for name in names:
-        if name and (value := os.environ.get(name)):
-            return value
-    return None
 
 
 def resolve_api_key(
@@ -113,7 +127,8 @@ def resolve_api_key(
         return os.environ.get(api_key_env) or None
     if not use_preset_keys:
         return None
-    return first_env(load_provider_config().preset(provider).api_key_envs)
+    names = load_provider_config().preset(provider).api_key_envs
+    return next((value for name in names if (value := os.environ.get(name))), None)
 
 
 def api_key_required(provider: str, api_key_env: str = "", *, use_preset_keys: bool = True) -> bool:
@@ -129,6 +144,8 @@ def api_key_required(provider: str, api_key_env: str = "", *, use_preset_keys: b
 
 
 def missing_api_key_message(provider: str, api_key_env: str = "") -> str:
+    """The error for a run that needs a key and has none, naming where it was looked for."""
+
     if api_key_env:
         return f"API key variable {api_key_env} is not set"
     names = load_provider_config().preset(provider).api_key_envs

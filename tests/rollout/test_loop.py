@@ -137,7 +137,7 @@ def tool_turn(name: str, arguments: dict[str, Any]) -> AssistantTurn:
                     },
                 }
             ],
-            "token_usage": {"output_tokens": 7},
+            "response_usage": {"output_tokens": 7},
         }
     )
 
@@ -504,7 +504,7 @@ def test_output_limit_recovers_once_without_resetting_budgets(estimated_input_to
         {
             "content": "Partial answer",
             "reasoning_content": "Partial plan",
-            "token_usage": {"output_tokens": 32768},
+            "response_usage": {"output_tokens": 32768},
         },
         finish_reason=finish_reason,
     )
