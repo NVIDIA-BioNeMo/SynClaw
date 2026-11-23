@@ -1,7 +1,6 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-import json
 
 import pytest
 
@@ -35,12 +34,19 @@ def test_tool_flags_default_to_the_tool_contract():
     )
 
 
-def test_tool_commands_validate_arguments_as_a_rollout_does(tmp_path, capsys):
-    cli.main(["tool", "submit-pathway", "--steps-json", '["R001"]', "--db", str(tmp_path / "x.db")])
+def test_arguments_a_tool_rejects_are_a_failed_command(tmp_path, capsys):
+    with pytest.raises(SystemExit) as exit_info:
+        cli.main(
+            ["tool", "submit-pathway", "--steps-json", '["R001"]', "--db", str(tmp_path / "x.db")]
+        )
 
-    result = json.loads(capsys.readouterr().out)
-    assert result["error"] == "invalid_tool_call"
-    assert "must be an array of objects" in result["issues"][0]
+    assert exit_info.value.code == 1
+    assert "must be an array of objects" in capsys.readouterr().err
+
+
+def test_debug_shows_the_traceback_instead_of_one_line():
+    with pytest.raises(RuntimeError, match="--steps-json"):
+        cli.main(["--debug", "tool", "submit-pathway", "--steps-json", "@/no/such/steps.json"])
 
 
 @pytest.mark.parametrize(
