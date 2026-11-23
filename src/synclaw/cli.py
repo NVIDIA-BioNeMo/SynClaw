@@ -47,7 +47,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         result = args.func(args)
     except (RuntimeError, ValueError, OSError) as exc:
-        # Bad settings, unreadable input files and invalid values all reach the user as one line.
+        # Bad settings, unreadable input files and invalid values reach the user as one line;
+        # --debug keeps the traceback for an error that is a bug rather than bad input.
+        if args.debug:
+            raise
         parser.exit(1, f"error: {exc}\n")
     if result is not None:
         print_json(result)
@@ -57,6 +60,9 @@ def main(argv: list[str] | None = None) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="synclaw")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+    parser.add_argument(
+        "--debug", action="store_true", help="Show the full traceback when a command fails"
+    )
     sub = parser.add_subparsers(dest="command")
 
     db_parser = sub.add_parser("db", help="Database operations")
@@ -566,11 +572,18 @@ def _cmd_prepare_emolecules_bbs(args: argparse.Namespace) -> dict[str, Any]:
 def _call_tool(
     args: argparse.Namespace, name: str, arguments: dict[str, Any], **tool_options: Any
 ) -> dict[str, Any]:
-    """Run one of the model's tools exactly as a rollout dispatches it."""
+    """Run one of the model's tools with the argument handling a rollout uses.
+
+    Unlike a rollout, nothing is hidden from stock. Arguments the tool rejects are a command
+    error (exit status 1), not a result.
+    """
 
     target_smiles = tool_options.pop("target_smiles", None)
     tools = SynthesisTools(args.db, **tool_options)
-    return call_local_tool(tools, name, arguments, target_smiles=target_smiles)
+    result = call_local_tool(tools, name, arguments, target_smiles=target_smiles)
+    if result.get("error") == "invalid_tool_call":
+        raise RuntimeError("; ".join(str(issue) for issue in result.get("issues", [])))
+    return result
 
 
 def _cmd_tool_search(args: argparse.Namespace) -> dict[str, Any]:
