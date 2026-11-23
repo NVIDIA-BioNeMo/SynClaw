@@ -794,7 +794,7 @@ def render_reverse_reaction_result(result: dict[str, Any], max_results: int) -> 
         f"**Result:** valid `{str(bool(result.get('valid'))).lower()}`, "
         f"{result.get('returned_candidate_count', len(candidate_sets))} candidate precursor set(s)"
     ]
-    template = result.get("template_summary")
+    template = result.get("template")
     if isinstance(template, dict):
         family = template.get("reaction_family")
         description = template.get("description")
@@ -838,7 +838,7 @@ def render_reverse_reaction_result(result: dict[str, Any], max_results: int) -> 
             if not isinstance(candidate, dict):
                 continue
             reactants = candidate.get("reactants") or []
-            grounded = candidate.get("all_reactants_have_exact_building_block_match")
+            grounded = candidate.get("all_precursors_grounded")
             lines.append(
                 f"  - Set {index}: {format_smiles_list(reactants)} "
                 + f"(fully grounded `{str(bool(grounded)).lower()}`)"

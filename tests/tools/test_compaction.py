@@ -428,18 +428,18 @@ def test_compaction_trims_template_detail_and_echoed_routes():
     reverse = compact_tool_result(
         "simulate_reverse_reaction",
         {
-            "building_block_match_summary": {
-                "exact_match_count": 0,
-                "note": "Planning evidence only.",
+            "template": {
+                "reaction_id": "ord:R011",
+                "reaction_family": "aryl coupling",
+                "smarts": "Br-c>>c",
+                "query_hints": ["suzuki"],
             },
+            "building_block_match_summary": {"exact_match_count": 0},
             "candidate_reactant_sets": [
                 {
                     "reactants": ["Brc1ccccc1"],
-                    "grounding_summary": "Lacks exact matches.",
-                    "precursor_grounding": [{"smiles": "Brc1ccccc1"}],
-                    "reactant_details": [
-                        {"smiles": "Brc1ccccc1", "grounding_note": "No exact match."}
-                    ],
+                    "all_precursors_grounded": False,
+                    "reactant_details": [{"smiles": "Brc1ccccc1"}],
                 }
             ],
         },
@@ -458,9 +458,15 @@ def test_compaction_trims_template_detail_and_echoed_routes():
     assert accepted == {"accepted": True, "final_smiles": "CCO"}
     assert similarity["left"] == {"valid": True, "canonical_smiles": "CCO"}
     assert reverse["building_block_match_summary"] == {"exact_match_count": 0}
+    # The reverse view keeps the template's identity and family, not its SMARTS or search hints.
+    assert reverse["template_summary"] == {
+        "reaction_id": "ord:R011",
+        "reaction_family": "aryl coupling",
+    }
     assert reverse["candidate_reactant_sets"] == [
         {
             "reactants": ["Brc1ccccc1"],
+            "all_precursors_grounded": False,
             "reactant_details": [
                 {
                     "smiles": "Brc1ccccc1",

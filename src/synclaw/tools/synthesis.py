@@ -331,7 +331,7 @@ class SynthesisTools:
         result["include_near"] = include_near
         result["min_similarity"] = min_similarity
         result["top_near_matches"] = top_near_matches
-        _compact_reverse_reaction_result(result)
+        _summarize_reverse_products(result)
         return result
 
     def _rank_template_search_by_reverse_usefulness(
@@ -430,41 +430,13 @@ class SynthesisTools:
                             _compact_building_block_match(match)
                             for match in near_matches[:top_near_matches]
                         ],
-                        "grounding_note": (
-                            "Exact BB match: can be submitted as a starting reactant."
-                            if exact_matches
-                            else "No exact BB match: treat as an intermediate unless you find a separate purchasable route."
-                        ),
                     }
                 )
             candidate["reactant_details"] = reactant_details
-            candidate["precursor_grounding"] = [
-                {
-                    "smiles": detail["smiles"],
-                    "has_exact_building_block_match": detail["has_exact_building_block_match"],
-                    "exact_submit_references": [
-                        match["submit_reference"]
-                        for match in detail["exact_building_block_matches"]
-                    ],
-                    "top_near_submit_references": [
-                        match["submit_reference"]
-                        for match in detail["top_near_building_block_matches"]
-                    ],
-                }
-                for detail in reactant_details
-            ]
-            candidate["all_reactants_have_exact_building_block_match"] = bool(
-                reactant_details
-            ) and all(detail["has_exact_building_block_match"] for detail in reactant_details)
-            candidate["all_precursors_grounded"] = candidate[
-                "all_reactants_have_exact_building_block_match"
-            ]
-            candidate["grounding_summary"] = (
-                "All reverse precursors exactly match purchasable building blocks."
-                if candidate["all_precursors_grounded"]
-                else "One or more reverse precursors lack exact BB matches; use them only as intermediates."
+            candidate["all_precursors_grounded"] = bool(reactant_details) and all(
+                detail["has_exact_building_block_match"] for detail in reactant_details
             )
-            if candidate["all_reactants_have_exact_building_block_match"]:
+            if candidate["all_precursors_grounded"]:
                 exact_match_sets += 1
         if exact_match_sets:
             recommended_next_step = "A fully grounded reverse candidate exists. Verify it forward with simulate_reaction before submitting."
@@ -489,10 +461,6 @@ class SynthesisTools:
             "candidate_sets_with_all_reactants_exactly_matched": exact_match_sets,
             "exact_match_count": exact_match_count,
             "returned_near_match_count": near_match_count,
-            "note": (
-                "Building-block matches are planning evidence only. Reverse precursors may be "
-                "intermediates; only exact matches are submit-ready starting reactants."
-            ),
         }
 
     def submit_pathway(
@@ -1049,7 +1017,6 @@ def _compact_building_block_match(match: dict[str, Any]) -> dict[str, Any]:
         "smiles": match.get("smiles"),
         "canonical_smiles": match.get("canonical_smiles"),
         "similarity": match.get("similarity"),
-        "submission_note": match.get("submission_note"),
     }
 
 
@@ -1062,8 +1029,8 @@ def _reverse_usefulness_summary(reverse_result: dict[str, Any]) -> dict[str, Any
     best_reactants: list[str] = []
     if best_candidate:
         best_reactants = [str(smiles) for smiles in best_candidate.get("reactants") or []]
-        for detail in best_candidate.get("precursor_grounding") or []:
-            exact_submit_refs = [str(ref) for ref in detail.get("exact_submit_references") or []]
+        for detail in best_candidate.get("reactant_details") or []:
+            exact_submit_refs = _exact_submit_references(detail)
             if exact_submit_refs:
                 exact_precursors += 1
                 exact_refs.extend(exact_submit_refs)
@@ -1101,9 +1068,17 @@ def _best_reverse_candidate(candidates: list[dict[str, Any]]) -> dict[str, Any] 
 
 
 def _reverse_candidate_score(candidate: dict[str, Any]) -> tuple[int, int, int]:
-    details = candidate.get("precursor_grounding") or []
-    exact = sum(1 for detail in details if detail.get("exact_submit_references"))
+    details = candidate.get("reactant_details") or []
+    exact = sum(1 for detail in details if _exact_submit_references(detail))
     return int(bool(candidate.get("all_precursors_grounded"))), exact, exact - len(details)
+
+
+def _exact_submit_references(detail: dict[str, Any]) -> list[str]:
+    return [
+        str(match["submit_reference"])
+        for match in detail.get("exact_building_block_matches") or []
+        if match.get("submit_reference")
+    ]
 
 
 def _reverse_usefulness_score(
@@ -1127,17 +1102,8 @@ def _reverse_usefulness_score(
     return score
 
 
-def _compact_reverse_reaction_result(result: dict[str, Any]) -> None:
-    template = result.pop("template", None)
-    if isinstance(template, dict):
-        result["template_summary"] = {
-            "reaction_id": template.get("reaction_id"),
-            "reaction_family": template.get("reaction_family"),
-            "description": template.get("description"),
-            "reactant_roles": template.get("reactant_roles"),
-            "query_hints": template.get("query_hints"),
-            "introduces_unmapped_product_atoms": template.get("introduces_unmapped_product_atoms"),
-        }
+def _summarize_reverse_products(result: dict[str, Any]) -> None:
+    """Replace the reverse result's product records with their validity and canonical SMILES."""
     products = result.pop("products", None)
     if isinstance(products, list):
         product_errors = [
