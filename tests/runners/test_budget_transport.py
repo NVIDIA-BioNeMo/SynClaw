@@ -425,7 +425,6 @@ def test_chat_budget_counts_reasoning_and_tools_but_not_trace_metadata():
         > transport.budget_snapshot([{"role": "assistant", "content": "route"}], []).input_tokens
     )
     messages[0]["response_usage"] = {"ignored": "x" * 10000}
-    messages[0]["token_usage"] = {"total_tokens": 999999}
     assert transport.budget_snapshot(messages, tools) == snapshot
     assert snapshot.max_output_tokens == 32768
 

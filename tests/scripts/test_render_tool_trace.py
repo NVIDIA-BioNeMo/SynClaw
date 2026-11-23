@@ -219,12 +219,12 @@ def test_summary_and_turns_render_token_usage():
             "role": "assistant",
             "payload": {
                 "content": "I will inspect the route.",
-                "token_usage": {
+                "response_usage": {
                     "input_tokens": 10,
                     "output_tokens": 5,
                     "total_tokens": 15,
-                    "cached_input_tokens": 1,
-                    "reasoning_tokens": 2,
+                    "cache_read_input_tokens": 1,
+                    "output_tokens_details": {"reasoning_tokens": 2},
                     "cost": 0.001,
                 },
             },
@@ -247,11 +247,11 @@ def test_summary_and_turns_render_token_usage():
     markdown = renderer.render_trace(events, trace_path=Path("trace.jsonl"))
 
     assert (
-        "- Token usage: input `30`, output `13`, total `43`, cached input `1`, reasoning `2`, cost `0.004`"
+        "- Token usage: input `30`, output `13`, total `43`, cache read `1`, reasoning `2`, cost `0.004`"
         in markdown
     )
     assert (
-        "**Token usage:** input `10`, output `5`, total `15`, cached input `1`, reasoning `2`, cost `0.001`"
+        "**Token usage:** input `10`, output `5`, total `15`, cache read `1`, reasoning `2`, cost `0.001`"
         in markdown
     )
     assert "**Token usage:** input `20`, output `8`, total `28`, cost `0.003`" in markdown
@@ -282,14 +282,8 @@ def test_report_never_estimates_cost_when_provider_omits_it():
         model="example-model",
     )
 
-    assert (
-        "- Token usage: input `1000`, output `100`, total `1100`, cached input `200`, cache read `200`"
-        in markdown
-    )
-    assert (
-        "**Token usage:** input `1000`, output `100`, total `1100`, cached input `200`, cache read `200`"
-        in markdown
-    )
+    assert "- Token usage: input `1000`, output `100`, total `1100`, cache read `200`" in markdown
+    assert "**Token usage:** input `1000`, output `100`, total `1100`, cache read `200`" in markdown
     assert "cost" not in markdown
 
 

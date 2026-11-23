@@ -4,42 +4,26 @@
     "nvbuild": {
       "api_mode": "chat",
       "base_url": "https://integrate.api.nvidia.com/v1",
-      "responses_url": "",
-      "messages_url": "",
-      "responses_state_mode": "previous_id",
       "api_key_envs": ["NVIDIA_API_KEY", "NVBUILD_API_KEY"]
     },
     "openai": {
       "api_mode": "responses",
       "base_url": "https://api.openai.com/v1",
       "responses_url": "https://api.openai.com/v1/responses",
-      "messages_url": "",
-      "responses_state_mode": "previous_id",
       "api_key_envs": ["OPENAI_API_KEY"]
     },
     "anthropic": {
       "api_mode": "messages",
-      "base_url": "",
-      "responses_url": "",
       "messages_url": "https://api.anthropic.com/v1/messages",
-      "responses_state_mode": "previous_id",
       "api_key_envs": ["ANTHROPIC_API_KEY"]
     },
     "openrouter": {
       "api_mode": "chat",
       "base_url": "https://openrouter.ai/api/v1",
-      "responses_url": "",
-      "messages_url": "",
-      "responses_state_mode": "previous_id",
       "api_key_envs": ["OPENROUTER_API_KEY"]
     },
     "custom": {
-      "api_mode": "chat",
-      "base_url": "",
-      "responses_url": "",
-      "messages_url": "",
-      "responses_state_mode": "previous_id",
-      "api_key_envs": []
+      "api_mode": "chat"
     }
   }
 }

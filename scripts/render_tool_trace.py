@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from synclaw.core import chem
-from synclaw.token_usage import int_or_none, trace_token_usage, usage_from_payload
+from synclaw.token_usage import aggregate_token_usage_from_events, usage_from_payload
 
 
 def main() -> int:
@@ -113,7 +113,7 @@ def render_trace(
     runtime_seconds = first_present(run_summary, "runtime_seconds")
     if runtime_seconds is not None:
         lines.append(f"- Runtime: `{format_runtime(runtime_seconds)}`")
-    token_usage = trace_token_usage(events, run_summary=run_summary)
+    token_usage = aggregate_token_usage_from_events(events)
     if token_usage:
         lines.append(f"- Token usage: {format_token_usage(token_usage)}")
     lines.append(f"- Assistant turns: `{turn_summary['assistant_turns']}`")
@@ -1053,7 +1053,6 @@ def format_token_usage(usage: dict[str, Any]) -> str:
         ("input_tokens", "input"),
         ("output_tokens", "output"),
         ("total_tokens", "total"),
-        ("cached_input_tokens", "cached input"),
         ("cache_creation_input_tokens", "cache write"),
         ("cache_read_input_tokens", "cache read"),
         ("reasoning_tokens", "reasoning"),
@@ -1071,18 +1070,6 @@ def format_usage_value(field: str, value: Any) -> str:
     if field == "cost" and isinstance(value, (int, float)) and not isinstance(value, bool):
         return f"{value:.12g}"
     return str(value)
-
-
-def sum_ints(*values: Any) -> int | None:
-    total = 0
-    saw_value = False
-    for value in values:
-        integer = int_or_none(value)
-        if integer is None:
-            continue
-        total += integer
-        saw_value = True
-    return total if saw_value else None
 
 
 def first_present(source: dict[str, Any] | None, key: str) -> Any:

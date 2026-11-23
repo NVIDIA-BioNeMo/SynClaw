@@ -22,7 +22,11 @@ from synclaw.rollout.policy import (
     submission_identical_to_target,
     submission_similarity_to_target,
 )
-from synclaw.token_usage import float_or_none, trace_token_usage
+from synclaw.token_usage import (
+    TOKEN_SUMMARY_FIELDS,
+    aggregate_token_usage_from_events,
+    float_or_none,
+)
 from synclaw.tools.synthesis import (
     SynthesisTools,
     hidden_target_summary_fields,
@@ -89,7 +93,7 @@ def evaluate_trace_file(
     similarity_to_target = scoring["similarity_to_target"]
     identical_to_target = scoring["identical_to_target"]
     runtime_seconds = float_or_none(run_summary.get("runtime_seconds") if run_summary else None)
-    token_usage = trace_token_usage(events, run_summary=run_summary)
+    token_usage = aggregate_token_usage_from_events(events)
     similarity_floor = _similarity_floor(tool_config)
     meets_similarity_floor = accepted is True and meets_submission_floor(
         similarity_to_target,
@@ -387,14 +391,7 @@ def write_summary_csv(summaries: list[dict[str, Any]], output_path: str | Path) 
         "identical_to_target",
         "constitutional_similarity_to_target",
         "runtime_seconds",
-        "input_tokens",
-        "output_tokens",
-        "total_tokens",
-        "cached_input_tokens",
-        "cache_creation_input_tokens",
-        "cache_read_input_tokens",
-        "reasoning_tokens",
-        "cost",
+        *TOKEN_SUMMARY_FIELDS,
         "events",
         "assistant_turns",
         "tool_call_turns",
