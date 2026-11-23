@@ -108,7 +108,8 @@ def _compact_simulate_reaction(result: dict[str, Any]) -> dict[str, Any]:
         # product was generated; then the role order is enough to read the products.
         template = _copy_keys(template, ["reactant_roles"]) or None
     output["template"] = template
-    output["reactants"] = [_compact_validation(item) for item in result.get("reactants") or []]
+    if result.get("reactants"):
+        output["reactants"] = [_compact_validation(item) for item in result["reactants"]]
     if isinstance(result.get("product"), dict) and not result["product"].get("valid", True):
         output["product"] = _compact_validation(result["product"])
     if result.get("resolved_reactants"):
