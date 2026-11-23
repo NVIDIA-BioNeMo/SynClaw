@@ -34,10 +34,8 @@ def compact_tool_result(tool_name: str, result: Any) -> Any:
         return _compact_submit_pathway(result)
     if tool_name == "simulate_reverse_reaction":
         return _compact_simulate_reverse_reaction(result)
-    if tool_name == "mces":
-        return _compact_mces(result)
-    if tool_name == "similarity":
-        return _compact_similarity(result)
+    if tool_name in ("mces", "similarity"):
+        return _compact_pair_comparison(result)
     return _compact_generic_result(result)
 
 
@@ -81,27 +79,9 @@ def _compact_search_building_blocks(result: dict[str, Any]) -> dict[str, Any]:
     return _drop_none(output)
 
 
-def _compact_mces(result: dict[str, Any]) -> dict[str, Any]:
-    output = _copy_keys(
-        result,
-        [
-            "valid",
-            "mces_smiles",
-            "similarity",
-            "matched_bonds",
-            "left_bonds",
-            "right_bonds",
-            "union_bonds",
-            "timed_out",
-            "error",
-        ],
-    )
-    output["left"] = _compact_validation(result.get("left"))
-    output["right"] = _compact_validation(result.get("right"))
-    return _drop_none(output)
+def _compact_pair_comparison(result: dict[str, Any]) -> dict[str, Any]:
+    """``similarity`` and ``mces``: every field, with the two input molecules reduced."""
 
-
-def _compact_similarity(result: dict[str, Any]) -> dict[str, Any]:
     output = {key: value for key, value in result.items() if key not in ("left", "right")}
     output["left"] = _compact_validation(result.get("left"))
     output["right"] = _compact_validation(result.get("right"))
@@ -112,7 +92,6 @@ def _compact_simulate_reaction(result: dict[str, Any]) -> dict[str, Any]:
     output = _copy_keys(
         result,
         [
-            "valid",
             "reaction_id",
             "product_smiles",
             "product_matched",
@@ -132,9 +111,10 @@ def _compact_simulate_reaction(result: dict[str, Any]) -> dict[str, Any]:
     output["reactants"] = [_compact_validation(item) for item in result.get("reactants") or []]
     if isinstance(result.get("product"), dict) and not result["product"].get("valid", True):
         output["product"] = _compact_validation(result["product"])
-    output["resolved_reactants"] = [
-        _compact_resolved_reactant(item) for item in result.get("resolved_reactants") or []
-    ]
+    if result.get("resolved_reactants"):
+        output["resolved_reactants"] = [
+            _compact_resolved_reactant(item) for item in result["resolved_reactants"]
+        ]
     output.update(_generated_products(result))
     return _drop_none(output)
 
@@ -350,9 +330,10 @@ def _compact_validated_step(step: Any) -> Any:
     )
     output.update(_limited_issues(step))
     output.update(_generated_products(step))
-    output["resolved_reactants"] = [
-        _compact_resolved_reactant(item) for item in step.get("resolved_reactants") or []
-    ]
+    if step.get("resolved_reactants"):
+        output["resolved_reactants"] = [
+            _compact_resolved_reactant(item) for item in step["resolved_reactants"]
+        ]
     submitted = step.get("submitted_step")
     if isinstance(submitted, dict):
         output["submitted_step_summary"] = _copy_keys(
@@ -400,26 +381,35 @@ def _compact_reverse_candidate(candidate: Any) -> Any:
 
 
 def _problems(result: dict[str, Any]) -> dict[str, Any]:
-    """Report validity and issues only when something went wrong."""
+    """Report validity and issues only when something went wrong.
+
+    A call rejected for its arguments also keeps its ``error`` label and ``retryable`` hint.
+    """
 
     output: dict[str, Any] = {}
     if result.get("valid") is False:
         output["valid"] = False
     if result.get("issues"):
         output["issues"] = result["issues"]
+    for key in ("error", "retryable"):
+        if result.get(key):
+            output[key] = result[key]
     return output
 
 
 def _limited_issues(result: dict[str, Any]) -> dict[str, Any]:
-    """The first ``MAX_ISSUES`` issues, with the full count when some were left out."""
+    """At most ``MAX_ISSUES`` issues, with the full count when some were left out.
+
+    The last two are always kept: a pathway's decisive issues, such as an invalid final
+    product or a refusal, come after the per-step ones.
+    """
 
     issues = result.get("issues")
     if not isinstance(issues, list) or not issues:
         return {}
-    output: dict[str, Any] = {"issues": issues[:MAX_ISSUES]}
-    if len(issues) > MAX_ISSUES:
-        output["issue_count"] = len(issues)
-    return output
+    if len(issues) <= MAX_ISSUES:
+        return {"issues": issues}
+    return {"issues": issues[: MAX_ISSUES - 2] + issues[-2:], "issue_count": len(issues)}
 
 
 def _generated_products(result: dict[str, Any]) -> dict[str, Any]:
