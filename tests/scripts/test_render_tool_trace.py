@@ -476,7 +476,7 @@ def test_simulate_reverse_reaction_renders_readable_result():
                     "reaction_id": "demo:R000",
                     "product_canonical_smiles": "C=O",
                     "returned_candidate_count": 1,
-                    "template_summary": {
+                    "template": {
                         "reaction_family": "oxidation",
                         "description": "Convert an alcohol-like reactant pattern to a carbonyl-like product.",
                     },
@@ -491,7 +491,7 @@ def test_simulate_reverse_reaction_renders_readable_result():
                     "candidate_reactant_sets": [
                         {
                             "reactants": ["CO"],
-                            "all_reactants_have_exact_building_block_match": True,
+                            "all_precursors_grounded": True,
                             "reactant_details": [
                                 {
                                     "smiles": "CO",

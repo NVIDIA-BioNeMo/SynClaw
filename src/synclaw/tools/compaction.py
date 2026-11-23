@@ -176,7 +176,10 @@ def _compact_simulate_reverse_reaction(result: dict[str, Any]) -> dict[str, Any]
         ],
     )
     output.update(_problems(result))
-    output["template_summary"] = _compact_template(result.get("template_summary"))
+    # The reverse view keeps what a planner needs from the template, not its SMARTS or hints.
+    output["template_summary"] = _compact_template(
+        result.get("template"), fields=("reaction_id", "reaction_family", "description")
+    )
     if isinstance(result.get("reverse_planning_summary"), dict):
         output["reverse_planning_summary"] = {
             key: value
@@ -184,11 +187,7 @@ def _compact_simulate_reverse_reaction(result: dict[str, Any]) -> dict[str, Any]
             if key != "recommended_next_step"
         }
     if isinstance(result.get("building_block_match_summary"), dict):
-        output["building_block_match_summary"] = {
-            key: value
-            for key, value in result["building_block_match_summary"].items()
-            if key != "note"
-        }
+        output["building_block_match_summary"] = result["building_block_match_summary"]
     output["candidate_reactant_sets"] = [
         _compact_reverse_candidate(item) for item in result.get("candidate_reactant_sets") or []
     ]
@@ -200,20 +199,20 @@ def _compact_generic_result(result: dict[str, Any]) -> dict[str, Any]:
     return _drop_none(result)
 
 
-def _compact_template(template: Any) -> Any:
+_TEMPLATE_FIELDS = (
+    "reaction_id",
+    "name",
+    "description",
+    "reaction_family",
+    "smarts",
+    "execution_hints",
+)
+
+
+def _compact_template(template: Any, fields: tuple[str, ...] = _TEMPLATE_FIELDS) -> Any:
     if not isinstance(template, dict):
         return template
-    output = _copy_keys(
-        template,
-        [
-            "reaction_id",
-            "name",
-            "description",
-            "reaction_family",
-            "smarts",
-            "execution_hints",
-        ],
-    )
+    output = _copy_keys(template, list(fields))
     roles = template.get("reactant_roles")
     if isinstance(roles, list):
         # Roles are listed in reactant order, so position and atom maps add nothing.
@@ -351,7 +350,6 @@ def _compact_reverse_candidate(candidate: Any) -> Any:
         candidate,
         [
             "reactants",
-            "all_reactants_have_exact_building_block_match",
             "all_precursors_grounded",
         ],
     )
