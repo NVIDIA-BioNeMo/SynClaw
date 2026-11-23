@@ -57,6 +57,7 @@ from typing import Any
 import numpy as np
 
 from synclaw.core.chem import unscoreable_reason
+from synclaw.core.libraries import LibrarySelection, normalize_libraries
 from synclaw.core.reactions import _rdkit_reaction_modules, _run_reaction_with_permutations
 
 MATRIX_FILE = "matrix.npy"
@@ -81,7 +82,8 @@ class GenerationOptions:
     max_steps: int = 5
     max_num_atoms: int = 80
     sampling: str = "template"
-    libraries: tuple[str, ...] = ()
+    # A name, a comma-separated string or a list of names; normalized to a tuple.
+    libraries: LibrarySelection = ()
     with_pathway: bool = True
     with_intermediates: bool = False
     mw_min: float | None = None
@@ -92,6 +94,9 @@ class GenerationOptions:
     exclude: str | None = None
     pool_cache_max: int = DEFAULT_POOL_CACHE_MAX
     max_attempts_per_target: int = 50
+
+    def __post_init__(self) -> None:
+        self.libraries = normalize_libraries(self.libraries)
 
 
 @dataclass

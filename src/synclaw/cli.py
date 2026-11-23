@@ -14,11 +14,11 @@ from typing import Any
 
 from synclaw import __version__, paths
 from synclaw.core import chem, db, toxicity
-from synclaw.core.libraries import normalize_libraries
 from synclaw.core.reactions import ingest_reaction_libraries, ingest_reaction_templates
 from synclaw.evaluation.evaluate import evaluate_trace_file, write_summary_csv
 from synclaw.evaluation.results import combine_summary_csvs
 from synclaw.rollout import policy
+from synclaw.rollout.loop import call_local_tool
 from synclaw.runners import model_runner
 from synclaw.tasks.datasets import generate_llm_taskset, parse_budget_set
 from synclaw.tasks.emolecules import prepare_emolecules_building_blocks
@@ -46,7 +46,8 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     try:
         result = args.func(args)
-    except RuntimeError as exc:
+    except (RuntimeError, ValueError, OSError) as exc:
+        # Bad settings, unreadable input files and invalid values all reach the user as one line.
         parser.exit(1, f"error: {exc}\n")
     if result is not None:
         print_json(result)
@@ -59,25 +60,25 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command")
 
     db_parser = sub.add_parser("db", help="Database operations")
-    db_sub = db_parser.add_subparsers(dest="db_command")
+    db_sub = db_parser.add_subparsers(dest="db_command", required=True, metavar="COMMAND")
     db_init = db_sub.add_parser("init", help="Initialize the SQLite database")
-    db_init.add_argument("--db", default=str(paths.DEFAULT_DB_PATH))
+    _add_db_argument(db_init)
     db_init.set_defaults(func=_cmd_db_init)
     db_stats = db_sub.add_parser("stats", help="Show table counts")
-    db_stats.add_argument("--db", default=str(paths.DEFAULT_DB_PATH))
+    _add_db_argument(db_stats)
     db_stats.set_defaults(func=_cmd_db_stats)
     db_remove_reactions = db_sub.add_parser(
         "remove-reactions",
         help="Delete reaction-template libraries and renumber the remaining templates",
     )
     db_remove_reactions.add_argument("library", nargs="+")
-    db_remove_reactions.add_argument("--db", default=str(paths.DEFAULT_DB_PATH))
+    _add_db_argument(db_remove_reactions)
     db_remove_reactions.set_defaults(func=_cmd_db_remove_reactions)
     db_prepare_search = db_sub.add_parser(
         "prepare-search",
         help="Build the required indexed building-block search database",
     )
-    db_prepare_search.add_argument("--db", default=str(paths.DEFAULT_DB_PATH))
+    _add_db_argument(db_prepare_search)
     db_prepare_search.add_argument(
         "--output",
         help="Atomically create a lean indexed chemistry DB at this path",
@@ -86,14 +87,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     ingest = sub.add_parser("ingest-bbs", help="Import building-block SMILES into SQLite")
     ingest.add_argument("source")
-    ingest.add_argument("--db", default=str(paths.DEFAULT_DB_PATH))
+    _add_db_argument(ingest)
     ingest.set_defaults(func=_cmd_ingest_bbs)
 
     ingest_reactions = sub.add_parser("ingest-reactions", help="Import reaction templates")
     ingest_reactions.add_argument(
         "source", nargs="?", help="Custom template file; omit to import bundled source libraries"
     )
-    ingest_reactions.add_argument("--db", default=str(paths.DEFAULT_DB_PATH))
+    _add_db_argument(ingest_reactions)
     ingest_reactions.add_argument("--library", help="Library name for a custom template file")
     ingest_reactions.add_argument(
         "--annotations",
@@ -140,7 +141,7 @@ def build_parser() -> argparse.ArgumentParser:
     targets.add_argument(
         "--matrix-dir",
         required=True,
-        help="Matrix matrix directory; see 'Sourcing a reactant-template matrix directory' in the README",
+        help="Matrix directory; see 'Sourcing a reactant-template matrix directory' in the README",
     )
     targets.add_argument("--output", required=True, help="Destination TSV")
     targets.add_argument("--count", type=int, default=100_000, help="Unique targets to generate")
@@ -280,7 +281,7 @@ def build_parser() -> argparse.ArgumentParser:
     emolecules.set_defaults(func=_cmd_prepare_emolecules_bbs)
 
     tools = sub.add_parser("tool", help="Call local tool handlers without MCP")
-    tools_sub = tools.add_subparsers(dest="tool_command")
+    tools_sub = tools.add_subparsers(dest="tool_command", required=True, metavar="COMMAND")
     search = tools_sub.add_parser("search-building-blocks", help="Search building blocks")
     search.add_argument("query")
     search.add_argument(
@@ -290,13 +291,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-near", action="store_true", help="Disable similarity-ranked near matches"
     )
     search.add_argument(
-        "--min-similarity", type=float, default=0.15, help="Minimum near-match similarity to return"
+        "--min-similarity",
+        type=float,
+        default=TOOL_ARGUMENT_DEFAULTS["search_building_blocks"]["min_similarity"],
+        help="Minimum near-match similarity to return",
     )
-    search.add_argument("--db", default=str(paths.DEFAULT_DB_PATH))
+    _add_db_argument(search)
     search.set_defaults(func=_cmd_tool_search)
     get = tools_sub.add_parser("get-bb", help="Fetch one building block")
     get.add_argument("bb_id", type=int)
-    get.add_argument("--db", default=str(paths.DEFAULT_DB_PATH))
+    _add_db_argument(get)
     get.set_defaults(func=_cmd_tool_get_bb)
     validate = tools_sub.add_parser("validate", help="Validate SMILES")
     validate.add_argument("smiles")
@@ -325,11 +329,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Product SMILES to match; repeat for multi-product templates",
     )
     rxn_search.add_argument("--run-forward", action="store_true")
-    rxn_search.add_argument("--db", default=str(paths.DEFAULT_DB_PATH))
+    _add_db_argument(rxn_search)
     rxn_search.set_defaults(func=_cmd_tool_search_reaction_templates)
     rxn_get = tools_sub.add_parser("get-reaction", help="Fetch one reaction template")
     rxn_get.add_argument("reaction_id")
-    rxn_get.add_argument("--db", default=str(paths.DEFAULT_DB_PATH))
+    _add_db_argument(rxn_get)
     rxn_get.set_defaults(func=_cmd_tool_get_reaction)
     rxn_sim = tools_sub.add_parser(
         "simulate-reaction", help="Run one reaction template and optionally check a claimed product"
@@ -341,8 +345,12 @@ def build_parser() -> argparse.ArgumentParser:
     rxn_sim.add_argument(
         "--product-smiles", help="Optional claimed product to check against generated products"
     )
-    rxn_sim.add_argument("--max-products", type=int, default=100)
-    rxn_sim.add_argument("--db", default=str(paths.DEFAULT_DB_PATH))
+    rxn_sim.add_argument(
+        "--max-products",
+        type=int,
+        default=TOOL_ARGUMENT_DEFAULTS["simulate_reaction"]["max_products"],
+    )
+    _add_db_argument(rxn_sim)
     rxn_sim.set_defaults(func=_cmd_tool_simulate_reaction)
     rxn_reverse = tools_sub.add_parser(
         "simulate-reverse-reaction",
@@ -355,15 +363,21 @@ def build_parser() -> argparse.ArgumentParser:
         action="append",
         help="Product SMILES; repeat for multi-product templates",
     )
-    rxn_reverse.add_argument("--max-outcomes", type=int, default=50)
+    reverse_defaults = TOOL_ARGUMENT_DEFAULTS["simulate_reverse_reaction"]
+    rxn_reverse.add_argument("--max-outcomes", type=int, default=reverse_defaults["max_outcomes"])
     rxn_reverse.add_argument(
         "--no-near", action="store_true", help="Disable similarity-ranked near BB matches"
     )
-    rxn_reverse.add_argument("--min-similarity", type=float, default=0.15)
     rxn_reverse.add_argument(
-        "--top-near-matches", type=int, default=3, help="Near BB matches returned per precursor"
+        "--min-similarity", type=float, default=reverse_defaults["min_similarity"]
     )
-    rxn_reverse.add_argument("--db", default=str(paths.DEFAULT_DB_PATH))
+    rxn_reverse.add_argument(
+        "--top-near-matches",
+        type=int,
+        default=reverse_defaults["top_near_matches"],
+        help="Near BB matches returned per precursor",
+    )
+    _add_db_argument(rxn_reverse)
     rxn_reverse.set_defaults(func=_cmd_tool_simulate_reverse_reaction)
     submit = tools_sub.add_parser("submit-pathway", help="Validate a template-grounded pathway")
     submit.add_argument(
@@ -376,14 +390,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--building-block", help="BB:<id> or exact BB SMILES for zero-step direct purchase"
     )
     submit.add_argument("--pathway-text")
-    submit.add_argument("--db", default=str(paths.DEFAULT_DB_PATH))
+    _add_db_argument(submit)
     toxicity.add_toxicity_argument(submit)
     submit.set_defaults(func=_cmd_tool_submit)
 
     mcp = sub.add_parser("mcp", help="MCP server operations")
-    mcp_sub = mcp.add_subparsers(dest="mcp_command")
+    mcp_sub = mcp.add_subparsers(dest="mcp_command", required=True, metavar="COMMAND")
     serve = mcp_sub.add_parser("serve", help="Serve MCP tools over stdio")
-    serve.add_argument("--db", default=str(paths.DEFAULT_DB_PATH))
+    _add_db_argument(serve)
     serve.add_argument(
         "--stage-db-to-node-local",
         action="store_true",
@@ -402,7 +416,7 @@ def build_parser() -> argparse.ArgumentParser:
         "eval-trace", help="Import and score one or more trace JSONL files"
     )
     eval_parser.add_argument("traces", nargs="+")
-    eval_parser.add_argument("--db", default=str(paths.DEFAULT_DB_PATH))
+    _add_db_argument(eval_parser)
     eval_parser.add_argument("--model", default="unknown")
     eval_parser.add_argument("--prompt-version")
     eval_parser.add_argument("--target-smiles")
@@ -416,6 +430,10 @@ def build_parser() -> argparse.ArgumentParser:
     eval_parser.set_defaults(func=_cmd_eval_trace)
 
     return parser
+
+
+def _add_db_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--db", default=str(paths.DEFAULT_DB_PATH), help="SQLite database")
 
 
 def print_json(value: Any) -> None:
@@ -476,13 +494,6 @@ def _cmd_make_taskset(args: argparse.Namespace) -> dict[str, Any]:
     )
 
 
-def _budget_set(text: str) -> dict[str, int | bool | str]:
-    try:
-        return parse_budget_set(text)
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError(str(exc)) from exc
-
-
 def _cmd_build_matrix(args: argparse.Namespace) -> dict[str, Any]:
     return build_matrix_directory(
         building_blocks=args.building_blocks,
@@ -498,7 +509,6 @@ def _cmd_build_matrix(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def _cmd_generate_targets(args: argparse.Namespace) -> dict[str, Any]:
-    libraries = normalize_libraries(args.libraries)
     options = GenerationOptions(
         count=args.count,
         workers=args.workers,
@@ -507,7 +517,7 @@ def _cmd_generate_targets(args: argparse.Namespace) -> dict[str, Any]:
         max_steps=args.max_steps,
         max_num_atoms=args.max_num_atoms,
         sampling=args.sampling,
-        libraries=libraries,
+        libraries=args.libraries,
         with_pathway=not args.no_pathway,
         with_intermediates=args.with_intermediates,
         mw_min=args.mw_min,
@@ -553,12 +563,26 @@ def _cmd_prepare_emolecules_bbs(args: argparse.Namespace) -> dict[str, Any]:
     )
 
 
+def _call_tool(
+    args: argparse.Namespace, name: str, arguments: dict[str, Any], **tool_options: Any
+) -> dict[str, Any]:
+    """Run one of the model's tools exactly as a rollout dispatches it."""
+
+    target_smiles = tool_options.pop("target_smiles", None)
+    tools = SynthesisTools(args.db, **tool_options)
+    return call_local_tool(tools, name, arguments, target_smiles=target_smiles)
+
+
 def _cmd_tool_search(args: argparse.Namespace) -> dict[str, Any]:
-    return SynthesisTools(args.db).search_building_blocks(
-        args.query,
-        args.limit,
-        include_near=not args.no_near,
-        min_similarity=args.min_similarity,
+    return _call_tool(
+        args,
+        "search_building_blocks",
+        {
+            "query": args.query,
+            "limit": args.limit,
+            "include_near": not args.no_near,
+            "min_similarity": args.min_similarity,
+        },
     )
 
 
@@ -579,15 +603,16 @@ def _cmd_tool_mces(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def _cmd_tool_search_reaction_templates(args: argparse.Namespace) -> dict[str, Any]:
-    product_smiles = args.product_smiles
-    if isinstance(product_smiles, list) and len(product_smiles) == 1:
-        product_smiles = product_smiles[0]
-    return SynthesisTools(args.db).search_reaction_templates(
-        query=args.query,
-        reactant_smiles=args.reactant_smiles,
-        product_smiles=product_smiles,
-        limit=args.limit,
-        run_forward=args.run_forward,
+    return _call_tool(
+        args,
+        "search_reaction_templates",
+        {
+            "query": args.query,
+            "reactant_smiles": args.reactant_smiles,
+            "product_smiles": args.product_smiles,
+            "limit": args.limit,
+            "run_forward": args.run_forward,
+        },
     )
 
 
@@ -596,39 +621,43 @@ def _cmd_tool_get_reaction(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def _cmd_tool_simulate_reaction(args: argparse.Namespace) -> dict[str, Any]:
-    reactants = _load_json_argument(args.reactants_json)
-    if not isinstance(reactants, list):
-        raise RuntimeError("--reactants-json must decode to a JSON list")
-    return SynthesisTools(args.db).simulate_reaction(
-        reaction_id=args.reaction_id,
-        reactants=[str(item) for item in reactants],
-        product_smiles=args.product_smiles,
-        max_products=args.max_products,
+    return _call_tool(
+        args,
+        "simulate_reaction",
+        {
+            "reaction_id": args.reaction_id,
+            "reactants": _load_json_argument(args.reactants_json, "--reactants-json"),
+            "product_smiles": args.product_smiles,
+            "max_products": args.max_products,
+        },
     )
 
 
 def _cmd_tool_simulate_reverse_reaction(args: argparse.Namespace) -> dict[str, Any]:
-    product_smiles = (
-        args.product_smiles[0] if len(args.product_smiles) == 1 else args.product_smiles
-    )
-    return SynthesisTools(args.db).simulate_reverse_reaction(
-        reaction_id=args.reaction_id,
-        product_smiles=product_smiles,
-        max_outcomes=args.max_outcomes,
-        include_near=not args.no_near,
-        min_similarity=args.min_similarity,
-        top_near_matches=args.top_near_matches,
+    return _call_tool(
+        args,
+        "simulate_reverse_reaction",
+        {
+            "reaction_id": args.reaction_id,
+            "product_smiles": args.product_smiles,
+            "max_outcomes": args.max_outcomes,
+            "include_near": not args.no_near,
+            "min_similarity": args.min_similarity,
+            "top_near_matches": args.top_near_matches,
+        },
     )
 
 
 def _cmd_tool_submit(args: argparse.Namespace) -> dict[str, Any]:
-    steps = _load_json_argument(args.steps_json)
-    if not isinstance(steps, list):
-        raise RuntimeError("--steps-json must decode to a JSON list")
-    return SynthesisTools(args.db, toxicity=toxicity.config_from_args(args)).submit_pathway(
-        steps=steps,
-        building_block=args.building_block,
-        pathway_text=args.pathway_text,
+    return _call_tool(
+        args,
+        "submit_pathway",
+        {
+            "steps": _load_json_argument(args.steps_json, "--steps-json"),
+            "building_block": args.building_block,
+            "pathway_text": args.pathway_text,
+        },
+        toxicity=toxicity.config_from_args(args),
         target_smiles=args.target_smiles,
     )
 
@@ -644,7 +673,6 @@ def _cmd_mcp_serve(args: argparse.Namespace) -> None:
         max_concurrent_executions=args.max_concurrent_executions,
         toxicity=toxicity.config_from_args(args),
     )
-    return None
 
 
 def _cmd_eval_trace(args: argparse.Namespace) -> dict[str, Any]:
@@ -665,7 +693,18 @@ def _cmd_eval_trace(args: argparse.Namespace) -> dict[str, Any]:
     return {"summaries": summaries, "output": args.output}
 
 
-def _load_json_argument(value: str) -> Any:
-    if value.startswith("@"):
-        return json.loads(Path(value[1:]).read_text(encoding="utf-8"))
-    return json.loads(value)
+def _load_json_argument(value: str, flag: str) -> Any:
+    """Decode a flag's JSON, given inline or as ``@path``."""
+
+    try:
+        text = Path(value[1:]).read_text(encoding="utf-8") if value.startswith("@") else value
+        return json.loads(text)
+    except (OSError, ValueError) as exc:
+        raise RuntimeError(f"{flag}: {exc}") from exc
+
+
+def _budget_set(text: str) -> dict[str, int | bool | str]:
+    try:
+        return parse_budget_set(text)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
