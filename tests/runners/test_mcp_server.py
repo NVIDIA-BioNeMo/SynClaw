@@ -256,23 +256,43 @@ def test_a_finished_success_is_reused_but_a_failure_is_retried() -> None:
     assert calls == 2  # the failure ran again; the success was served from the first run
 
 
-def test_a_pool_that_breaks_again_right_after_a_restart_is_not_restarted_forever(
-    tmp_path: Path,
-) -> None:
-    executor = AsyncToolExecutor(
+def _thread_executor_that_can_restart(tmp_path: Path) -> AsyncToolExecutor:
+    # A thread-mode executor still builds (lazy) spawn pools when asked to replace one.
+    return AsyncToolExecutor(
         1,
         use_process_pool=False,
         tools=_FakeTools(lambda *_: {}),
         tool_worker_config=ToolWorkerConfig(db_path=str(tmp_path / "unused.sqlite")),
     )
-    try:
-        first = executor._replace_broken_pool(executor._worker_pool, BrokenProcessPool("died"))
-        second = executor._replace_broken_pool(executor._worker_pool, BrokenProcessPool("again"))
 
-        assert isinstance(first, ToolWorkerPoolBroken)
-        assert not isinstance(second, ToolWorkerPoolBroken)
-        assert "failed again right after a restart" in str(second)
-        with pytest.raises(RuntimeError, match="failed again right after a restart"):
+
+def test_a_call_that_keeps_crashing_workers_keeps_getting_a_restart(tmp_path: Path) -> None:
+    executor = _thread_executor_that_can_restart(tmp_path)
+    try:
+        for _ in range(3):  # the same bad input, retried as the error message invites
+            error = executor._replace_broken_pool(executor._worker_pool, BrokenProcessPool("died"))
+            assert isinstance(error, ToolWorkerPoolBroken)
+        assert executor._unusable is None
+    finally:
+        executor.shutdown()
+
+
+def test_workers_that_fail_at_startup_stop_the_restarts_with_their_error(tmp_path: Path) -> None:
+    executor = _thread_executor_that_can_restart(tmp_path)
+    try:
+        executor._replace_broken_pool(executor._worker_pool, BrokenProcessPool("died"))
+        reports = executor._startup_reports
+        reports.put((123, "WatchlistUnavailable", "watchlist is missing"))
+        for _ in range(100):  # the queue's feeder thread delivers asynchronously
+            if not reports.empty():
+                break
+            time.sleep(0.01)
+
+        error = executor._replace_broken_pool(executor._worker_pool, BrokenProcessPool("again"))
+
+        assert not isinstance(error, ToolWorkerPoolBroken)
+        assert "WatchlistUnavailable: watchlist is missing" in str(error)
+        with pytest.raises(RuntimeError, match="fail at startup"):
             asyncio.run(executor.execute("similarity", smiles_a="C", smiles_b="C"))
     finally:
         executor.shutdown()

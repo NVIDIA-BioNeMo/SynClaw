@@ -55,7 +55,11 @@ def attach_response_usage(message: dict[str, Any], response: dict[str, Any]) -> 
 
 
 def retry_delay_seconds(attempt: int, body: str = "", headers: Any = None) -> float:
-    """Seconds to wait before a retry: exponential backoff raised to the server's Retry-After (header, or "wait N seconds" in the body), capped at 120."""
+    """Seconds to wait before a retry.
+
+    Exponential backoff, raised to the server's Retry-After (the header, or "wait N seconds"
+    in the body), and capped at 120.
+    """
 
     retry_after = None
     if headers is not None:
@@ -612,7 +616,8 @@ def _restored_run_state(
     recorded_trace_path = Path(str(checkpoint.get("trace_path") or trace_path))
     if not recorded_trace_path.exists():
         raise RuntimeError(
-            f"Checkpoint {checkpoint_path} expects trace {recorded_trace_path}, which does not exist"
+            f"Checkpoint {checkpoint_path} expects trace {recorded_trace_path}, "
+            "which does not exist"
         )
     trace_events, intact = _read_trace(recorded_trace_path)
     covered = checkpoint.get("trace_event_count")
@@ -1348,7 +1353,10 @@ def responses_completion(
 
 
 def responses_finish_reason(response: dict[str, Any]) -> str | None:
-    """Why an incomplete Responses reply stopped (for example ``max_output_tokens``), or None when it completed."""
+    """Why an incomplete Responses reply stopped, or None when it completed.
+
+    For example ``max_output_tokens``.
+    """
 
     if str(response.get("status") or "").strip().lower() != "incomplete":
         return None
@@ -1359,7 +1367,10 @@ def responses_finish_reason(response: dict[str, Any]) -> str | None:
 
 
 def responses_to_chat_message(response: dict[str, Any]) -> dict[str, Any]:
-    """Convert a Responses reply into the chat-style assistant message the rollout loop uses, keeping the raw output for replay."""
+    """Convert a Responses reply into the chat-style assistant message the rollout loop uses.
+
+    The raw output is kept on the message for replay.
+    """
 
     output = response.get("output") or []
     content_parts: list[str] = []
@@ -1412,7 +1423,10 @@ def responses_to_chat_message(response: dict[str, Any]) -> dict[str, Any]:
 
 
 def anthropic_response_to_chat_message(response: dict[str, Any]) -> dict[str, Any]:
-    """Convert a Messages reply into the chat-style assistant message the rollout loop uses, keeping the raw content for replay."""
+    """Convert a Messages reply into the chat-style assistant message the rollout loop uses.
+
+    The raw content is kept on the message for replay.
+    """
 
     content = response.get("content") or []
     content_parts: list[str] = []
@@ -1480,7 +1494,10 @@ def resolve_api_key(provider: str, api_key_env: str, *, use_preset_keys: bool = 
 
 
 def resolve_token_param(base_url: str, token_param: str) -> str:
-    """The chat token-limit parameter: under ``auto``, ``max_completion_tokens`` for api.openai.com and ``max_tokens`` elsewhere."""
+    """The chat token-limit parameter name.
+
+    Under ``auto``: ``max_completion_tokens`` for api.openai.com, ``max_tokens`` elsewhere.
+    """
 
     if token_param != "auto":
         return token_param
@@ -1537,7 +1554,10 @@ def checkpoint_matches_run(
     task: dict[str, Any],
     config: policy.RolloutPolicyConfig,
 ) -> bool:
-    """Whether a checkpoint came from a run with these model, endpoint, task, budget and screening settings, so resuming it is safe."""
+    """Whether resuming a checkpoint is safe for this run.
+
+    It must come from a run with the same model, endpoint, task, budgets and screening settings.
+    """
 
     if checkpoint.get("responses_state_mode") != getattr(args, "responses_state_mode", None):
         return False

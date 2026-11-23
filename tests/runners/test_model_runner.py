@@ -257,7 +257,8 @@ class _Reply:
 
 
 def _http_error(code: int, body: str = "") -> urllib.error.HTTPError:
-    return urllib.error.HTTPError("http://x", code, "err", {}, io.BytesIO(body.encode()))  # type: ignore[arg-type]
+    headers: dict = {}
+    return urllib.error.HTTPError("http://x", code, "err", headers, io.BytesIO(body.encode()))
 
 
 def _post(retries: int = 2) -> dict[str, Any]:
