@@ -96,3 +96,49 @@ def test_the_request_carries_the_json_body_and_headers() -> None:
     assert seen["body"] == {"a": 1}
     assert seen["headers"]["content-type"] == "application/json"
     assert seen["headers"]["authorization"] == "Bearer k"
+
+
+@pytest.mark.parametrize(
+    "flags",
+    [
+        ["--retries", "-1"],
+        ["--request-timeout", "0"],
+        ["--max-turns", "0"],
+        ["--max-tool-calls", "-1"],
+        ["--turn-warning-remaining", "-1"],
+        ["--same-pathway-finish-after", "-1"],
+    ],
+)
+def test_out_of_range_numeric_flags_are_rejected_when_parsing(flags: list[str]) -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    model_runner.add_arguments(parser)
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(["--model", "m", *flags])
+
+
+def test_zero_disables_the_budget_flags_that_say_so() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    model_runner.add_arguments(parser)
+
+    args = parser.parse_args(
+        [
+            "--model",
+            "m",
+            "--max-tool-calls",
+            "0",
+            "--turn-warning-remaining",
+            "0",
+            "--same-pathway-finish-after",
+            "0",
+            "--retries",
+            "0",
+        ]
+    )
+
+    assert (args.max_tool_calls, args.turn_warning_remaining) == (0, 0)
+    assert (args.same_pathway_finish_after, args.retries) == (0, 0)
