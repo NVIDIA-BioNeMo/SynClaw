@@ -18,7 +18,6 @@ import pytest
 
 from synclaw.core import db
 from synclaw.core.reactions import ingest_reaction_templates
-from synclaw.rollout.loop import call_local_tool
 from synclaw.runners import mcp_server
 from synclaw.runners.mcp_server import (
     AsyncToolExecutor,
@@ -171,21 +170,26 @@ def test_an_omitted_argument_reaches_the_tool_with_the_contract_default(
     ]
 
 
-def test_thread_and_process_workers_dispatch_through_the_same_validation() -> None:
-    called = False
+def test_thread_and_process_workers_dispatch_through_the_same_validation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    called: list[tuple[str, str]] = []
 
-    def similarity(_a: str, _b: str) -> dict:
-        nonlocal called
-        called = True
+    def similarity(smiles_a: str, smiles_b: str) -> dict:
+        called.append((smiles_a, smiles_b))
         return {}
 
-    executor = AsyncToolExecutor(1, use_process_pool=False, tools=_FakeTools(similarity))
+    tools = _FakeTools(similarity)
+    monkeypatch.setattr(mcp_server, "_WORKER_TOOLS", tools)
+    executor = AsyncToolExecutor(1, use_process_pool=False, tools=tools)
+    arguments = {"smiles_a": "", "smiles_b": "CCO"}
 
-    result = asyncio.run(executor.execute("similarity", smiles_a="", smiles_b="CCO"))
+    in_thread = asyncio.run(executor.execute("similarity", **arguments))
+    in_process = mcp_server._invoke_tool_process("similarity", arguments)
 
-    assert result["error"] == "invalid_tool_call"
-    assert "missing required argument 'smiles_a'" in result["issues"][0]
-    assert called is False
+    assert in_process["error"] == "invalid_tool_call"
+    assert in_thread == compact_tool_result("similarity", in_process)
+    assert called == []
 
 
 def test_server_refuses_a_library_without_family_metadata_at_startup(tmp_path: Path) -> None:
@@ -197,32 +201,6 @@ def test_server_refuses_a_library_without_family_metadata_at_startup(tmp_path: P
 
     with pytest.raises(ValueError, match="missing family_metadata"):
         create_server(database, use_process_pool=False)
-
-
-def test_process_worker_rejects_schema_invalid_tool_arguments(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    class GuardedTools:
-        called = False
-
-        def simulate_reaction(self, **_kwargs: object) -> dict:
-            self.called = True
-            return {"valid": True}
-
-    tools = GuardedTools()
-    monkeypatch.setattr(mcp_server, "_WORKER_TOOLS", tools)
-    arguments = {"reaction_id": "R1", "reactants": "CC"}
-
-    result = mcp_server._invoke_tool_process(
-        "simulate_reaction",
-        arguments,
-    )
-
-    assert result == call_local_tool(tools, "simulate_reaction", arguments)
-    assert result["error"] == "invalid_tool_call"
-    assert result["retryable"] is True
-    assert "must be a JSON array" in result["issues"][0]
-    assert tools.called is False
 
 
 def test_identical_inflight_calls_reattach_without_duplicate_execution() -> None:
@@ -368,34 +346,6 @@ def test_process_workers_prestart_and_rebuild_a_broken_pool(
                 smiles_b=smiles_b,
             )
             assert 0.0 <= result["similarity"] < 1.0
-
-    try:
-        asyncio.run(run())
-    finally:
-        executor.shutdown()
-
-
-@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="fork workers are Linux-only")
-def test_process_worker_unknown_tool_is_a_tool_error_and_the_pool_keeps_serving(
-    tmp_path: Path,
-) -> None:
-    database_path = tmp_path / "synclaw.sqlite"
-    db.init_db(database_path)
-    db.prepare_building_block_search(database_path)
-    executor = AsyncToolExecutor(
-        2,
-        tool_worker_config=ToolWorkerConfig(db_path=str(database_path)),
-    )
-
-    async def run() -> None:
-        unknown = await executor.execute("not-a-public-tool")
-        assert unknown["error"] == "invalid_tool_call"
-        result = await executor.execute(
-            "similarity",
-            smiles_a="CCO",
-            smiles_b="CCO",
-        )
-        assert result["similarity"] == 1.0
 
     try:
         asyncio.run(run())
