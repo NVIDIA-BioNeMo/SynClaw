@@ -27,8 +27,8 @@ from synclaw.rollout.policy import (
     handle_no_tool_response,
     handle_tool_result,
     prepare_tool_call,
-    response_or_chat_tool_choice,
     selected_submission_event,
+    submit_tool_choice,
     tool_argument_error,
     tool_limit_finish_reason,
     turn_reminders,
@@ -405,10 +405,9 @@ async def run_rollout(
                 turn_index,
                 record,
             )
-        tool_choice = response_or_chat_tool_choice(
-            api_mode="chat",
+        tool_choice = submit_tool_choice(
             forced_submit_requested=state.policy.forced_submit_requested,
-            has_submission=state.policy.has_submission,
+            has_accepted_submission=state.policy.has_accepted_submission,
             tools=list(tool_schemas),
         )
         # Clip and record each request's output cap before sending it, so a failed request keeps its budget.

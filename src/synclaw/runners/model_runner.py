@@ -176,13 +176,11 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         "--turn-warning-remaining",
         type=int,
         default=policy.DEFAULT_TURN_WARNING_REMAINING,
-        help="Warn the model when this many assistant turns remain; set 0 to disable",
-    )
-    parser.add_argument(
-        "--force-submit-after-non-tool-turns",
-        type=int,
-        default=policy.DEFAULT_FORCE_SUBMIT_AFTER_NON_TOOL_TURNS,
-        help="Request final submission after this many assistant turns without tool calls after prior tool use; set 0 to disable",
+        help=(
+            "Warn the model when this many assistant turns remain, before the final turn's own "
+            "reminder. Needs a finite --max-turns and budget feedback; values below 2 never "
+            "fire. Set 0 to disable"
+        ),
     )
     parser.add_argument(
         "--same-pathway-finish-after",
@@ -195,13 +193,13 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--max-tokens",
-        type=_positive_token_limit,
+        type=_positive_int,
         default=policy.DEFAULT_MAX_TOKENS,
         help="Output cap per response; a task's max_tokens overrides it",
     )
     parser.add_argument(
         "--max-model-len",
-        type=_positive_token_limit,
+        type=_positive_int,
         help=(
             "Context limit; each response's output is clipped to the context left. A task's "
             "max_model_len may lower it. Omitted when unknown, which disables clipping"
@@ -258,7 +256,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--max-low-similarity-submissions",
-        type=int,
+        type=_positive_int,
         default=policy.DEFAULT_MAX_LOW_SIMILARITY_SUBMISSIONS,
         help=(
             "Optional cap on accepted submissions below the --stop-condition similarity before ending. "
@@ -366,7 +364,6 @@ def run_model_from_args(args: argparse.Namespace) -> dict[str, Any]:
         budget_feedback=getattr(args, "budget_feedback", True),
         stop_condition=getattr(args, "stop_condition", policy.DEFAULT_STOP_CONDITION),
         turn_warning_remaining=args.turn_warning_remaining,
-        force_submit_after_non_tool_turns=args.force_submit_after_non_tool_turns,
         same_pathway_finish_after=int(args.same_pathway_finish_after or 0),
         max_low_similarity_submissions=args.max_low_similarity_submissions,
         excluded_tools=frozenset(excluded_tools),
@@ -880,10 +877,10 @@ class _HostedTransport:
         }
 
 
-def _positive_token_limit(value: str) -> int:
+def _positive_int(value: str) -> int:
     result = int(value)
     if result <= 0:
-        raise argparse.ArgumentTypeError("token limit must be positive")
+        raise argparse.ArgumentTypeError("must be a positive integer")
     return result
 
 

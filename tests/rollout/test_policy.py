@@ -13,6 +13,7 @@ from synclaw.rollout.policy import (
     handle_tool_result,
     prepare_tool_call,
     submission_summary_fields,
+    submit_tool_choice,
     task_budget_config,
     turn_reminders,
 )
@@ -25,7 +26,6 @@ def _config(**overrides: object) -> RolloutPolicyConfig:
         "max_tool_calls": 20,
         "stop_condition": 1.0,
         "turn_warning_remaining": 3,
-        "force_submit_after_non_tool_turns": 2,
         "same_pathway_finish_after": 2,
         "max_low_similarity_submissions": None,
     }
@@ -45,7 +45,6 @@ def test_policy_checkpoint_fields_round_trip() -> None:
     state = RolloutPolicyState.from_checkpoint(
         {
             "total_tool_calls": 7,
-            "consecutive_non_tool_turns_after_tools": 2,
             "forced_submit_requested": True,
             "last_submission": {"accepted": False},
             "best_accepted_similarity": 0.75,
@@ -55,10 +54,8 @@ def test_policy_checkpoint_fields_round_trip() -> None:
     fields = state.checkpoint_fields()
 
     assert fields["total_tool_calls"] == 7
-    assert fields["consecutive_non_tool_turns_after_tools"] == 2
     assert fields["forced_submit_requested"] is True
     assert fields["last_submission"] == {"accepted": False}
-    assert state.has_submission is True
     assert fields["best_accepted_similarity"] == 0.75
 
 
@@ -88,34 +85,34 @@ def test_turn_reminders_are_emitted_once_and_force_the_final_turn() -> None:
     assert state.forced_submit_requested is True
 
 
-@pytest.mark.parametrize("tool_calls", [0, 1])
-def test_no_tool_response_uses_shared_persistence_and_force_submit_policy(tool_calls: int) -> None:
-    state = RolloutPolicyState(
-        total_tool_calls=1,
-        best_accepted_similarity=0.5,
-    )
-    config = _config(force_submit_after_non_tool_turns=2)
+def test_no_tool_responses_keep_getting_the_continue_nudge_with_persistence() -> None:
+    state = RolloutPolicyState(total_tool_calls=1, best_accepted_similarity=0.5)
+    config = _config()
 
-    first = handle_no_tool_response(config, state, content="still thinking")
-    second = handle_no_tool_response(config, state, content="still thinking")
+    replies = [handle_no_tool_response(config, state, content="still thinking") for _ in range(4)]
 
-    assert first.reminder is not None
-    assert NON_TOOL_PERSISTENCE_GUARANTEE_SENTENCE in first.reminder
-    assert second.reminder is not None
-    assert second.reminder.startswith("Call submit_pathway now")
+    for reply in replies:
+        assert reply.finish_reason is None
+        assert reply.reminder is not None
+        assert reply.reminder.startswith("Continue. Use additional tools")
+        assert NON_TOOL_PERSISTENCE_GUARANTEE_SENTENCE in reply.reminder
+    assert state.forced_submit_requested is False
+
+    fresh = handle_no_tool_response(config, RolloutPolicyState(), content="still thinking")
+    assert fresh.reminder is not None
+    assert NON_TOOL_PERSISTENCE_GUARANTEE_SENTENCE not in fresh.reminder
+
+
+def test_a_no_tool_reply_after_the_final_turn_reminder_asks_for_submit_pathway() -> None:
+    state = RolloutPolicyState()
+    config = _config(max_turns=3)
+    turn_reminders(config, state, turn_index=2)
     assert state.forced_submit_requested is True
 
-    search_only_state = RolloutPolicyState(total_tool_calls=tool_calls)
-    search_only_first = handle_no_tool_response(config, search_only_state, content="still thinking")
-    search_only_second = handle_no_tool_response(
-        config, search_only_state, content="still thinking"
-    )
-    assert search_only_first.reminder is not None
-    assert search_only_first.reminder.startswith("Continue. Use additional tools")
-    assert search_only_second.reminder is not None
-    assert search_only_second.reminder.startswith("Call submit_pathway now")
-    assert "maximum achievable route" not in search_only_first.reminder
-    assert "maximum achievable route" not in search_only_second.reminder
+    reply = handle_no_tool_response(config, state, content="still thinking")
+
+    assert reply.reminder is not None
+    assert reply.reminder.startswith("Your previous response did not call submit_pathway")
 
 
 def test_prepare_tool_call_normalizes_payloads_independent_of_event_index() -> None:
@@ -172,7 +169,7 @@ def test_repair_reminders_name_no_optional_tool() -> None:
         "target, and verify "
     ) in low.repair
     assert invalid_state.invalid_submissions == 1
-    assert invalid_state.has_submission is True
+    assert invalid_state.has_accepted_submission is False
 
 
 def test_low_similarity_sequence_tracks_best_route_and_allows_finish_token() -> None:
@@ -561,3 +558,65 @@ def test_a_stop_at_the_tool_call_limit_is_reported_as_the_tool_limit() -> None:
     decision = handle_no_tool_response(config, state, content="That is my best route.")
 
     assert decision.finish_reason == "tool_limit_best_accepted_submission"
+
+
+def test_a_zero_low_similarity_cap_is_rejected_not_clamped() -> None:
+    with pytest.raises(ValueError, match="max_low_similarity_submissions must be at least 1"):
+        RolloutPolicyConfig(max_low_similarity_submissions=0)
+
+
+def test_an_equally_unscored_later_submission_does_not_replace_the_best() -> None:
+    from synclaw.rollout.policy import is_better_accepted_submission
+
+    assert not is_better_accepted_submission(False, None, False, None)
+    assert is_better_accepted_submission(False, 0.4, False, None)
+    assert not is_better_accepted_submission(False, None, False, 0.4)
+
+
+def test_forced_submit_stays_forced_after_a_rejected_submission() -> None:
+    config = _config(max_turns=5)
+    state = RolloutPolicyState()
+    handle_tool_result(
+        config,
+        state,
+        name="submit_pathway",
+        arguments={},
+        result={"accepted": False, "error_message": "bad"},
+        target_smiles="CCO",
+    )
+    assert turn_reminders(config, state, turn_index=4)
+    tools = [{"type": "function", "function": {"name": "submit_pathway"}}]
+    choice = submit_tool_choice(
+        forced_submit_requested=state.forced_submit_requested,
+        has_accepted_submission=state.has_accepted_submission,
+        tools=tools,
+    )
+    assert choice == {"type": "function", "function": {"name": "submit_pathway"}}
+
+    # The forced request yields a submission, and any submission result clears the flag.
+    handle_tool_result(
+        config,
+        state,
+        name="submit_pathway",
+        arguments={},
+        result={"accepted": False, "error_message": "still bad"},
+        target_smiles="CCO",
+    )
+    assert state.forced_submit_requested is False
+    assert (
+        submit_tool_choice(
+            forced_submit_requested=state.forced_submit_requested,
+            has_accepted_submission=state.has_accepted_submission,
+            tools=tools,
+        )
+        == "auto"
+    )
+
+
+def test_no_persistence_coaching_in_model_stop_mode() -> None:
+    from synclaw.rollout.policy import is_below_persistence_floor
+
+    assert is_below_persistence_floor(0.4, "model") is False
+    assert is_below_persistence_floor(0.4, "exact") is True
+    assert is_below_persistence_floor(0.4, 0.8) is True
+    assert is_below_persistence_floor(0.9, 0.8) is False

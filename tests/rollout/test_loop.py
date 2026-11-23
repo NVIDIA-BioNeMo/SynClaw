@@ -82,7 +82,6 @@ def config(**overrides: Any) -> RolloutPolicyConfig:
         "max_tool_calls": 10,
         "stop_condition": 1.0,
         "turn_warning_remaining": 0,
-        "force_submit_after_non_tool_turns": 2,
         "same_pathway_finish_after": 2,
         "max_low_similarity_submissions": None,
     }
