@@ -40,7 +40,7 @@ Previous Version(s): None
 
 ## License/Terms of Use:
 
-Governing Terms: Use of the data is governed by [OpenMDW License Agreement, version 1.1](https://github.com/OpenMDW/OpenMDW/blob/main/1.1/LICENSE.OpenMDW-1.1), except for the Open Reaction Database data, which is governed by the [Creative Commons Attribution-ShareAlike 4.0 International License (CC BY-SA 4.0)](https://creativecommons.org/licenses/by-sa/4.0/legalcode). Additional Information: [Apache License, Version 2.0](https://www.apache.org/licenses/LICENSE-2.0) for the SynFormer data and [Creative Commons Attribution 4.0 International License (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/legalcode.en) for the PaRoutes data.
+**Governing Terms**: Use of the data is governed by [OpenMDW License Agreement, version 1.1](https://github.com/OpenMDW/OpenMDW/blob/main/1.1/LICENSE.OpenMDW-1.1), except for the Open Reaction Database data, which is governed by the [Creative Commons Attribution-ShareAlike 4.0 International License (CC BY-SA 4.0)](https://creativecommons.org/licenses/by-sa/4.0/legalcode). **Additional Information:** [Apache License, Version 2.0](https://www.apache.org/licenses/LICENSE-2.0) for the SynFormer data and [Creative Commons Attribution 4.0 International License (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/legalcode.en) for the PaRoutes data.
 
 Attribution, source licenses and a description of NVIDIA's changes are in the NOTICE.md file for each source, [LICENSE](LICENSE), [ord/LICENSE](ord/LICENSE) and [THIRD_PARTY_NOTICES.md](../../THIRD_PARTY_NOTICES.md) in the repository.
 
