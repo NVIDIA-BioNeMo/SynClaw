@@ -323,7 +323,7 @@ def require_reaction_templates(conn: sqlite3.Connection) -> None:
     if not libraries:
         raise RuntimeError(
             "This database has no reaction templates. Import the bundled sources with "
-            "`synclaw ingest-reactions --db <path>` from a source checkout, or a custom file with "
+            "`synclaw ingest-reactions --db <path>`, or a custom file with "
             "`synclaw ingest-reactions <templates> --library <name> --db <path>`."
         )
     _require_current_reaction_libraries(conn, libraries)

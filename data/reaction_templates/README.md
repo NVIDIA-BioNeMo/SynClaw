@@ -7,7 +7,7 @@ description and search terms are stored once in `families.json` and added to eve
 template of that family on import.
 [`src/synclaw/reaction_libraries.json`](../../src/synclaw/reaction_libraries.json) lists the
 source files, their template counts, and checksums. The manifest ships in the wheel; the
-template files themselves are read from a source checkout.
+template files do not, so an installed package downloads them and checks each against the manifest.
 
 | Source | Templates |
 | --- | ---: |
@@ -18,7 +18,7 @@ template files themselves are read from a source checkout.
 
 No SMARTS appears in more than one source.
 
-Import from a source checkout into a new or existing stock database:
+Import into a new or existing stock database:
 
 ```bash
 uv run synclaw ingest-reactions --db var/synclaw.sqlite
