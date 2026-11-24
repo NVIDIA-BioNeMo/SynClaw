@@ -309,9 +309,7 @@ reactant positions than the chemistry warrants, and entries whose SMILES carry a
 (`--atom-maps drop`), which would otherwise leak into atom-mapped targets. `meta.json` in the
 output records how the matrix was built.
 
-A matrix outlives the templates it was built from, so one built against an older checkout can cite
-templates this package has since dropped. `scripts/verify_generated_routes.py` checks a generated
-file against both the matrix and the installed catalog and reports either kind of drift.
+A matrix outlives the templates it was built from, so rebuild it after the template catalog changes.
 
 ### Feeding targets into `make-taskset`
 

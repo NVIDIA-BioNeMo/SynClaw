@@ -46,8 +46,6 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     databases = dict(_parse_database(value) for value in args.db)
-    if not databases:
-        raise SystemExit("At least one --db LABEL=PATH is required")
     query_count = max(1, int(args.queries))
     if args.query_file is None:
         first_database = next(iter(databases.values()))
