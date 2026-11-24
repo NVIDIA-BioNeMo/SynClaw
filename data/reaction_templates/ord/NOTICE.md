@@ -18,7 +18,7 @@ ORD's import of:
 Daniel Lowe, Chemical reactions from US patents (1976-Sep2016), figshare (2017),
 https://doi.org/10.6084/m9.figshare.5104873.v1.
 
-## Changes made by NVIDIA
+## Changes made in this repository
 
 - Extracted a radius-1 template with reaction-utils 1.9.3 from each of 203
   selected atom-mapped reactions, and removed duplicates.
@@ -38,5 +38,5 @@ https://doi.org/10.6084/m9.figshare.5104873.v1.
 
 These changes are not endorsed by ORD or the original authors.
 
-NVIDIA-authored templates are in [../nvidia/](../nvidia/NOTICE.md) and are not
+The project-authored templates are in [../nvidia/](../nvidia/NOTICE.md) and are not
 covered by this license.

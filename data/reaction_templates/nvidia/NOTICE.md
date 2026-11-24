@@ -1,6 +1,6 @@
 # NVIDIA-authored reaction templates (8 templates)
 
-Generic templates for common transformations, written at NVIDIA rather than
+Generic templates for common transformations, authored for this project rather than
 extracted from reaction records. Each record's `metadata.provenance` starts with
 `{"source_id": "nvidia-authored"}`. The remaining entries, marked
 `"relation": "example"`, cite one to five recorded reactions in Lowe's USPTO grants
@@ -29,8 +29,7 @@ SynFormer templates in [../synformer/](../synformer/NOTICE.md).
 | `nvidia:R006` | Broad chloride or bromide replacement by a heteroatom donor | `synformer:R009`, `synformer:R056`, `synformer:R031` | General substitution, broader than the published templates; the donor atom is neutral in the product. |
 | `nvidia:R007` | N-carbamate cleavage to the parent nitrogen | Patent-extracted Boc removal, including `ord:R031` | Boc and other acyclic carbamates; cyclic carbamates are excluded. |
 
-Two earlier templates were removed because existing templates already cover
-them: methyl ester cleavage is a subset of `synformer:R085`, and nitro reduction
-to a primary amine equals `paroutes:PR664F7756F752` and
-`paroutes:PR09D37E55A41F` together. Neither produced an outcome those templates
-do not on the 43,745 distinct molecules in the 20,000-reaction sample.
+Two common transformations are deliberately not covered by a template of their own,
+because existing templates already cover them: methyl ester cleavage is a subset of
+`synformer:R085`, and nitro reduction to a primary amine equals `paroutes:PR664F7756F752`
+and `paroutes:PR09D37E55A41F` together.
