@@ -16,7 +16,10 @@ from pathlib import Path
 from typing import Any
 
 from synclaw.core import db
+from synclaw.tools.contracts import TOOL_ARGUMENT_DEFAULTS
 from synclaw.tools.synthesis import SynthesisTools
+
+SEARCH_DEFAULTS = TOOL_ARGUMENT_DEFAULTS["search_building_blocks"]
 
 
 def parse_args() -> argparse.Namespace:
@@ -36,8 +39,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--queries", type=int, default=100)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--concurrency", type=int, default=1)
-    parser.add_argument("--limit", type=int, default=20)
-    parser.add_argument("--min-similarity", type=float, default=0.15)
+    parser.add_argument("--limit", type=int, default=SEARCH_DEFAULTS["limit"])
+    parser.add_argument("--min-similarity", type=float, default=SEARCH_DEFAULTS["min_similarity"])
     parser.add_argument("--warmup", type=int, default=5)
     parser.add_argument("--output", type=Path)
     return parser.parse_args()
@@ -46,8 +49,6 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     databases = dict(_parse_database(value) for value in args.db)
-    if not databases:
-        raise SystemExit("At least one --db LABEL=PATH is required")
     query_count = max(1, int(args.queries))
     if args.query_file is None:
         first_database = next(iter(databases.values()))
@@ -152,8 +153,10 @@ def _benchmark_database(
 ) -> dict[str, Any]:
     db.require_prepared_building_block_search(path)
     tools = SynthesisTools(path)
+    # Warm both modes so neither timing includes a one-time load (the fingerprint index for near).
     for query in queries[:warmup]:
-        tools.search_building_blocks(query, limit=limit, include_near=False)
+        for include_near in (False, True):
+            tools.search_building_blocks(query, limit=limit, include_near=include_near)
     return {
         "path": str(path),
         "exact_only": _benchmark_mode(

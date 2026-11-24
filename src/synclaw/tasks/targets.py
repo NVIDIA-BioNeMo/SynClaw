@@ -33,8 +33,7 @@ this package's own templates plus a building-block catalog. Its layout is:
 
 Fortran order matters: a column is read whole for every template, and in C order that strides
 across every page of a multi-gigabyte file. `load_matrix_dir` validates the shapes against each
-other and reports what is inconsistent, since a matrix outlives the run that built it;
-`scripts/verify_generated_routes.py` replays a generated file to catch the rest.
+other and reports what is inconsistent, since a matrix outlives the run that built it.
 
 Blocks are memory-mapped and parsed on demand, and pools of qualifying blocks are materialized
 only when small (`pool_cache_max`), with denser pools rejection-sampled instead, so worker

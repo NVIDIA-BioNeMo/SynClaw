@@ -24,7 +24,13 @@ def test_report_shows_budget_snapshots_separately_from_billing_and_feedback():
         "Remaining: ~1040k context tokens."
     )
     events = [
-        {"event_type": "message", "role": "user", "payload": {"content": reminder}},
+        # The loop marks a harness message it sends as a new user turn.
+        {
+            "event_type": "message",
+            "role": "user",
+            "harness": True,
+            "payload": {"content": reminder},
+        },
         {
             "event_type": "token_budget",
             "payload": {
@@ -67,6 +73,7 @@ def test_report_shows_budget_snapshots_separately_from_billing_and_feedback():
             {
                 "event_type": "message",
                 "role": "user",
+                "harness": True,
                 "payload": {
                     "content": "Remaining: 79 turns, 145 tool calls, ~1040k context tokens."
                 },
@@ -74,6 +81,7 @@ def test_report_shows_budget_snapshots_separately_from_billing_and_feedback():
             {
                 "event_type": "message",
                 "role": "user",
+                "harness": True,
                 "payload": {
                     "content": "Your previous response hit its output-token limit and was truncated."
                 },
@@ -197,12 +205,7 @@ def test_summary_can_fall_back_to_run_summary_similarity():
     events = [
         {
             "event_type": "run_summary",
-            "payload": {
-                "evaluation_summary": {
-                    "final_smiles": "not-a-smiles",
-                    "similarity_to_target": 0.42,
-                }
-            },
+            "payload": {"final_smiles": "not-a-smiles", "similarity_to_target": 0.42},
         }
     ]
 
@@ -569,8 +572,8 @@ def test_similarity_call_renders_ordered_markdown_arguments():
     markdown = renderer.render_trace(events, trace_path=Path("trace.jsonl"))
 
     assert "- `similarity`" in markdown
-    assert (
-        '- arguments: `{"smiles_a":"Cc1nsc(-c2ccc[n+](CC#N)c2)n1",'
+    assert (  # the decision trace, indented under the call
+        '  - Arguments: `{"smiles_a":"Cc1nsc(-c2ccc[n+](CC#N)c2)n1",'
         '"smiles_b":"Cc1nc(-c2ccncc2)sc1CC#N"}`'
     ) in markdown
     assert (
@@ -616,3 +619,44 @@ def test_tool_interaction_reports_model_visible_compaction():
 
     assert "**Model-visible result:** compacted from `1000` to `250` JSON byte(s)" in markdown
     assert "**Result:** 1 building-block hits" in markdown
+
+
+def test_harness_interventions_come_from_the_trace_marker_not_message_text():
+    renderer = _load_renderer()
+    events = [
+        {"event_type": "message", "role": "user", "payload": {"content": "Continue. Plan CCO."}},
+        {
+            "event_type": "message",
+            "role": "user",
+            "harness": True,
+            "payload": {"content": "The similarity tool call failed: smiles_b is missing."},
+        },
+    ]
+
+    markdown = renderer.render_trace(events, trace_path=Path("trace.jsonl"))
+
+    assert "- The similarity tool call failed: smiles_b is missing." in markdown
+    assert "- Continue. Plan CCO." not in markdown
+
+
+def test_a_rejected_submission_shows_no_similarity():
+    renderer = _load_renderer()
+    events = [
+        {
+            "event_type": "tool_result",
+            "tool_name": "submit_pathway",
+            "target_smiles": "CCO",
+            "payload": {
+                "result": {
+                    "accepted": False,
+                    "actual_final_smiles": "CCN",
+                    "similarity_to_target": None,
+                    "issues": ["step 1: reactant is not in stock"],
+                }
+            },
+        }
+    ]
+
+    markdown = renderer.render_trace(events, trace_path=Path("trace.jsonl"))
+
+    assert "similarity to target" not in markdown

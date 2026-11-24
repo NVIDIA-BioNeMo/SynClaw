@@ -155,44 +155,9 @@ def render_trace(
         lines.append("## Validator Outcome")
         lines.append("")
         issues = submission.get("issues") or []
-        actual_final = actual_final_from_result(submission)
         lines.append(f"- Accepted: `{str(bool(submission.get('accepted'))).lower()}`")
         lines.append(f"- Reaction validation: `{submission.get('reaction_validation', 'unknown')}`")
-        if submission.get("pathway_type"):
-            lines.append(f"- Pathway type: `{submission.get('pathway_type')}`")
-        direct_block = submission.get("direct_building_block")
-        if isinstance(direct_block, dict):
-            direct_ref = direct_block.get("submit_reference") or submission.get(
-                "direct_building_block_ref"
-            )
-            direct_smiles = direct_block.get("canonical_smiles") or direct_block.get("smiles")
-            lines.append(f"- Direct-purchase building block: `{direct_ref}` -> `{direct_smiles}`")
-        if submission.get("building_block_grounded") is not None:
-            lines.append(
-                f"- Building-block grounded: `{str(bool(submission.get('building_block_grounded'))).lower()}`"
-            )
-        if submission.get("referenced_building_block_ids"):
-            lines.append(
-                "- Referenced building blocks: "
-                + ", ".join(
-                    f"`{item}`" for item in submission.get("referenced_building_block_ids") or []
-                )
-            )
-        if actual_final and submission.get("similarity_to_target") is not None:
-            lines.append(f"- Active similarity to target: `{submission['similarity_to_target']}`")
-        lines.extend(render_similarity_fields(submission))
-        if actual_final:
-            label = (
-                "Final product"
-                if submission.get("pathway_type") == "direct_purchase"
-                else "RDKit final product"
-            )
-            lines.append(f"- {label}: `{actual_final}`")
-        if (
-            submission.get("submitted_final_smiles")
-            and submission.get("submitted_final_smiles") != actual_final
-        ):
-            lines.append(f"- Claimed final-step product: `{submission['submitted_final_smiles']}`")
+        lines.extend(submission_detail_lines(submission, grounding=True))
         if issues:
             lines.append(f"- Issues: `{json.dumps(issues, sort_keys=True)}`")
         else:
@@ -215,6 +180,42 @@ def render_trace(
         lines.extend(render_exchange(index, exchange, max_results=max_results))
 
     return "\n".join(lines).rstrip() + "\n"
+
+
+def submission_detail_lines(result: dict[str, Any], *, grounding: bool = False) -> list[str]:
+    """What a submit_pathway result established, shared by the outcome and tool sections."""
+
+    lines: list[str] = []
+    if result.get("pathway_type"):
+        lines.append(f"- Pathway type: `{result.get('pathway_type')}`")
+    direct_block = result.get("direct_building_block")
+    if isinstance(direct_block, dict):
+        direct_ref = direct_block.get("submit_reference") or result.get("direct_building_block_ref")
+        direct_smiles = direct_block.get("canonical_smiles") or direct_block.get("smiles")
+        lines.append(f"- Direct-purchase building block: `{direct_ref}` -> `{direct_smiles}`")
+    if grounding and result.get("building_block_grounded") is not None:
+        grounded = str(bool(result.get("building_block_grounded"))).lower()
+        lines.append(f"- Building-block grounded: `{grounded}`")
+    if grounding and result.get("referenced_building_block_ids"):
+        lines.append(
+            "- Referenced building blocks: "
+            + ", ".join(f"`{item}`" for item in result.get("referenced_building_block_ids") or [])
+        )
+    actual_final = actual_final_from_result(result)
+    if actual_final and result.get("similarity_to_target") is not None:
+        lines.append(f"- Active similarity to target: `{result['similarity_to_target']}`")
+    lines.extend(render_similarity_fields(result))
+    if actual_final:
+        label = (
+            "Final product"
+            if result.get("pathway_type") == "direct_purchase"
+            else "RDKit final product"
+        )
+        lines.append(f"- {label}: `{actual_final}`")
+    claimed = result.get("submitted_final_smiles")
+    if claimed and claimed != actual_final:
+        lines.append(f"- Claimed final-step product: `{claimed}`")
+    return lines
 
 
 def append_blank_line(lines: list[str]) -> None:
@@ -288,8 +289,8 @@ def render_model_decision_trace(events: list[dict[str, Any]]) -> list[str]:
                 name = function.get("name")
                 arguments = parse_json_object(function.get("arguments"))
                 lines.append(f"- `{name}`")
-                for detail in summarize_tool_call_arguments(str(name), arguments):
-                    lines.append(f"  - {detail}")
+                for label, value in call_details(str(name), arguments):
+                    lines.append(f"  - {label}: {value}")
             lines.append("")
         else:
             lines.append("**Tool calls chosen by the model:** none.")
@@ -351,107 +352,83 @@ def render_token_budgets(events: list[dict[str, Any]]) -> list[str]:
 
 def render_harness_interventions(events: list[dict[str, Any]]) -> list[str]:
     lines: list[str] = []
-    prefixes = (
-        "Stop searching",
-        "Call submit_pathway",
-        "Your previous response",
-        "Continue.",
-        "The validator",
-        "The search_",
-        "The simulate_",
-        "The submit_pathway",
-        "You have ",
-        "This is the final",
-        "The tool-call budget",
-        "Your context-window budget",
-        "Each response is capped",
-        "Remaining:",
-        "Your previous response hit its output-token limit",
-    )
+    last_budget = None
     for event in events:
+        payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
+        content = payload.get("content")
         if event.get("event_type") in {"token_budget", "harness_feedback"}:
-            content = event.get("payload", {}).get("content")
             if content:
                 lines.append(f"- {content}")
-            continue
-        if event.get("event_type") != "message" or event.get("role") != "user":
-            continue
-        payload = event.get("payload")
-        content = payload.get("content") if isinstance(payload, dict) else None
-        if not isinstance(content, str) or not content.startswith(prefixes):
-            continue
-        lines.append(f"- {content}")
+                if event.get("event_type") == "token_budget":
+                    last_budget = content
+        elif event.get("event_type") == "message" and event.get("harness") and content:
+            # Budget feedback sent as a new message is already listed from its budget event.
+            if content != last_budget:
+                lines.append(f"- {content}")
     return lines
 
 
-def summarize_tool_call_arguments(name: str, arguments: dict[str, Any]) -> list[str]:
+def call_details(name: str, arguments: dict[str, Any]) -> list[tuple[str, str]]:
+    """The labelled arguments of one tool call, shared by the decision trace and tool section."""
+
     if name in {"similarity", "mces"}:
-        return [f"arguments: `{format_similarity_arguments(arguments)}`"]
+        return [("Arguments", f"`{format_similarity_arguments(arguments)}`")]
+    details: list[tuple[str, str]] = []
+    if name in {"search_reaction_templates", "search_building_blocks"}:
+        details.append(("Query", f"`{arguments.get('query')}`"))
     if name == "search_reaction_templates":
-        details = [f"query: `{arguments.get('query')}`"]
         if arguments.get("reactant_smiles"):
             details.append(
-                f"reactants: {format_smiles_list(arguments.get('reactant_smiles') or [])}"
+                ("Reactants", format_smiles_list(arguments.get("reactant_smiles") or []))
             )
         if arguments.get("product_smiles"):
-            details.append(f"products: {format_smiles_list(arguments.get('product_smiles') or [])}")
-        if arguments.get("run_forward"):
-            details.append("run_forward: `true`")
-        return details
-    if name == "search_building_blocks":
-        details = [f"query: `{arguments.get('query')}`"]
-        return details
-    if name == "search_reaction_templates_by_molecule":
-        details = []
-        if arguments.get("reactant_smiles"):
-            details.append(
-                f"reactants: {format_smiles_list(arguments.get('reactant_smiles') or [])}"
-            )
-        if arguments.get("product_smiles"):
-            details.append(f"products: {format_smiles_list(arguments.get('product_smiles') or [])}")
-        if arguments.get("run_forward"):
-            details.append("run_forward: `true`")
-        return details or [f"arguments: `{compact_json(arguments)}`"]
+            details.append(("Products", format_smiles_list(arguments.get("product_smiles") or [])))
+    if name in {"simulate_reaction", "simulate_reverse_reaction"}:
+        details.append(("Template", f"`{arguments.get('reaction_id')}`"))
     if name == "simulate_reaction":
         reactants = arguments.get("reactants")
-        details = [
-            f"template: `{arguments.get('reaction_id')}`",
-            f"reactants: {format_smiles_list(reactants or [])}",
-        ]
+        details.append(("Reactants", format_smiles_list(reactants or [])))
         if reactants is not None and not isinstance(reactants, list):
-            details.append(f"reactants argument type: `{type(reactants).__name__}`")
+            details.append(("Reactants argument type", f"`{type(reactants).__name__}`"))
         if arguments.get("product_smiles"):
-            details.append(f"claimed product: `{arguments.get('product_smiles')}`")
-        return details
+            details.append(("Claimed product", f"`{arguments.get('product_smiles')}`"))
     if name == "simulate_reverse_reaction":
-        details = [
-            f"template: `{arguments.get('reaction_id')}`",
-            f"products: {format_smiles_list(normalize_smiles_items(arguments.get('product_smiles')))}",
-        ]
+        products = normalize_smiles_items(arguments.get("product_smiles"))
+        details.append(("Products", format_smiles_list(products)))
         if arguments.get("max_outcomes") is not None:
-            details.append(f"max outcomes: `{arguments.get('max_outcomes')}`")
-        if "include_near" in arguments:
-            details.append(
-                f"include near matches: `{str(bool(arguments.get('include_near'))).lower()}`"
-            )
-        return details
+            details.append(("Max outcomes", f"`{arguments.get('max_outcomes')}`"))
+    if name in {"search_reaction_templates", "search_building_blocks"}:
+        if arguments.get("limit") is not None:
+            details.append(("Limit", f"`{arguments.get('limit')}`"))
+    if name == "search_reaction_templates" and "run_forward" in arguments:
+        details.append(("Run forward", f"`{str(bool(arguments.get('run_forward'))).lower()}`"))
+    if (
+        name in {"search_building_blocks", "simulate_reverse_reaction"}
+        and "include_near" in arguments
+    ):
+        details.append(
+            ("Include near matches", f"`{str(bool(arguments.get('include_near'))).lower()}`")
+        )
     if name == "submit_pathway":
-        details = []
         steps = arguments.get("steps") if isinstance(arguments.get("steps"), list) else []
-        details.append(f"submitted steps: `{len(steps)}`")
+        details.append(("Submitted steps", f"`{len(steps)}`"))
         if arguments.get("building_block"):
-            details.append(f"direct-purchase building block: `{arguments.get('building_block')}`")
+            details.append(
+                ("Direct-purchase building block", f"`{arguments.get('building_block')}`")
+            )
         for index, step in enumerate(steps, start=1):
             if isinstance(step, dict):
                 details.append(
-                    f"step {index}: `{step.get('reaction_id')}` with "
-                    f"{format_smiles_list(step.get('reactants') or [])} -> `{step.get('product_smiles')}`"
+                    (
+                        f"Step {index}",
+                        f"`{step.get('reaction_id')}` with "
+                        f"{format_smiles_list(step.get('reactants') or [])} -> "
+                        f"`{step.get('product_smiles')}`",
+                    )
                 )
-        pathway_text = arguments.get("pathway_text")
-        if pathway_text:
-            details.append(f"pathway text: {inline_text(pathway_text)}")
-        return details
-    return [f"arguments: `{compact_json(arguments)}`"]
+        if arguments.get("pathway_text"):
+            details.append(("Pathway text", inline_text(arguments["pathway_text"])))
+    return details or [("Arguments", f"`{compact_json(arguments)}`")]
 
 
 def render_submitted_step(index: int, step: dict[str, Any]) -> list[str]:
@@ -539,84 +516,7 @@ def render_exchange(index: int, exchange: dict[str, Any], max_results: int) -> l
 
 
 def render_call(name: str, arguments: dict[str, Any]) -> list[str]:
-    if name in {"similarity", "mces"}:
-        return ["**Call:**", f"- Arguments: `{format_similarity_arguments(arguments)}`"]
-
-    if name == "search_reaction_templates":
-        lines = ["**Call:**"]
-        lines.append(f"- Query: `{arguments.get('query')}`")
-        if arguments.get("reactant_smiles"):
-            lines.append(
-                f"- Reactants: {format_smiles_list(arguments.get('reactant_smiles') or [])}"
-            )
-        if arguments.get("product_smiles"):
-            lines.append(f"- Products: {format_smiles_list(arguments.get('product_smiles') or [])}")
-        if arguments.get("limit") is not None:
-            lines.append(f"- Limit: `{arguments.get('limit')}`")
-        if "run_forward" in arguments:
-            lines.append(f"- Run forward: `{str(bool(arguments.get('run_forward'))).lower()}`")
-        return lines
-
-    if name == "search_building_blocks":
-        lines = ["**Call:**"]
-        lines.append(f"- Query: `{arguments.get('query')}`")
-        if arguments.get("limit") is not None:
-            lines.append(f"- Limit: `{arguments.get('limit')}`")
-        if "include_near" in arguments:
-            lines.append(
-                f"- Include near matches: `{str(bool(arguments.get('include_near'))).lower()}`"
-            )
-        return lines
-
-    if name == "search_reaction_templates_by_molecule":
-        lines = ["**Call:**"]
-        if arguments.get("reactant_smiles"):
-            lines.append(
-                f"- Reactants: {format_smiles_list(arguments.get('reactant_smiles') or [])}"
-            )
-        if arguments.get("product_smiles"):
-            lines.append(f"- Products: {format_smiles_list(arguments.get('product_smiles') or [])}")
-        if "run_forward" in arguments:
-            lines.append(f"- Run forward: `{str(bool(arguments.get('run_forward'))).lower()}`")
-        return lines
-
-    if name == "simulate_reaction":
-        lines = ["**Call:**"]
-        lines.append(f"- Template: `{arguments.get('reaction_id')}`")
-        lines.append(f"- Reactants: {format_smiles_list(arguments.get('reactants') or [])}")
-        if arguments.get("product_smiles"):
-            lines.append(f"- Claimed product: `{arguments.get('product_smiles')}`")
-        return lines
-
-    if name == "simulate_reverse_reaction":
-        lines = ["**Call:**"]
-        lines.append(f"- Template: `{arguments.get('reaction_id')}`")
-        lines.append(
-            f"- Products: {format_smiles_list(normalize_smiles_items(arguments.get('product_smiles')))}"
-        )
-        if arguments.get("max_outcomes") is not None:
-            lines.append(f"- Max outcomes: `{arguments.get('max_outcomes')}`")
-        if "include_near" in arguments:
-            lines.append(
-                f"- Include near matches: `{str(bool(arguments.get('include_near'))).lower()}`"
-            )
-        return lines
-
-    if name == "submit_pathway":
-        steps = arguments.get("steps") if isinstance(arguments.get("steps"), list) else []
-        lines = ["**Call:**"]
-        lines.append(f"- Submitted steps: `{len(steps)}`")
-        if arguments.get("building_block"):
-            lines.append(f"- Direct-purchase building block: `{arguments.get('building_block')}`")
-        for index, step in enumerate(steps, start=1):
-            if isinstance(step, dict):
-                lines.append(
-                    f"- Step {index}: `{step.get('reaction_id')}` with "
-                    f"{format_smiles_list(step.get('reactants') or [])} -> `{step.get('product_smiles')}`"
-                )
-        return lines
-
-    return [f"**Call:** `{compact_json(arguments)}`"]
+    return ["**Call:**", *(f"- {label}: {value}" for label, value in call_details(name, arguments))]
 
 
 def render_result(name: str, result: dict[str, Any], max_results: int) -> list[str]:
@@ -735,51 +635,12 @@ def render_result(name: str, result: dict[str, Any], max_results: int) -> list[s
     if name == "simulate_reverse_reaction":
         return render_reverse_reaction_result(result, max_results=max_results)
 
-    if name == "search_reaction_templates_by_molecule":
-        lines = [f"**Result:** {result.get('count', 0)} structural template hit(s)"]
-        for item in (result.get("results") or [])[:max_results]:
-            structure = item.get("structure_match") or {}
-            lines.append(
-                "- "
-                + f"`{item.get('reaction_id')}`"
-                + f" score `{structure.get('score')}`"
-                + f": {item.get('description', '')}"
-            )
-        issues = result.get("issues") or []
-        if issues:
-            lines.append(f"- Issues: `{json.dumps(issues, sort_keys=True)}`")
-        return lines
-
     if name == "submit_pathway":
         lines = [
             f"**Result:** accepted `{str(bool(result.get('accepted'))).lower()}`, "
             f"reaction validation `{result.get('reaction_validation', 'unknown')}`"
         ]
-        if result.get("pathway_type"):
-            lines.append(f"- Pathway type: `{result.get('pathway_type')}`")
-        direct_block = result.get("direct_building_block")
-        if isinstance(direct_block, dict):
-            direct_ref = direct_block.get("submit_reference") or result.get(
-                "direct_building_block_ref"
-            )
-            direct_smiles = direct_block.get("canonical_smiles") or direct_block.get("smiles")
-            lines.append(f"- Direct-purchase building block: `{direct_ref}` -> `{direct_smiles}`")
-        actual_final = actual_final_from_result(result)
-        if actual_final and result.get("similarity_to_target") is not None:
-            lines.append(f"- Active similarity to target: `{result['similarity_to_target']}`")
-        lines.extend(render_similarity_fields(result))
-        if actual_final:
-            label = (
-                "Final product"
-                if result.get("pathway_type") == "direct_purchase"
-                else "RDKit final product"
-            )
-            lines.append(f"- {label}: `{actual_final}`")
-        if (
-            result.get("submitted_final_smiles")
-            and result.get("submitted_final_smiles") != actual_final
-        ):
-            lines.append(f"- Claimed final-step product: `{result['submitted_final_smiles']}`")
+        lines.extend(submission_detail_lines(result))
         issues = result.get("issues") or []
         if issues:
             lines.append(f"- Issues: `{json.dumps(issues, sort_keys=True)}`")
@@ -888,14 +749,11 @@ def collect_tool_exchanges(events: list[dict[str, Any]]) -> list[dict[str, Any]]
         name = event.get("tool_name")
         payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
         if event_type == "tool_call":
-            call = payload.get("raw_tool_call") if isinstance(payload, dict) else None
-            call_id = call.get("id") if isinstance(call, dict) else None
             exchange = {
                 "name": name,
-                "arguments": payload.get("dispatch_arguments") or payload.get("arguments", {}),
-                "raw_arguments": payload.get("arguments", {}),
+                # What the tool received, after defaults and with harness-owned fields removed.
+                "arguments": payload.get("dispatch_arguments", payload.get("arguments", {})),
                 "argument_coercions": payload.get("argument_coercions") or [],
-                "call_id": call_id,
                 "result": None,
             }
             open_indexes.setdefault(str(name), []).append(len(exchanges))
@@ -905,8 +763,6 @@ def collect_tool_exchanges(events: list[dict[str, Any]]) -> list[dict[str, Any]]
             index = indexes.pop(0) if indexes else None
             if index is not None:
                 exchanges[index]["result"] = payload.get("result")
-                if isinstance(payload.get("model_result"), dict):
-                    exchanges[index]["model_result"] = payload.get("model_result")
                 if isinstance(payload.get("model_result_compaction"), dict):
                     exchanges[index]["model_result_compaction"] = payload.get(
                         "model_result_compaction"
@@ -1009,12 +865,10 @@ def infer_target(events: list[dict[str, Any]]) -> str | None:
 
 def final_run_summary(events: list[dict[str, Any]]) -> dict[str, Any] | None:
     for event in reversed(events):
-        if event.get("event_type") not in {"run_summary", "summary"}:
+        if event.get("event_type") != "run_summary":
             continue
         payload = event.get("payload")
         if isinstance(payload, dict):
-            if isinstance(payload.get("evaluation_summary"), dict):
-                return payload["evaluation_summary"]
             return payload
     return None
 
@@ -1030,7 +884,8 @@ def final_molecule_similarity(
         value = first_present(source, "similarity_to_target")
         if value is not None:
             return value
-    if final_smiles and target_smiles:
+    # Only an accepted submission is scored; a rejected one's product has no similarity.
+    if final_smiles and target_smiles and submission and submission.get("accepted") is True:
         return chem.similarity(final_smiles, target_smiles).get("similarity")
     return None
 
@@ -1073,10 +928,7 @@ def format_usage_value(field: str, value: Any) -> str:
 
 
 def first_present(source: dict[str, Any] | None, key: str) -> Any:
-    if not source:
-        return None
-    value = source.get(key)
-    return value if value is not None else None
+    return source.get(key) if source else None
 
 
 def actual_final_from_result(result: dict[str, Any] | None) -> str | None:
