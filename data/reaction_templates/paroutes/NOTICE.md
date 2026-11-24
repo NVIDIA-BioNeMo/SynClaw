@@ -10,8 +10,9 @@ https://doi.org/10.1039/D2DD00015F.
 PaRoutes 2.0 dataset, Samuel Genheden: https://doi.org/10.5281/zenodo.7341155.
 CC BY 4.0: https://creativecommons.org/licenses/by/4.0/.
 
-Forward inversion, selection, reaction names, query-bound roles, search terms,
-and caveats are local interpretations. Per-record metadata retains source hashes
-and annotation provenance. Patent-derived route
-topology does not establish a chronological laboratory synthesis or conditions,
-yield, selectivity, or experimental feasibility.
+The selection and forward inversion are local. Names, families, descriptions, search
+terms, role queries and caveats are local interpretations of the SMARTS, not ground
+truth, and are hybrid human- and LLM-generated. Per-record metadata retains source
+hashes and annotation provenance. Patent-derived route topology does not establish a
+chronological laboratory synthesis or conditions, yield, selectivity, or experimental
+feasibility.

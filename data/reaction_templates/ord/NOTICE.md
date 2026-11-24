@@ -29,7 +29,7 @@ https://doi.org/10.6084/m9.figshare.5104873.v1.
   `metadata.smarts_revision`; see [SMARTS_REPAIRS.md](../SMARTS_REPAIRS.md).
 - Added names, families, descriptions, search terms, role queries, execution
   caveats and planning notes. These are local interpretations of the SMARTS, not
-  upstream ORD labels and not ground truth.
+  upstream ORD labels and not ground truth, and are hybrid human- and LLM-generated.
 - Added a provenance record to each template:
   `{"source_id": "uspto-grants-lowe-2017", "source_record_id": "<patent>:<line>"}`,
   where `<line>` is the 1-based line of Lowe's file
