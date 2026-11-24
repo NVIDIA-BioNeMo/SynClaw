@@ -18,7 +18,6 @@ import pytest
 
 from synclaw.core import db
 from synclaw.core.reactions import ingest_reaction_templates
-from synclaw.rollout.loop import call_local_tool
 from synclaw.runners import mcp_server
 from synclaw.runners.mcp_server import (
     AsyncToolExecutor,
@@ -28,6 +27,17 @@ from synclaw.runners.mcp_server import (
 )
 from synclaw.tools.compaction import compact_tool_result
 from synclaw.tools.contracts import TOOL_ARGUMENT_DEFAULTS, TOOL_SCHEMAS
+from synclaw.tools.synthesis import SynthesisTools
+
+
+class _FakeTools:
+    """Stands in for ``SynthesisTools`` in thread mode; ``similarity`` runs ``behaviour``."""
+
+    def __init__(self, behaviour) -> None:
+        self.behaviour = behaviour
+
+    def similarity(self, smiles_a: str, smiles_b: str) -> dict:
+        return self.behaviour(smiles_a, smiles_b)
 
 
 def _block_process_worker(marker_path: str) -> None:
@@ -43,7 +53,7 @@ def test_async_tool_executor_caps_concurrency_and_releases_waiters() -> None:
     sixteen_started = threading.Event()
     release = threading.Event()
 
-    def blocking_tool(*, value: int) -> dict:
+    def blocking_tool(value: str, _other: str) -> dict:
         nonlocal active, peak_active, started
         with state_lock:
             active += 1
@@ -54,12 +64,12 @@ def test_async_tool_executor_caps_concurrency_and_releases_waiters() -> None:
         assert release.wait(timeout=5)
         with state_lock:
             active -= 1
-        return {"value": value}
+        return {"value": int(value)}
 
     async def run() -> list[dict]:
-        executor = AsyncToolExecutor(16, use_process_pool=False)
+        executor = AsyncToolExecutor(16, use_process_pool=False, tools=_FakeTools(blocking_tool))
         tasks = [
-            asyncio.create_task(executor.execute("blocking_tool", blocking_tool, value=index))
+            asyncio.create_task(executor.execute("similarity", smiles_a=str(index), smiles_b="C"))
             for index in range(20)
         ]
         assert await asyncio.to_thread(sixteen_started.wait, 5)
@@ -91,9 +101,14 @@ def test_mcp_serves_the_compacted_result_rollouts_show_the_model() -> None:
             }
         ],
     }
-    executor = AsyncToolExecutor(1, use_process_pool=False)
 
-    served = asyncio.run(executor.execute("search_building_blocks", lambda: result))
+    class SearchTools:
+        def search_building_blocks(self, *_args: object, **_kwargs: object) -> dict:
+            return result
+
+    executor = AsyncToolExecutor(1, use_process_pool=False, tools=SearchTools())
+
+    served = asyncio.run(executor.execute("search_building_blocks", query="OCC"))
 
     assert served == compact_tool_result("search_building_blocks", result)
     assert "submission_note" not in served["results"][0]
@@ -121,13 +136,60 @@ def test_mcp_tool_schemas_remain_public_and_wrappers_are_async(
     assert advertised == {
         tool["function"]["name"]: tool["function"]["parameters"] for tool in TOOL_SCHEMAS
     }
+    contracts = {tool["function"]["name"]: tool["function"]["parameters"] for tool in TOOL_SCHEMAS}
     for tool in tools.values():
-        properties = tool.parameters["properties"]
-        assert "max_concurrent_executions" not in properties
+        contract = contracts[tool.name]
         parameters = inspect.signature(tool.fn).parameters
-        for key, value in TOOL_ARGUMENT_DEFAULTS[tool.name].items():
-            if key != "steps":
-                assert parameters[key].default == value, (tool.name, key)
+        assert list(parameters) == list(contract["properties"]), tool.name
+        required = set(contract.get("required") or ())
+        for key, parameter in parameters.items():
+            # Optional arguments default to "not given", so the contract's own default applies.
+            expected = inspect.Parameter.empty if key in required else None
+            assert parameter.default is expected, (tool.name, key)
+
+
+def test_an_omitted_argument_reaches_the_tool_with_the_contract_default(
+    tmp_path: Path, bundled_db: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    database = Path(shutil.copy(bundled_db, tmp_path / "synclaw.sqlite"))
+    db.prepare_building_block_search(database)
+    seen: list[tuple] = []
+
+    def search(_self, query, limit, *, include_near, min_similarity):
+        seen.append((query, limit, include_near, min_similarity))
+        return {"query": query, "results": []}
+
+    monkeypatch.setattr(SynthesisTools, "search_building_blocks", search)
+    server = create_server(database, use_process_pool=False)
+
+    asyncio.run(server.call_tool("search_building_blocks", {"query": "CCO"}))
+
+    defaults = TOOL_ARGUMENT_DEFAULTS["search_building_blocks"]
+    assert seen == [
+        ("CCO", defaults["limit"], defaults["include_near"], defaults["min_similarity"])
+    ]
+
+
+def test_thread_and_process_workers_dispatch_through_the_same_validation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    called: list[tuple[str, str]] = []
+
+    def similarity(smiles_a: str, smiles_b: str) -> dict:
+        called.append((smiles_a, smiles_b))
+        return {}
+
+    tools = _FakeTools(similarity)
+    monkeypatch.setattr(mcp_server, "_WORKER_TOOLS", tools)
+    executor = AsyncToolExecutor(1, use_process_pool=False, tools=tools)
+    arguments = {"smiles_a": "", "smiles_b": "CCO"}
+
+    in_thread = asyncio.run(executor.execute("similarity", **arguments))
+    in_process = mcp_server._invoke_tool_process("similarity", arguments)
+
+    assert in_process["error"] == "invalid_tool_call"
+    assert in_thread == compact_tool_result("similarity", in_process)
+    assert called == []
 
 
 def test_server_refuses_a_library_without_family_metadata_at_startup(tmp_path: Path) -> None:
@@ -141,49 +203,23 @@ def test_server_refuses_a_library_without_family_metadata_at_startup(tmp_path: P
         create_server(database, use_process_pool=False)
 
 
-def test_process_worker_rejects_schema_invalid_tool_arguments(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    class GuardedTools:
-        called = False
-
-        def simulate_reaction(self, **_kwargs: object) -> dict:
-            self.called = True
-            return {"valid": True}
-
-    tools = GuardedTools()
-    monkeypatch.setattr(mcp_server, "_WORKER_TOOLS", tools)
-    arguments = {"reaction_id": "R1", "reactants": "CC"}
-
-    result = mcp_server._invoke_tool_process(
-        "simulate_reaction",
-        arguments,
-    )
-
-    assert result == call_local_tool(tools, "simulate_reaction", arguments)
-    assert result["error"] == "invalid_tool_call"
-    assert result["retryable"] is True
-    assert "must be a JSON array" in result["issues"][0]
-    assert tools.called is False
-
-
 def test_identical_inflight_calls_reattach_without_duplicate_execution() -> None:
     calls = 0
     started = threading.Event()
     release = threading.Event()
 
-    def blocking_tool(*, value: int) -> dict:
+    def blocking_tool(value: str, _other: str) -> dict:
         nonlocal calls
         calls += 1
         started.set()
         assert release.wait(timeout=5)
-        return {"value": value}
+        return {"value": int(value)}
 
     async def run() -> tuple[dict, dict]:
-        executor = AsyncToolExecutor(4, use_process_pool=False)
-        first = asyncio.create_task(executor.execute("blocking_tool", blocking_tool, value=7))
+        executor = AsyncToolExecutor(4, use_process_pool=False, tools=_FakeTools(blocking_tool))
+        first = asyncio.create_task(executor.execute("similarity", smiles_a="7", smiles_b="C"))
         assert await asyncio.to_thread(started.wait, 5)
-        second = asyncio.create_task(executor.execute("blocking_tool", blocking_tool, value=7))
+        second = asyncio.create_task(executor.execute("similarity", smiles_a="7", smiles_b="C"))
         await asyncio.sleep(0)
         release.set()
         return await first, await second
@@ -192,6 +228,85 @@ def test_identical_inflight_calls_reattach_without_duplicate_execution() -> None
 
     assert calls == 1
     assert first["value"] == second["value"] == 7
+
+
+def test_a_finished_success_is_reused_but_a_failure_is_retried() -> None:
+    outcomes = [RuntimeError("database is locked"), {"value": 1}]
+    calls = 0
+
+    def flaky(_a: str, _b: str) -> dict:
+        nonlocal calls
+        calls += 1
+        outcome = outcomes.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+    async def run() -> tuple[dict, dict]:
+        executor = AsyncToolExecutor(1, use_process_pool=False, tools=_FakeTools(flaky))
+        with pytest.raises(RuntimeError, match="database is locked"):
+            await executor.execute("similarity", smiles_a="C", smiles_b="C")
+        retried = await executor.execute("similarity", smiles_a="C", smiles_b="C")
+        reused = await executor.execute("similarity", smiles_a="C", smiles_b="C")
+        return retried, reused
+
+    retried, reused = asyncio.run(run())
+
+    assert retried == reused == {"value": 1}
+    assert calls == 2  # the failure ran again; the success was served from the first run
+
+
+def _thread_executor_that_can_restart(tmp_path: Path) -> AsyncToolExecutor:
+    # A thread-mode executor still builds (lazy) spawn pools when asked to replace one.
+    return AsyncToolExecutor(
+        1,
+        use_process_pool=False,
+        tools=_FakeTools(lambda *_: {}),
+        tool_worker_config=ToolWorkerConfig(db_path=str(tmp_path / "unused.sqlite")),
+    )
+
+
+def test_a_call_that_keeps_crashing_workers_keeps_getting_a_restart(tmp_path: Path) -> None:
+    executor = _thread_executor_that_can_restart(tmp_path)
+    try:
+        for _ in range(3):  # the same bad input, retried as the error message invites
+            error = executor._replace_broken_pool(executor._worker_pool, BrokenProcessPool("died"))
+            assert isinstance(error, ToolWorkerPoolBroken)
+        assert executor._unusable is None
+    finally:
+        executor.shutdown()
+
+
+def test_workers_that_fail_at_startup_stop_the_restarts_with_their_error(tmp_path: Path) -> None:
+    executor = _thread_executor_that_can_restart(tmp_path)
+    try:
+        executor._replace_broken_pool(executor._worker_pool, BrokenProcessPool("died"))
+        reports = executor._startup_reports
+        reports.put((123, "WatchlistUnavailable", "watchlist is missing"))
+        for _ in range(100):  # the queue's feeder thread delivers asynchronously
+            if not reports.empty():
+                break
+            time.sleep(0.01)
+
+        error = executor._replace_broken_pool(executor._worker_pool, BrokenProcessPool("again"))
+
+        assert not isinstance(error, ToolWorkerPoolBroken)
+        assert "WatchlistUnavailable: watchlist is missing" in str(error)
+        with pytest.raises(RuntimeError, match="fail at startup"):
+            asyncio.run(executor.execute("similarity", smiles_a="C", smiles_b="C"))
+    finally:
+        executor.shutdown()
+
+
+def test_a_broken_pool_during_shutdown_is_not_reported_as_retryable() -> None:
+    executor = AsyncToolExecutor(1, use_process_pool=False, tools=_FakeTools(lambda *_: {}))
+    pool = executor._worker_pool
+    executor.shutdown()
+
+    error = executor._replace_broken_pool(pool, BrokenProcessPool("stopping"))
+
+    assert not isinstance(error, ToolWorkerPoolBroken)
+    assert "shutting down" in str(error)
 
 
 @pytest.mark.skipif(not sys.platform.startswith("linux"), reason="process workers are Linux-only")
@@ -213,7 +328,6 @@ def test_process_workers_prestart_and_rebuild_a_broken_pool(
         assert len(executor.worker_pids) == 2
         result = await executor.execute(
             "similarity",
-            lambda **_: {},
             smiles_a="CCO",
             smiles_b="CCO",
         )
@@ -235,7 +349,6 @@ def test_process_workers_prestart_and_rebuild_a_broken_pool(
             try:
                 await executor.execute(
                     "similarity",
-                    lambda **_: {},
                     smiles_a="CCO",
                     smiles_b="CCN",
                 )
@@ -249,38 +362,10 @@ def test_process_workers_prestart_and_rebuild_a_broken_pool(
         for smiles_b in ("CCN", "CCC"):
             result = await executor.execute(
                 "similarity",
-                lambda **_: {},
                 smiles_a="CCO",
                 smiles_b=smiles_b,
             )
             assert 0.0 <= result["similarity"] < 1.0
-
-    try:
-        asyncio.run(run())
-    finally:
-        executor.shutdown()
-
-
-@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="fork workers are Linux-only")
-def test_process_worker_tool_exception_does_not_break_pool(tmp_path: Path) -> None:
-    database_path = tmp_path / "synclaw.sqlite"
-    db.init_db(database_path)
-    db.prepare_building_block_search(database_path)
-    executor = AsyncToolExecutor(
-        2,
-        tool_worker_config=ToolWorkerConfig(db_path=str(database_path)),
-    )
-
-    async def run() -> None:
-        with pytest.raises(ValueError, match="Unknown BioNeMo-SynClaw tool"):
-            await executor.execute("not-a-public-tool", lambda **_: {})
-        result = await executor.execute(
-            "similarity",
-            lambda **_: {},
-            smiles_a="CCO",
-            smiles_b="CCO",
-        )
-        assert result["similarity"] == 1.0
 
     try:
         asyncio.run(run())
