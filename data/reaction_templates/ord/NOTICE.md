@@ -37,6 +37,3 @@ https://doi.org/10.6084/m9.figshare.5104873.v1.
   before the seven repairs.
 
 These changes are not endorsed by ORD or the original authors.
-
-The project-authored templates are in [../nvidia/](../nvidia/NOTICE.md) and are not
-covered by this license.
