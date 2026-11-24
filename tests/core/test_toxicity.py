@@ -78,6 +78,24 @@ def test_new_screen_loads_the_current_watchlist(tmp_path: Path) -> None:
         toxicity.ToxicityScreen(config)
 
 
+def test_screens_built_from_an_unchanged_watchlist_parse_it_once(
+    tmp_path: Path, monkeypatch
+) -> None:
+    path = tmp_path / "unchanged.txt"
+    path.write_text("CCOCC\nCCNCC\n")
+    config = toxicity.ToxicityConfig(mode="on", watchlist=path)
+    parsed = []
+    real = toxicity._fingerprint
+    monkeypatch.setattr(
+        toxicity, "_fingerprint", lambda smiles: parsed.append(smiles) or real(smiles)
+    )
+
+    toxicity.ToxicityScreen(config)
+    toxicity.ToxicityScreen(config)
+
+    assert parsed == ["CCOCC", "CCNCC"]
+
+
 def test_screen_is_opt_in_and_requires_a_watchlist_only_when_enabled(monkeypatch) -> None:
     monkeypatch.delenv(toxicity.ENV_MODE)
     monkeypatch.setenv(toxicity.ENV_WATCHLIST, "/nonexistent/watchlist.txt")

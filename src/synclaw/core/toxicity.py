@@ -242,11 +242,19 @@ def _load_fingerprints(path: Path) -> tuple[DataStructs.ExplicitBitVect, ...]:
             f"Cannot read toxicity watchlist {path}: {exc}. "
             "Use --toxicity-watchlist PATH or fetch the default with `synclaw download-public-data`."
         ) from exc
-    candidates = (_fingerprint(line) for line in map(str.strip, lines) if line)
-    fingerprints = tuple(fp for fp in candidates if fp is not None)
+    fingerprints = _fingerprint_lines(tuple(lines))
     if not fingerprints:
         raise WatchlistUnavailable(f"Toxicity watchlist {path} holds no valid SMILES")
     return fingerprints
+
+
+@lru_cache(maxsize=4)
+def _fingerprint_lines(lines: tuple[str, ...]) -> tuple[DataStructs.ExplicitBitVect, ...]:
+    """Fingerprint a watchlist's lines once per distinct content, so each worker and screen
+    built from an unchanged file skips the parse while an edited file is always re-read."""
+
+    candidates = (_fingerprint(line) for line in map(str.strip, lines) if line)
+    return tuple(fp for fp in candidates if fp is not None)
 
 
 def _best_match(
