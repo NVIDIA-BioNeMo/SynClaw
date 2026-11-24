@@ -12,5 +12,5 @@ Apache-2.0; the license terms are the Apache-2.0 terms in the project
 [LICENSE](../../../LICENSE). See also [THIRD_PARTY_NOTICES.md](../../../THIRD_PARTY_NOTICES.md).
 
 Names, query-bound roles, search terms, family descriptions, and caveats are
-locally authored interpretations and have not been reviewed by an expert chemist.
+locally authored interpretations, not ground truth.
 Per-record metadata records source attribution.
