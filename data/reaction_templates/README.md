@@ -45,6 +45,11 @@ sources, e.g. `synclaw db remove-reactions paroutes nvidia --db <path>`.
 | `synformer paroutes ord` | 493 |
 | `synformer paroutes ord nvidia` | 501 |
 
+Template annotations (names, families, descriptions, search terms, role queries and
+caveats) were written by a mix of human authors and an LLM. They have not been reviewed
+by an expert chemist, except that an expert chemist reviewed each of the 18 repaired
+SMARTS below.
+
 SMARTS are unchanged from their sources except 18 repaired rules (10 SynFormer, 1 PaRoutes, 7 ORD), listed in
 [SMARTS_REPAIRS.md](SMARTS_REPAIRS.md) with their imported strings kept in
 `metadata.smarts_revision`. Prompt hints are generated from the imported records.
