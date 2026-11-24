@@ -158,6 +158,7 @@ def test_a_malformed_call_returns_the_loops_error_result_flagged_as_an_error(
         ("similarity", {"smiles_a": "CCO"}),
         ("search_building_blocks", {"query": "CCO", "limit": "ten"}),
         ("search_building_blocks", {"query": "not-a-smiles"}),
+        ("submit_pathway", {"pathway_text": "x", "steps": "nope"}),
     ]:
         result = asyncio.run(server.call_tool(name, arguments))
         assert result.is_error, (name, arguments)
