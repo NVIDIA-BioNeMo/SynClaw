@@ -9,6 +9,7 @@ import argparse
 import asyncio
 import json
 import re
+import sqlite3
 import time
 import urllib.error
 import urllib.request
@@ -442,7 +443,7 @@ def run_model_from_args(args: argparse.Namespace) -> dict[str, Any]:
         if checkpoint_path is not None:
             write_checkpoint(checkpoint_path, checkpoint_payload(checkpoint_next_turn_index))
 
-    def finish_run(submission: dict[str, Any] | None) -> dict[str, Any]:
+    def finish_run(submission: dict[str, Any] | None, end_reason: str) -> dict[str, Any]:
         runtime_seconds = time.monotonic() - state.session_started_monotonic
         append_run_summary_event(
             trace_events,
@@ -454,6 +455,7 @@ def run_model_from_args(args: argparse.Namespace) -> dict[str, Any]:
             runtime_seconds=runtime_seconds,
             invalid_submissions=state.policy_state.invalid_submissions,
             low_similarity_submissions=state.policy_state.low_similarity_submissions,
+            end_reason=end_reason,
         )
         trace.flush()
         delete_checkpoint(checkpoint_path)
@@ -467,6 +469,7 @@ def run_model_from_args(args: argparse.Namespace) -> dict[str, Any]:
             invalid_submissions=state.policy_state.invalid_submissions,
             low_similarity_submissions=state.policy_state.low_similarity_submissions,
             runtime_seconds=runtime_seconds,
+            end_reason=end_reason,
         )
 
     if not trace_events:
@@ -513,7 +516,7 @@ def run_model_from_args(args: argparse.Namespace) -> dict[str, Any]:
                 event_callback=lambda _event, turn: persist_state(turn),
             )
         )
-        return finish_run(result.submission)
+        return finish_run(result.submission, result.reason)
     except RuntimeError as exc:
         runtime_seconds = time.monotonic() - state.session_started_monotonic
         trace_events.append(
@@ -530,8 +533,17 @@ def run_model_from_args(args: argparse.Namespace) -> dict[str, Any]:
             },
         )
         persist_state(checkpoint_next_turn_index)
+        # A failed run still gets its row (``run_success`` false, with the error), so a batch
+        # shows it instead of silently shrinking; a retry to the same path replaces it.
+        note = ""
+        try:
+            write_summary_row(args, policy_config, task, trace_path, trace_events)
+        except (OSError, ValueError, sqlite3.Error) as row_error:
+            note = f" The summary row could not be written: {row_error}."
         if checkpoint_path is not None:
-            raise RuntimeError(f"{exc} Checkpoint saved to {checkpoint_path}") from exc
+            raise RuntimeError(f"{exc}{note} Checkpoint saved to {checkpoint_path}") from exc
+        if note:
+            raise RuntimeError(f"{exc}{note}") from exc
         raise
 
 
@@ -1637,10 +1649,12 @@ def _run_summary_fields(
     invalid_submissions: int,
     low_similarity_submissions: int,
     runtime_seconds: float,
+    end_reason: str,
 ) -> dict[str, Any]:
     """The fields the trace's ``run_summary`` event and the returned summary share."""
 
     return {
+        "end_reason": end_reason,
         "model": args.model,
         "provider": args.provider,
         "api_mode": args.api_mode,
@@ -1669,6 +1683,7 @@ def summarize_run(
     invalid_submissions: int,
     low_similarity_submissions: int,
     runtime_seconds: float,
+    end_reason: str,
 ) -> dict[str, Any]:
     """Build a run's summary; with ``--summary-output`` also write the evaluated summary CSV."""
 
@@ -1682,6 +1697,7 @@ def summarize_run(
             invalid_submissions=invalid_submissions,
             low_similarity_submissions=low_similarity_submissions,
             runtime_seconds=runtime_seconds,
+            end_reason=end_reason,
         ),
         "target_smiles": task["target_smiles"],
         "trace": str(trace_path),
@@ -1695,26 +1711,41 @@ def summarize_run(
         ),
         **hidden_target_summary_fields(trace_events),
     }
-    summary_output = getattr(args, "summary_output", None)
-    if summary_output:
-        from synclaw.evaluation.evaluate import evaluate_trace_file, write_summary_csv
-
-        evaluated = evaluate_trace_file(
-            trace_path,
-            db_path=args.db,
-            model=args.model,
-            prompt_version=getattr(args, "prompt_version", None),
-            target_smiles=task["target_smiles"],
-            tool_config={
-                "trace_file": str(trace_path),
-                "stop_condition": config.stop_condition,
-                "toxicity_screen": summary["toxicity_screen"],
-            },
-        )
-        write_summary_csv([evaluated], summary_output)
-        summary["summary_output"] = summary_output
+    evaluated = write_summary_row(args, config, task, trace_path, trace_events)
+    if evaluated is not None:
+        summary["summary_output"] = args.summary_output
         summary["evaluation_summary"] = evaluated
     return summary
+
+
+def write_summary_row(
+    args: argparse.Namespace,
+    config: policy.RolloutPolicyConfig,
+    task: dict[str, Any],
+    trace_path: Path,
+    trace_events: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    """With ``--summary-output``, score the trace and write its one-row results CSV."""
+
+    summary_output = getattr(args, "summary_output", None)
+    if not summary_output:
+        return None
+    from synclaw.evaluation.evaluate import evaluate_trace_file, write_summary_csv
+
+    evaluated = evaluate_trace_file(
+        trace_path,
+        db_path=args.db,
+        model=args.model,
+        prompt_version=getattr(args, "prompt_version", None),
+        target_smiles=task["target_smiles"],
+        tool_config={
+            "trace_file": str(trace_path),
+            "stop_condition": config.stop_condition,
+            "toxicity_screen": toxicity_summary(args, trace_events)["toxicity_screen"],
+        },
+    )
+    write_summary_csv([evaluated], summary_output)
+    return evaluated
 
 
 def toxicity_summary(args: argparse.Namespace, events: list[dict[str, Any]]) -> dict[str, Any]:
@@ -1733,6 +1764,7 @@ def append_run_summary_event(
     runtime_seconds: float,
     invalid_submissions: int,
     low_similarity_submissions: int,
+    end_reason: str,
 ) -> None:
     """Append the closing ``run_summary`` event to the trace."""
 
@@ -1750,6 +1782,7 @@ def append_run_summary_event(
                     invalid_submissions=invalid_submissions,
                     low_similarity_submissions=low_similarity_submissions,
                     runtime_seconds=runtime_seconds,
+                    end_reason=end_reason,
                 ),
                 "started_at_unix": session_started_at,
                 "completed_at_unix": session_started_at + runtime_seconds,

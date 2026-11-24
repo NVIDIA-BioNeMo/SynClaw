@@ -95,6 +95,7 @@ def render_trace(
     lines.append(f"- Trace: `{trace_path}`")
     if model:
         lines.append(f"- Model: `{model}`")
+    lines.extend(run_outcome_lines(events))
     if target:
         lines.append(f"- Target: `{target}`")
     if final_smiles:
@@ -110,6 +111,9 @@ def render_trace(
     if similarity is not None:
         lines.append(f"- Active final-molecule similarity to target: `{similarity}`")
     lines.extend(render_similarity_fields(submission, run_summary=run_summary))
+    end_reason = first_present(run_summary, "end_reason")
+    if end_reason:
+        lines.append(f"- Run ended: `{end_reason}`")
     runtime_seconds = first_present(run_summary, "runtime_seconds")
     if runtime_seconds is not None:
         lines.append(f"- Runtime: `{format_runtime(runtime_seconds)}`")
@@ -882,6 +886,42 @@ def final_run_summary(events: list[dict[str, Any]]) -> dict[str, Any] | None:
         if isinstance(payload, dict):
             return payload
     return None
+
+
+def run_outcome_lines(events: list[dict[str, Any]]) -> list[str]:
+    """Summary bullets for a run that failed, was cut short, or had to recover.
+
+    A run that ended on an error has no closing summary, so without these lines its report
+    reads like a normal run.
+    """
+
+    lines: list[str] = []
+    recoveries = 0
+    for index, event in enumerate(events):
+        payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
+        event_type = event.get("event_type")
+        # Only the run's last event is its failure; a resumed run has events after the error.
+        if event_type == "run_error" and index == len(events) - 1:
+            detail = f"`{payload.get('error_type')}`: {payload.get('error_message')}"
+            when = []
+            if payload.get("runtime_seconds") is not None:
+                when.append(f"after {format_runtime(payload['runtime_seconds'])}")
+            if isinstance(payload.get("next_turn_index"), int):
+                when.append(f"before assistant turn {payload['next_turn_index'] + 1}")
+            suffix = f" ({', '.join(when)})" if when else ""
+            lines.append(f"- **Run failed:** {detail}{suffix}")
+            if payload.get("checkpoint"):
+                lines.append(f"- Resume from checkpoint: `{payload['checkpoint']}`")
+        elif event_type == "controlled_termination":
+            lines.append(
+                f"- Run ended early by the harness: `{payload.get('kind')}`"
+                f" at assistant turn {payload.get('assistant_turn')}: {payload.get('message')}"
+            )
+        elif event_type == "output_limit_recovery":
+            recoveries += 1
+    if recoveries:
+        lines.append(f"- Output-limit recoveries: `{recoveries}`")
+    return lines
 
 
 def final_molecule_similarity(

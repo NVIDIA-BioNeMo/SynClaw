@@ -145,6 +145,32 @@ def test_summary_fields_report_the_setting_and_hidden_ids() -> None:
     }
 
 
+def _hosted_args(tmp_path: Path, db_path: Path, flags: list[str]) -> argparse.Namespace:
+    taskset = tmp_path / "tasks.jsonl"
+    taskset.write_text(
+        json.dumps(
+            {
+                "task_id": "fixture",
+                "target_smiles": TARGET,
+                "system_prompt": "Plan syntheses.",
+                "question": "Make the target.",
+                "prompt_fingerprint": PROMPT_FINGERPRINT,
+            }
+        )
+        + "\n"
+    )
+    parser = argparse.ArgumentParser()
+    model_runner.add_arguments(parser)
+    return parser.parse_args(
+        [
+            "--model", "fixture", "--api-mode", "chat", "--taskset", str(taskset),
+            "--db", str(db_path), "--trace", str(tmp_path / "trace.jsonl"),
+            "--summary-output", str(tmp_path / "summary.csv"), "--max-turns", "1",
+            *flags,
+        ]
+    )  # fmt: skip
+
+
 @pytest.mark.parametrize(
     ("flags", "hidden_ids", "hide_target"),
     [
@@ -166,40 +192,7 @@ def test_hosted_run_records_the_hidden_target(
     hidden_ids: frozenset[int],
     hide_target: bool,
 ) -> None:
-    taskset = tmp_path / "tasks.jsonl"
-    taskset.write_text(
-        json.dumps(
-            {
-                "task_id": "fixture",
-                "target_smiles": TARGET,
-                "system_prompt": "Plan syntheses.",
-                "question": "Make the target.",
-                "prompt_fingerprint": PROMPT_FINGERPRINT,
-            }
-        )
-        + "\n"
-    )
-    parser = argparse.ArgumentParser()
-    model_runner.add_arguments(parser)
-    args = parser.parse_args(
-        [
-            "--model",
-            "fixture",
-            "--api-mode",
-            "chat",
-            "--taskset",
-            str(taskset),
-            "--db",
-            str(db_path),
-            "--trace",
-            str(tmp_path / "trace.jsonl"),
-            "--summary-output",
-            str(tmp_path / "summary.csv"),
-            "--max-turns",
-            "1",
-            *flags,
-        ]
-    )
+    args = _hosted_args(tmp_path, db_path, flags)
     monkeypatch.setattr(model_runner, "resolve_api_key", lambda *args, **kwargs: "fixture-key")
     monkeypatch.setattr(
         model_runner.db, "validate_model_run_database", lambda *args, **kwargs: None
@@ -242,6 +235,8 @@ def test_hosted_run_records_the_hidden_target(
         hide_target=hide_target,
         similarity_threshold=args.hide_building_block_similarity,
     )
+    run_summary = next(e for e in events if e["event_type"] == "run_summary")
+    assert summary["end_reason"] and summary["end_reason"] == run_summary["payload"]["end_reason"]
     assert summary["target_hidden_from_stock"] is hide_target
     assert summary["hidden_building_block_ids"] == json.dumps(sorted(hidden_ids))
     with Path(args.summary_output).open() as handle:
@@ -383,3 +378,39 @@ def test_hidden_ids_cover_open_stereo_isomers_and_unmerged_tautomers(tmp_path: P
     assert _tools(path, "O=C1CCC(F)C(Cl)C1").hidden_building_block_ids == {8}
     # A wildcard target has no InChI, so only an entry with its exact SMILES is hidden.
     assert _tools(path, "*CC").hidden_building_block_ids == frozenset()
+
+
+def test_a_failed_hosted_run_writes_a_failed_row_that_a_retry_replaces(
+    tmp_path: Path, db_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    args = _hosted_args(tmp_path, db_path, [])
+    monkeypatch.setattr(model_runner, "resolve_api_key", lambda *args, **kwargs: "fixture-key")
+    monkeypatch.setattr(
+        model_runner.db, "validate_model_run_database", lambda *args, **kwargs: None
+    )
+
+    def timed_out(**kwargs):
+        raise RuntimeError("Chat Completions API request timed out or failed: read timed out")
+
+    monkeypatch.setattr(model_runner, "chat_completion", timed_out)
+    with pytest.raises(RuntimeError, match="timed out"):
+        model_runner.run_model_from_args(args)
+    with (tmp_path / "summary.csv").open() as handle:
+        row = next(csv.DictReader(handle))
+    assert row["run_success"] == "False"
+    assert "read timed out" in row["run_error"]
+
+    monkeypatch.setattr(
+        model_runner,
+        "chat_completion",
+        lambda **kwargs: {
+            "choices": [
+                {"message": {"role": "assistant", "content": "Done."}, "finish_reason": "stop"}
+            ]
+        },
+    )
+    model_runner.run_model_from_args(args)
+    with (tmp_path / "summary.csv").open() as handle:
+        rows = list(csv.DictReader(handle))
+    assert len(rows) == 1
+    assert rows[0]["run_error"] == ""

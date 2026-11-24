@@ -469,6 +469,54 @@ class ImportAndEvalTests(unittest.TestCase):
             self.assertFalse(summary["meets_similarity_floor"])
             self.assertTrue(summary["run_success"])
 
+    def test_a_run_that_ended_on_an_error_is_not_a_success(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            trace = tmp_path / "trace.jsonl"
+            events = [
+                {
+                    "event_type": "message",
+                    "role": "user",
+                    "target_smiles": "CC=O",
+                    "payload": {"text": "Plan CC=O"},
+                },
+                {
+                    "event_type": "selected_submission",
+                    "tool_name": "submit_pathway",
+                    "payload": {
+                        "reason": "best_accepted_submission",
+                        "result": {
+                            "accepted": True,
+                            "reaction_validation": "valid",
+                            "actual_final_smiles": "CCO",
+                            "steps": [{"valid": True, "actual_product_smiles": "CCO"}],
+                        },
+                    },
+                },
+                {
+                    "event_type": "run_error",
+                    "payload": {"error_type": "RuntimeError", "error_message": "request timed out"},
+                },
+            ]
+            trace.write_text(
+                "\n".join(json.dumps(event) for event in events) + "\n", encoding="utf-8"
+            )
+
+            summary = evaluate_trace_file(trace, tmp_path / "eval.sqlite", model="mock-model")
+
+            self.assertTrue(summary["accepted"])
+            self.assertFalse(summary["run_success"])
+            self.assertEqual(summary["run_error"], "request timed out")
+
+            # Resumed past its error, the run has later events and succeeded.
+            events.append({"event_type": "run_summary", "payload": {}})
+            trace.write_text(
+                "\n".join(json.dumps(event) for event in events) + "\n", encoding="utf-8"
+            )
+            resumed = evaluate_trace_file(trace, tmp_path / "eval.sqlite", model="mock-model")
+            self.assertTrue(resumed["run_success"])
+            self.assertIsNone(resumed["run_error"])
+
     def test_evaluate_trace_reports_token_usage(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -600,6 +648,24 @@ class ImportAndEvalTests(unittest.TestCase):
             self.assertEqual(lines[0], "source_summary_file,model,accepted,similarity_to_target")
             self.assertIn("model-a,True,", lines[1])
             self.assertIn("model-b,,0.9", lines[2])
+
+    def test_combine_summary_csvs_reports_failed_and_repeated_runs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            header = "model,prompt_version,target_smiles,run_error\n"
+            (tmp_path / "a_summary.csv").write_text(
+                header + "m,p,CCO,request timed out\n", encoding="utf-8"
+            )
+            (tmp_path / "b_summary.csv").write_text(header + "m,p,CCO,\n", encoding="utf-8")
+            (tmp_path / "c_summary.csv").write_text(header + "m,p,CCN,\n", encoding="utf-8")
+
+            result = combine_summary_csvs([str(tmp_path / "*_summary.csv")], tmp_path / "all.csv")
+
+            self.assertEqual(result["failed_runs"], 1)
+            self.assertEqual(
+                result["duplicate_runs"],
+                [{"model": "m", "prompt_version": "p", "target_smiles": "CCO", "rows": 2}],
+            )
 
     def test_model_runner_rejects_empty_model_run_database(self):
         with tempfile.TemporaryDirectory() as tmp:

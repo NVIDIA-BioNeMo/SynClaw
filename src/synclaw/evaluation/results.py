@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import csv
 import glob
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -44,7 +45,30 @@ def combine_summary_csvs(inputs: list[str | Path], output: str | Path) -> dict[s
         "output": str(output_path),
         "rows": len(rows),
         "columns": fieldnames,
+        "failed_runs": sum(1 for row in rows if row.get("run_error")),
+        "duplicate_runs": _duplicate_runs(rows),
     }
+
+
+def _duplicate_runs(rows: list[dict[str, str]]) -> list[dict[str, Any]]:
+    """Runs that appear in more than one row, such as a failed run and its retry."""
+
+    counts = Counter(
+        (
+            row.get("model", ""),
+            row.get("prompt_version", ""),
+            row.get("target_smiles", ""),
+            row.get("target_hidden_from_stock", ""),
+            row.get("hidden_building_block_ids", ""),
+        )
+        for row in rows
+        if row.get("model") and row.get("target_smiles")
+    )
+    return [
+        {"model": model, "prompt_version": prompt_version, "target_smiles": target, "rows": count}
+        for (model, prompt_version, target, _hidden, _ids), count in counts.items()
+        if count > 1
+    ]
 
 
 def _expand_inputs(inputs: list[str | Path], output_path: Path) -> list[Path]:
