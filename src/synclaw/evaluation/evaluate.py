@@ -100,14 +100,11 @@ def evaluate_trace_file(
         similarity_floor,
         identical_to_target=identical_to_target,
     )
-    run_error = next(
-        (
-            (event.get("payload") or {}).get("error_message")
-            for event in events
-            if event.get("event_type") == "run_error"
-        ),
-        None,
-    )
+    # Only a run that ended on its error failed; one resumed past it has later events.
+    run_error = None
+    if events[-1].get("event_type") == "run_error":
+        payload = events[-1].get("payload") or {}
+        run_error = payload.get("error_message") or payload.get("error_type") or "unknown error"
     # A run that died after an accepted partial answer keeps that answer's columns, but did
     # not succeed.
     run_success = accepted is True and run_error is None

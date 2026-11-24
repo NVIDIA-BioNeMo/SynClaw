@@ -897,16 +897,17 @@ def run_outcome_lines(events: list[dict[str, Any]]) -> list[str]:
 
     lines: list[str] = []
     recoveries = 0
-    for event in events:
+    for index, event in enumerate(events):
         payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
         event_type = event.get("event_type")
-        if event_type == "run_error":
+        # Only the run's last event is its failure; a resumed run has events after the error.
+        if event_type == "run_error" and index == len(events) - 1:
             detail = f"`{payload.get('error_type')}`: {payload.get('error_message')}"
             when = []
             if payload.get("runtime_seconds") is not None:
                 when.append(f"after {format_runtime(payload['runtime_seconds'])}")
-            if payload.get("next_turn_index") is not None:
-                when.append(f"before assistant turn {int(payload['next_turn_index']) + 1}")
+            if isinstance(payload.get("next_turn_index"), int):
+                when.append(f"before assistant turn {payload['next_turn_index'] + 1}")
             suffix = f" ({', '.join(when)})" if when else ""
             lines.append(f"- **Run failed:** {detail}{suffix}")
             if payload.get("checkpoint"):

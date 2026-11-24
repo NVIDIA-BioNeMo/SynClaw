@@ -508,6 +508,15 @@ class ImportAndEvalTests(unittest.TestCase):
             self.assertFalse(summary["run_success"])
             self.assertEqual(summary["run_error"], "request timed out")
 
+            # Resumed past its error, the run has later events and succeeded.
+            events.append({"event_type": "run_summary", "payload": {}})
+            trace.write_text(
+                "\n".join(json.dumps(event) for event in events) + "\n", encoding="utf-8"
+            )
+            resumed = evaluate_trace_file(trace, tmp_path / "eval.sqlite", model="mock-model")
+            self.assertTrue(resumed["run_success"])
+            self.assertIsNone(resumed["run_error"])
+
     def test_evaluate_trace_reports_token_usage(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)

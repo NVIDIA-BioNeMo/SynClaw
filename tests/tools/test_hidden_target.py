@@ -145,6 +145,32 @@ def test_summary_fields_report_the_setting_and_hidden_ids() -> None:
     }
 
 
+def _hosted_args(tmp_path: Path, db_path: Path, flags: list[str]) -> argparse.Namespace:
+    taskset = tmp_path / "tasks.jsonl"
+    taskset.write_text(
+        json.dumps(
+            {
+                "task_id": "fixture",
+                "target_smiles": TARGET,
+                "system_prompt": "Plan syntheses.",
+                "question": "Make the target.",
+                "prompt_fingerprint": PROMPT_FINGERPRINT,
+            }
+        )
+        + "\n"
+    )
+    parser = argparse.ArgumentParser()
+    model_runner.add_arguments(parser)
+    return parser.parse_args(
+        [
+            "--model", "fixture", "--api-mode", "chat", "--taskset", str(taskset),
+            "--db", str(db_path), "--trace", str(tmp_path / "trace.jsonl"),
+            "--summary-output", str(tmp_path / "summary.csv"), "--max-turns", "1",
+            *flags,
+        ]
+    )  # fmt: skip
+
+
 @pytest.mark.parametrize(
     ("flags", "hidden_ids", "hide_target"),
     [
@@ -166,40 +192,7 @@ def test_hosted_run_records_the_hidden_target(
     hidden_ids: frozenset[int],
     hide_target: bool,
 ) -> None:
-    taskset = tmp_path / "tasks.jsonl"
-    taskset.write_text(
-        json.dumps(
-            {
-                "task_id": "fixture",
-                "target_smiles": TARGET,
-                "system_prompt": "Plan syntheses.",
-                "question": "Make the target.",
-                "prompt_fingerprint": PROMPT_FINGERPRINT,
-            }
-        )
-        + "\n"
-    )
-    parser = argparse.ArgumentParser()
-    model_runner.add_arguments(parser)
-    args = parser.parse_args(
-        [
-            "--model",
-            "fixture",
-            "--api-mode",
-            "chat",
-            "--taskset",
-            str(taskset),
-            "--db",
-            str(db_path),
-            "--trace",
-            str(tmp_path / "trace.jsonl"),
-            "--summary-output",
-            str(tmp_path / "summary.csv"),
-            "--max-turns",
-            "1",
-            *flags,
-        ]
-    )
+    args = _hosted_args(tmp_path, db_path, flags)
     monkeypatch.setattr(model_runner, "resolve_api_key", lambda *args, **kwargs: "fixture-key")
     monkeypatch.setattr(
         model_runner.db, "validate_model_run_database", lambda *args, **kwargs: None
@@ -390,28 +383,7 @@ def test_hidden_ids_cover_open_stereo_isomers_and_unmerged_tautomers(tmp_path: P
 def test_a_failed_hosted_run_writes_a_failed_row_that_a_retry_replaces(
     tmp_path: Path, db_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    taskset = tmp_path / "tasks.jsonl"
-    taskset.write_text(
-        json.dumps(
-            {
-                "task_id": "fixture",
-                "target_smiles": TARGET,
-                "system_prompt": "Plan syntheses.",
-                "question": "Make the target.",
-                "prompt_fingerprint": PROMPT_FINGERPRINT,
-            }
-        )
-        + "\n"
-    )
-    parser = argparse.ArgumentParser()
-    model_runner.add_arguments(parser)
-    args = parser.parse_args(
-        [
-            "--model", "fixture", "--api-mode", "chat", "--taskset", str(taskset),
-            "--db", str(db_path), "--trace", str(tmp_path / "trace.jsonl"),
-            "--summary-output", str(tmp_path / "summary.csv"), "--max-turns", "1",
-        ]
-    )  # fmt: skip
+    args = _hosted_args(tmp_path, db_path, [])
     monkeypatch.setattr(model_runner, "resolve_api_key", lambda *args, **kwargs: "fixture-key")
     monkeypatch.setattr(
         model_runner.db, "validate_model_run_database", lambda *args, **kwargs: None

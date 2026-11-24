@@ -9,6 +9,7 @@ import argparse
 import asyncio
 import json
 import re
+import sqlite3
 import time
 import urllib.error
 import urllib.request
@@ -534,9 +535,15 @@ def run_model_from_args(args: argparse.Namespace) -> dict[str, Any]:
         persist_state(checkpoint_next_turn_index)
         # A failed run still gets its row (``run_success`` false, with the error), so a batch
         # shows it instead of silently shrinking; a retry to the same path replaces it.
-        write_summary_row(args, policy_config, task, trace_path, trace_events)
+        note = ""
+        try:
+            write_summary_row(args, policy_config, task, trace_path, trace_events)
+        except (OSError, ValueError, sqlite3.Error) as row_error:
+            note = f" The summary row could not be written: {row_error}."
         if checkpoint_path is not None:
-            raise RuntimeError(f"{exc} Checkpoint saved to {checkpoint_path}") from exc
+            raise RuntimeError(f"{exc}{note} Checkpoint saved to {checkpoint_path}") from exc
+        if note:
+            raise RuntimeError(f"{exc}{note}") from exc
         raise
 
 

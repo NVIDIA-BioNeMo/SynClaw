@@ -696,26 +696,28 @@ def test_unparsable_call_shows_sent_arguments_and_not_run():
 
 def test_a_failed_or_cut_short_run_says_so_in_the_summary():
     renderer = _load_renderer()
-    failed = renderer.render_trace(
-        [
-            {
-                "event_type": "run_error",
-                "payload": {
-                    "error_type": "RuntimeError",
-                    "error_message": "Chat Completions API request timed out or failed",
-                    "runtime_seconds": 768.4,
-                    "next_turn_index": 19,
-                    "checkpoint": "run.checkpoint.json",
-                },
-            }
-        ],
-        trace_path=Path("trace.jsonl"),
-    )
+    error = {
+        "event_type": "run_error",
+        "payload": {
+            "error_type": "RuntimeError",
+            "error_message": "Chat Completions API request timed out or failed",
+            "runtime_seconds": 768.4,
+            "next_turn_index": 19,
+            "checkpoint": "run.checkpoint.json",
+        },
+    }
+    failed = renderer.render_trace([error], trace_path=Path("trace.jsonl"))
     assert (
         "- **Run failed:** `RuntimeError`: Chat Completions API request timed out or failed "
         "(after 12m 48.4s, before assistant turn 20)"
     ) in failed
     assert "- Resume from checkpoint: `run.checkpoint.json`" in failed
+
+    # A run resumed past its error has later events and did not fail.
+    resumed = [error, {"event_type": "run_summary", "payload": {"end_reason": "exact_match"}}]
+    markdown = renderer.render_trace(resumed, trace_path=Path("trace.jsonl"))
+    assert "Run failed" not in markdown
+    assert "- Run ended: `exact_match`" in markdown
 
     cut_short = renderer.render_trace(
         [
@@ -733,19 +735,3 @@ def test_a_failed_or_cut_short_run_says_so_in_the_summary():
     )
     assert "- Run ended early by the harness: `max_tokens` at assistant turn 7:" in cut_short
     assert "- Output-limit recoveries: `1`" in cut_short
-    assert "Run failed" not in renderer.render_trace([], trace_path=Path("trace.jsonl"))
-
-
-def test_summary_says_why_the_run_ended():
-    renderer = _load_renderer()
-    markdown = renderer.render_trace(
-        [
-            {
-                "event_type": "run_summary",
-                "payload": {"end_reason": "tool_limit_best_accepted_submission"},
-            }
-        ],
-        trace_path=Path("trace.jsonl"),
-    )
-    assert "- Run ended: `tool_limit_best_accepted_submission`" in markdown
-    assert "Run ended" not in renderer.render_trace([], trace_path=Path("trace.jsonl"))

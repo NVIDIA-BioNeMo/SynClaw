@@ -54,12 +54,19 @@ def _duplicate_runs(rows: list[dict[str, str]]) -> list[dict[str, Any]]:
     """Runs that appear in more than one row, such as a failed run and its retry."""
 
     counts = Counter(
-        (row.get("model", ""), row.get("prompt_version", ""), row.get("target_smiles", ""))
+        (
+            row.get("model", ""),
+            row.get("prompt_version", ""),
+            row.get("target_smiles", ""),
+            row.get("target_hidden_from_stock", ""),
+            row.get("hidden_building_block_ids", ""),
+        )
         for row in rows
+        if row.get("model") and row.get("target_smiles")
     )
     return [
         {"model": model, "prompt_version": prompt_version, "target_smiles": target, "rows": count}
-        for (model, prompt_version, target), count in counts.items()
+        for (model, prompt_version, target, _hidden, _ids), count in counts.items()
         if count > 1
     ]
 
