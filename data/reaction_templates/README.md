@@ -62,11 +62,14 @@ grants file.
 
 Attribution and licenses are in [synformer/NOTICE.md](synformer/NOTICE.md),
 [paroutes/NOTICE.md](paroutes/NOTICE.md), [ord/NOTICE.md](ord/NOTICE.md), and
-[nvidia/NOTICE.md](nvidia/NOTICE.md). SynFormer templates, NVIDIA-authored templates,
-and locally authored annotations outside `ord/` are covered by the Apache-2.0
-text in the project [LICENSE](../../LICENSE). The ORD templates, including their
-annotations, come from Lowe's USPTO grants data as distributed by the Open Reaction
-Database and are licensed under CC BY-SA 4.0; see [ord/LICENSE](ord/LICENSE) and
-[ord/NOTICE.md](ord/NOTICE.md). [THIRD_PARTY_NOTICES.md](../../THIRD_PARTY_NOTICES.md)
+[nvidia/NOTICE.md](nvidia/NOTICE.md). Use of the data in this directory is governed by
+the OpenMDW License Agreement, version 1.1 ([LICENSE](LICENSE)), except for the Open
+Reaction Database data in `ord/`, which is governed by CC BY-SA 4.0; see
+[ord/LICENSE](ord/LICENSE) and [ord/NOTICE.md](ord/NOTICE.md). The ORD templates,
+including their annotations, come from Lowe's USPTO grants data as distributed by the
+Open Reaction Database. Additional information: the SynFormer templates are under the
+Apache License 2.0 and the PaRoutes templates under CC BY 4.0 from their sources.
+The BioNeMo-SynClaw code is licensed separately under the Apache License 2.0 in the
+project [LICENSE](../../LICENSE). [THIRD_PARTY_NOTICES.md](../../THIRD_PARTY_NOTICES.md)
 summarizes every source. These are computational planning templates;
 RDKit execution and stock grounding do not establish experimental feasibility.

@@ -7,5 +7,7 @@ Full license text: https://creativecommons.org/licenses/by-sa/4.0/legalcode
 Attribution, the source of the material and the changes made to it are described
 in NOTICE.md in this directory.
 
-This license applies only to this directory. The rest of the repository is
-licensed under the Apache License 2.0; see the LICENSE file at the repository root.
+This license applies only to this directory. Use of the other data in
+data/reaction_templates/ is governed by the OpenMDW License Agreement, version 1.1
+(see ../LICENSE), and the BioNeMo-SynClaw code is licensed under the Apache License
+2.0 (see the LICENSE file at the repository root).
