@@ -1055,11 +1055,7 @@ class ReactionTemplateTests(unittest.TestCase):
 
             self.assertTrue(result["valid"])
             self.assertEqual(result["candidate_reactant_sets"][0]["reactants"], ["CO"])
-            self.assertFalse(
-                result["candidate_reactant_sets"][0][
-                    "all_reactants_have_exact_building_block_match"
-                ]
-            )
+            self.assertFalse(result["candidate_reactant_sets"][0]["all_precursors_grounded"])
 
     def test_simulate_reverse_reaction_preserves_reactant_tuples(self):
         with tempfile.TemporaryDirectory() as tmp:

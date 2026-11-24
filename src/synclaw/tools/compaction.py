@@ -10,6 +10,7 @@ only evidence the model can act on in the next turn.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 MAX_RETURNED_PRODUCTS = 20
@@ -18,33 +19,28 @@ MAX_ISSUES = 8
 MAX_ERROR_MESSAGE_CHARS = 1600
 
 
-def compact_tool_result(tool_name: str | None, result: Any) -> Any:
+def compact_tool_result(tool_name: str, result: Any) -> Any:
     """Return a compact, model-facing copy of a tool result."""
 
     if not isinstance(result, dict):
         return result
-    name = tool_name or str(result.get("tool_name") or "")
-    if name == "search_reaction_templates":
+    if tool_name == "search_reaction_templates":
         return _compact_search_reaction_templates(result)
-    if name == "search_building_blocks":
+    if tool_name == "search_building_blocks":
         return _compact_search_building_blocks(result)
-    if name == "simulate_reaction":
+    if tool_name == "simulate_reaction":
         return _compact_simulate_reaction(result)
-    if name == "submit_pathway":
+    if tool_name == "submit_pathway":
         return _compact_submit_pathway(result)
-    if name == "simulate_reverse_reaction":
+    if tool_name == "simulate_reverse_reaction":
         return _compact_simulate_reverse_reaction(result)
-    if name == "mces":
-        return _compact_mces(result)
-    if name == "similarity":
-        return _compact_similarity(result)
+    if tool_name in ("mces", "similarity"):
+        return _compact_pair_comparison(result)
     return _compact_generic_result(result)
 
 
 def compact_json_size(value: Any) -> int:
     """Approximate serialized size with stable separators."""
-
-    import json
 
     return len(json.dumps(value, sort_keys=True, separators=(",", ":")))
 
@@ -63,11 +59,9 @@ def _compact_search_reaction_templates(result: dict[str, Any]) -> dict[str, Any]
         ],
     )
     output.update(_problems(result))
-    if result.get("reverse_ranking"):
-        ranking = result["reverse_ranking"]
+    if isinstance(result.get("reverse_ranking"), dict):
         output["reverse_ranking"] = _copy_keys(
-            ranking,
-            ["applied", "reason", "enriched_result_count"],
+            result["reverse_ranking"], ["applied", "reason", "enriched_result_count"]
         )
     for key in ("results", "structural_results", "text_results"):
         if key in result:
@@ -85,27 +79,9 @@ def _compact_search_building_blocks(result: dict[str, Any]) -> dict[str, Any]:
     return _drop_none(output)
 
 
-def _compact_mces(result: dict[str, Any]) -> dict[str, Any]:
-    output = _copy_keys(
-        result,
-        [
-            "valid",
-            "mces_smiles",
-            "similarity",
-            "matched_bonds",
-            "left_bonds",
-            "right_bonds",
-            "union_bonds",
-            "timed_out",
-            "error",
-        ],
-    )
-    output["left"] = _compact_validation(result.get("left"))
-    output["right"] = _compact_validation(result.get("right"))
-    return _drop_none(output)
+def _compact_pair_comparison(result: dict[str, Any]) -> dict[str, Any]:
+    """``similarity`` and ``mces``: every field, with the two input molecules reduced."""
 
-
-def _compact_similarity(result: dict[str, Any]) -> dict[str, Any]:
     output = {key: value for key, value in result.items() if key not in ("left", "right")}
     output["left"] = _compact_validation(result.get("left"))
     output["right"] = _compact_validation(result.get("right"))
@@ -116,7 +92,6 @@ def _compact_simulate_reaction(result: dict[str, Any]) -> dict[str, Any]:
     output = _copy_keys(
         result,
         [
-            "valid",
             "reaction_id",
             "product_smiles",
             "product_matched",
@@ -133,12 +108,14 @@ def _compact_simulate_reaction(result: dict[str, Any]) -> dict[str, Any]:
         # product was generated; then the role order is enough to read the products.
         template = _copy_keys(template, ["reactant_roles"]) or None
     output["template"] = template
-    output["reactants"] = [_compact_validation(item) for item in result.get("reactants") or []]
+    if result.get("reactants"):
+        output["reactants"] = [_compact_validation(item) for item in result["reactants"]]
     if isinstance(result.get("product"), dict) and not result["product"].get("valid", True):
         output["product"] = _compact_validation(result["product"])
-    output["resolved_reactants"] = [
-        _compact_resolved_reactant(item) for item in result.get("resolved_reactants") or []
-    ]
+    if result.get("resolved_reactants"):
+        output["resolved_reactants"] = [
+            _compact_resolved_reactant(item) for item in result["resolved_reactants"]
+        ]
     output.update(_generated_products(result))
     return _drop_none(output)
 
@@ -148,7 +125,6 @@ def _compact_submit_pathway(result: dict[str, Any]) -> dict[str, Any]:
         result,
         [
             "accepted",
-            "issues",
             "error_message",
             "final_smiles",
             "similarity_to_target",
@@ -164,8 +140,7 @@ def _compact_submit_pathway(result: dict[str, Any]) -> dict[str, Any]:
     )
     if result.get("refused"):
         output["refused"] = True
-    if output.get("issues"):
-        output["issues"] = _limit_list(output["issues"], MAX_ISSUES)
+    output.update(_problems(result))
     if output.get("error_message"):
         output["error_message"] = _truncate(str(output["error_message"]), MAX_ERROR_MESSAGE_CHARS)
     final = result.get("final_smiles")
@@ -191,18 +166,21 @@ def _compact_simulate_reverse_reaction(result: dict[str, Any]) -> dict[str, Any]
     output = _copy_keys(
         result,
         [
-            "valid",
             "reaction_id",
-            "issues",
             "product_smiles",
             "product_valid",
             "product_canonical_smiles",
+            "product_error",
             "reaction_executed",
             "candidate_count",
             "returned_candidate_count",
         ],
     )
-    output["template_summary"] = _compact_template(result.get("template_summary"))
+    output.update(_problems(result))
+    # The reverse view keeps the template's identity, family and pattern, not its search hints.
+    output["template_summary"] = _compact_template(
+        result.get("template"), fields=("reaction_id", "reaction_family", "description", "smarts")
+    )
     if isinstance(result.get("reverse_planning_summary"), dict):
         output["reverse_planning_summary"] = {
             key: value
@@ -210,11 +188,7 @@ def _compact_simulate_reverse_reaction(result: dict[str, Any]) -> dict[str, Any]
             if key != "recommended_next_step"
         }
     if isinstance(result.get("building_block_match_summary"), dict):
-        output["building_block_match_summary"] = {
-            key: value
-            for key, value in result["building_block_match_summary"].items()
-            if key != "note"
-        }
+        output["building_block_match_summary"] = result["building_block_match_summary"]
     output["candidate_reactant_sets"] = [
         _compact_reverse_candidate(item) for item in result.get("candidate_reactant_sets") or []
     ]
@@ -222,37 +196,29 @@ def _compact_simulate_reverse_reaction(result: dict[str, Any]) -> dict[str, Any]
 
 
 def _compact_generic_result(result: dict[str, Any]) -> dict[str, Any]:
-    output = dict(result)
-    if isinstance(output.get("template"), dict):
-        output["template"] = _compact_template(output["template"])
-    if isinstance(output.get("results"), list):
-        output["results"] = [
-            _compact_template(item) if isinstance(item, dict) and item.get("reaction_id") else item
-            for item in output["results"]
-        ]
-    return _drop_none(output)
+    # Reached only by results that are not a known tool's, such as an unknown tool name's error.
+    return _drop_none(result)
 
 
-def _compact_template(template: Any) -> Any:
+_TEMPLATE_FIELDS = (
+    "reaction_id",
+    "name",
+    "description",
+    "reaction_family",
+    "smarts",
+    "execution_hints",
+)
+
+
+def _compact_template(template: Any, fields: tuple[str, ...] = _TEMPLATE_FIELDS) -> Any:
     if not isinstance(template, dict):
         return template
-    output = _copy_keys(
-        template,
-        [
-            "reaction_id",
-            "name",
-            "description",
-            "reaction_family",
-            "smarts",
-            "execution_hints",
-        ],
-    )
+    output = _copy_keys(template, list(fields))
     roles = template.get("reactant_roles")
     if isinstance(roles, list):
-        # Roles are listed in reactant order, so position and atom maps add nothing.
+        # Role names in reactant order; each role's pattern is that reactant's part of ``smarts``.
         output["reactant_roles"] = [
-            _copy_keys(role, ["role", "smarts"]) if isinstance(role, dict) else role
-            for role in roles
+            role.get("role") if isinstance(role, dict) else role for role in roles
         ]
     if template.get("introduces_unmapped_product_atoms"):
         output["introduces_unmapped_product_atoms"] = True
@@ -264,15 +230,9 @@ def _summarize_template(template: Any) -> Any:
 
     if not isinstance(template, dict):
         return template
-    output = _copy_keys(template, ["reaction_id", "name", "reaction_family", "smarts"])
-    roles = template.get("reactant_roles")
-    if isinstance(roles, list):
-        # Role SMARTS are the reactant side of smarts, in this order.
-        output["reactant_roles"] = [
-            role.get("role") if isinstance(role, dict) else role for role in roles
-        ]
-    if template.get("introduces_unmapped_product_atoms"):
-        output["introduces_unmapped_product_atoms"] = True
+    output = _compact_template(
+        template, fields=("reaction_id", "name", "reaction_family", "smarts")
+    )
     structure = template.get("structure_match")
     if isinstance(structure, dict):
         # Every hit matches all supplied molecules, so only the score and any forward run differ.
@@ -342,7 +302,7 @@ def _compact_resolved_reactant(item: Any) -> Any:
 def _compact_ungrounded_reactant(item: Any) -> Any:
     if not isinstance(item, dict):
         return item
-    return _drop_none(_copy_keys(item, ["step_index", "ref", "smiles", "source", "issue"]))
+    return _drop_none({"step_index": item.get("step_index"), **_compact_resolved_reactant(item)})
 
 
 def _compact_validated_step(step: Any) -> Any:
@@ -354,7 +314,6 @@ def _compact_validated_step(step: Any) -> Any:
             "step_index",
             "valid",
             "reaction_id",
-            "issues",
             "product_smiles",
             "actual_product_smiles",
             "product_matched",
@@ -363,10 +322,12 @@ def _compact_validated_step(step: Any) -> Any:
             "skipped_invalid_product_set_count",
         ],
     )
+    output.update(_limited_issues(step))
     output.update(_generated_products(step))
-    output["resolved_reactants"] = [
-        _compact_resolved_reactant(item) for item in step.get("resolved_reactants") or []
-    ]
+    if step.get("resolved_reactants"):
+        output["resolved_reactants"] = [
+            _compact_resolved_reactant(item) for item in step["resolved_reactants"]
+        ]
     submitted = step.get("submitted_step")
     if isinstance(submitted, dict):
         output["submitted_step_summary"] = _copy_keys(
@@ -383,7 +344,6 @@ def _compact_reverse_candidate(candidate: Any) -> Any:
         candidate,
         [
             "reactants",
-            "all_reactants_have_exact_building_block_match",
             "all_precursors_grounded",
         ],
     )
@@ -414,21 +374,42 @@ def _compact_reverse_candidate(candidate: Any) -> Any:
 
 
 def _problems(result: dict[str, Any]) -> dict[str, Any]:
-    """Report validity and issues only when something went wrong."""
+    """Report validity and issues only when something went wrong.
+
+    A call rejected for its arguments also keeps its ``error`` label and ``retryable`` hint.
+    """
 
     output: dict[str, Any] = {}
     if result.get("valid") is False:
         output["valid"] = False
-    if result.get("issues"):
-        output["issues"] = result["issues"]
+    output.update(_limited_issues(result))
+    for key in ("error", "retryable"):
+        if result.get(key):
+            output[key] = result[key]
     return output
+
+
+def _limited_issues(result: dict[str, Any]) -> dict[str, Any]:
+    """At most ``MAX_ISSUES`` issues, with the full count when some were left out.
+
+    The last two are always kept: a pathway's decisive issues, such as an invalid final
+    product or a refusal, come after the per-step ones.
+    """
+
+    issues = result.get("issues")
+    if not isinstance(issues, list) or not issues:
+        return {}
+    if len(issues) <= MAX_ISSUES:
+        return {"issues": issues}
+    return {"issues": issues[: MAX_ISSUES - 2] + issues[-2:], "issue_count": len(issues)}
 
 
 def _generated_products(result: dict[str, Any]) -> dict[str, Any]:
     """The flat product list, or product sets when some outcome has coproducts.
 
     The flat list is the union of the sets, so only one is needed. Counts are kept
-    only when the returned list is truncated.
+    only when the returned list is truncated. A result that generated nothing at all (the
+    reaction did not run) has no product field, so it does not read as an empty run.
     """
 
     sets = result.get("generated_product_sets")
@@ -437,6 +418,8 @@ def _generated_products(result: dict[str, Any]) -> dict[str, Any]:
     else:
         key, limit = "generated_products", MAX_RETURNED_PRODUCTS
     values = result.get(key)
+    if values is None or result.get("reaction_executed") is False:
+        return {}
     output: dict[str, Any] = {key: _limit_list(values, limit)}
     count_key = (
         "generated_product_set_count"

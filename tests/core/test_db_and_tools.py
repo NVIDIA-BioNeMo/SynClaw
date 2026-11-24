@@ -466,7 +466,7 @@ class DbAndToolsTests(unittest.TestCase):
 
             detail = result["candidate_reactant_sets"][0]["reactant_details"][0]
             self.assertTrue(result["valid"])
-            self.assertEqual(result["template_summary"]["reaction_id"], "R001")
+            self.assertEqual(result["template"]["reaction_id"], "R001")
             model_view = compact_tool_result("simulate_reverse_reaction", result)
             self.assertEqual(model_view["template_summary"]["reaction_id"], "R001")
             self.assertTrue(result["reverse_planning_summary"]["has_fully_grounded_candidate"])
@@ -475,7 +475,6 @@ class DbAndToolsTests(unittest.TestCase):
             self.assertLessEqual(len(detail["top_near_building_block_matches"]), 1)
             self.assertNotIn("source_file", detail["exact_building_block_matches"][0])
             self.assertGreaterEqual(result["building_block_match_summary"]["exact_match_count"], 1)
-            self.assertIn("planning evidence", result["building_block_match_summary"]["note"])
 
 
 if __name__ == "__main__":

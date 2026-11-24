@@ -94,7 +94,8 @@ def test_reaction_template_search_returns_short_hits():
     }
     assert simulated["template"]["description"] == "Couples amines and carboxylic acids."
     assert simulated["template"]["execution_hints"] == ["Coupling reagent is implicit."]
-    assert simulated["template"]["reactant_roles"][1] == {"role": "acid", "smarts": "[C:2](=O)O"}
+    # Role names only: each role's pattern is already that reactant's part of the template SMARTS.
+    assert simulated["template"]["reactant_roles"] == ["amine", "acid"]
 
 
 def test_submit_pathway_compaction_keeps_validation_summary_without_verbose_echoes():
@@ -377,10 +378,7 @@ def test_simulate_reaction_compaction_returns_one_product_listing():
         },
     )
 
-    assert {key: value for key, value in single.items() if value != []} == {
-        "valid": True,
-        "generated_products": ["CCO", "CCN"],
-    }
+    assert single == {"generated_products": ["CCO", "CCN"]}
     assert "generated_products" not in coproducts
     assert len(coproducts["generated_product_sets"]) == 10
     assert coproducts["generated_product_set_count"] == 12
@@ -431,18 +429,18 @@ def test_compaction_trims_template_detail_and_echoed_routes():
     reverse = compact_tool_result(
         "simulate_reverse_reaction",
         {
-            "building_block_match_summary": {
-                "exact_match_count": 0,
-                "note": "Planning evidence only.",
+            "template": {
+                "reaction_id": "ord:R011",
+                "reaction_family": "aryl coupling",
+                "smarts": "Br-c>>c",
+                "query_hints": ["suzuki"],
             },
+            "building_block_match_summary": {"exact_match_count": 0},
             "candidate_reactant_sets": [
                 {
                     "reactants": ["Brc1ccccc1"],
-                    "grounding_summary": "Lacks exact matches.",
-                    "precursor_grounding": [{"smiles": "Brc1ccccc1"}],
-                    "reactant_details": [
-                        {"smiles": "Brc1ccccc1", "grounding_note": "No exact match."}
-                    ],
+                    "all_precursors_grounded": False,
+                    "reactant_details": [{"smiles": "Brc1ccccc1"}],
                 }
             ],
         },
@@ -453,17 +451,24 @@ def test_compaction_trims_template_detail_and_echoed_routes():
         "reactant_roles": ["aryl bromide"],
         "structure_match": {"score": 10.0},
     }
-    assert simulated["template"] == {"reactant_roles": [{"role": "aryl bromide", "smarts": "Br-c"}]}
+    assert simulated["template"] == {"reactant_roles": ["aryl bromide"]}
     assert unmatched["template"] == {
         "reaction_id": "ord:R011",
-        "reactant_roles": [{"role": "aryl bromide", "smarts": "Br-c"}],
+        "reactant_roles": ["aryl bromide"],
     }
     assert accepted == {"accepted": True, "final_smiles": "CCO"}
     assert similarity["left"] == {"valid": True, "canonical_smiles": "CCO"}
     assert reverse["building_block_match_summary"] == {"exact_match_count": 0}
+    # The reverse view keeps the template's identity, family and SMARTS, not its search hints.
+    assert reverse["template_summary"] == {
+        "reaction_id": "ord:R011",
+        "reaction_family": "aryl coupling",
+        "smarts": "Br-c>>c",
+    }
     assert reverse["candidate_reactant_sets"] == [
         {
             "reactants": ["Brc1ccccc1"],
+            "all_precursors_grounded": False,
             "reactant_details": [
                 {
                     "smiles": "Brc1ccccc1",
@@ -489,3 +494,120 @@ def test_submit_pathway_compaction_shows_whether_the_product_is_the_exact_target
     # Similarity 1.0 can still miss the target, e.g. as the other stereoisomer.
     assert compact["similarity_to_target"] == 1.0
     assert compact["identical_to_target"] is False
+
+
+def test_truncated_issues_report_how_many_there_were():
+    issues = [f"issue {index}" for index in range(12)]
+    compact = compact_tool_result(
+        "submit_pathway",
+        {"accepted": False, "issues": issues, "steps": [{"valid": False, "issues": issues}]},
+    )
+
+    kept = issues[:6] + issues[-2:]  # the last issues are a pathway's decisive ones
+    assert compact["issues"] == kept and compact["issue_count"] == 12
+    assert compact["steps"][0]["issues"] == kept and compact["steps"][0]["issue_count"] == 12
+    assert "issue_count" not in compact_tool_result(
+        "submit_pathway", {"accepted": False, "issues": issues[:3]}
+    )
+
+
+def test_a_reaction_that_never_ran_reports_no_products():
+    rejected = compact_tool_result(
+        "simulate_reaction", {"valid": False, "issues": ["reactant 1 is not valid SMILES"]}
+    )
+    ran_empty = compact_tool_result("simulate_reaction", {"valid": True, "generated_products": []})
+
+    assert "generated_products" not in rejected
+    assert ran_empty["generated_products"] == []
+
+
+def test_a_successful_reverse_simulation_omits_valid_and_issues_like_the_other_tools():
+    ok = compact_tool_result(
+        "simulate_reverse_reaction", {"valid": True, "issues": [], "reaction_id": "R1"}
+    )
+    failed = compact_tool_result(
+        "simulate_reverse_reaction", {"valid": False, "issues": ["no match"], "reaction_id": "R1"}
+    )
+
+    assert "valid" not in ok and "issues" not in ok
+    assert failed["valid"] is False and failed["issues"] == ["no match"]
+
+
+def test_ungrounded_reactants_keep_their_step_and_reference():
+    compact = compact_tool_result(
+        "submit_pathway",
+        {
+            "accepted": False,
+            "ungrounded_reactants": [
+                {"step_index": 2, "ref": "CCO", "smiles": "CCO", "source": "smiles", "issue": "x"}
+            ],
+        },
+    )
+
+    assert compact["ungrounded_reactants"] == [
+        {"step_index": 2, "ref": "CCO", "smiles": "CCO", "source": "smiles", "issue": "x"}
+    ]
+
+
+def test_a_rejected_mces_call_says_why_and_that_it_can_be_retried():
+    from synclaw.rollout.policy import tool_argument_error
+
+    compact = compact_tool_result(
+        "mces", tool_argument_error("mces", "mces is missing required argument 'smiles_b'", {})
+    )
+
+    assert compact["issues"] == ["mces is missing required argument 'smiles_b'"]
+    assert compact["retryable"] is True and compact["error"] == "invalid_tool_call"
+
+
+def test_a_successful_simulation_omits_valid_and_empty_reactant_lists():
+    compact = compact_tool_result(
+        "simulate_reaction",
+        {"valid": True, "reaction_id": "R1", "resolved_reactants": [], "generated_products": ["C"]},
+    )
+
+    assert "valid" not in compact and "resolved_reactants" not in compact
+
+
+def test_a_simulation_that_never_ran_reports_no_products_from_a_real_tool_result(tmp_path):
+    from conftest import prepare_minimal_model_db
+
+    from synclaw.tools.synthesis import SynthesisTools
+
+    database = tmp_path / "x.sqlite"
+    prepare_minimal_model_db(database)
+    tools = SynthesisTools(database)
+
+    unknown_ref = compact_tool_result(
+        "simulate_reaction", tools.simulate_reaction("R001", ["BB:999999"])
+    )
+    bad_reaction = compact_tool_result(
+        "simulate_reaction", tools.simulate_reaction("NO-SUCH-ID", ["CO"])
+    )
+
+    assert unknown_ref["valid"] is False and "generated_products" not in unknown_ref
+    assert "generated_products" not in bad_reaction
+
+
+def test_a_rejected_submission_keeps_its_retry_hint():
+    from synclaw.rollout.policy import tool_argument_error
+
+    compact = compact_tool_result(
+        "submit_pathway", tool_argument_error("submit_pathway", "steps must be an array", {})
+    )
+
+    assert compact["retryable"] is True and compact["error"] == "invalid_tool_call"
+    assert compact["accepted"] is False
+
+
+def test_every_tool_caps_issues_and_a_reverse_product_error_is_explained():
+    issues = [f"issue {index}" for index in range(12)]
+
+    simulated = compact_tool_result("simulate_reaction", {"valid": False, "issues": issues})
+    reverse = compact_tool_result(
+        "simulate_reverse_reaction",
+        {"valid": False, "product_valid": False, "product_error": "unclosed ring"},
+    )
+
+    assert len(simulated["issues"]) == 8 and simulated["issue_count"] == 12
+    assert reverse["product_error"] == "unclosed ring"
