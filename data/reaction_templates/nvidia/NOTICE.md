@@ -1,4 +1,4 @@
-# NVIDIA-authored reaction templates (8 templates)
+# Project-authored (`nvidia`) reaction templates (8 templates)
 
 Generic templates for common transformations, authored for this project rather than
 extracted from reaction records. Each record's `metadata.provenance` starts with
