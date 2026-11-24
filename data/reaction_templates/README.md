@@ -73,3 +73,5 @@ The BioNeMo-SynClaw code is licensed separately under the Apache License 2.0 in 
 project [LICENSE](../../LICENSE). [THIRD_PARTY_NOTICES.md](../../THIRD_PARTY_NOTICES.md)
 summarizes every source. These are computational planning templates;
 RDKit execution and stock grounding do not establish experimental feasibility.
+
+The dataset card for these templates is [DATASET_CARD.md](DATASET_CARD.md).
