@@ -11,10 +11,14 @@ import itertools
 import json
 import re
 import sqlite3
+import tempfile
+import urllib.error
+import urllib.request
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
+from synclaw import __version__
 from synclaw.core import chem, db
 from synclaw.core.libraries import (
     BUNDLED_REACTION_SOURCE,
@@ -45,21 +49,59 @@ ANNOTATION_METADATA_KEYS = (
 )
 
 
+# Where an installed package, which ships no template files, fetches them from.
+CATALOG_BASE_URL = "https://raw.githubusercontent.com/NVIDIA-BioNeMo/SynClaw"
+
+
 def ingest_reaction_libraries(
-    db_path: str | Path,
+    db_path: str | Path, *, catalog_ref: str | None = None
 ) -> dict[str, Any]:
     """Install every bundled source and renumber the database's templates R001 onward.
 
     Existing rows stored under bundled library names are replaced in the same
     transaction, so a reimport never leaves stale templates behind. Drop sources
     a run should not use with ``db.remove_reaction_libraries``.
+
+    A source checkout reads its own template files. An installed package, or a call with
+    ``catalog_ref`` (a tag, branch or commit), downloads them from the repository; the release
+    tag for this version is the default. Every file is checked against the SHA-256 in the
+    manifest, so a ref that holds different templates is refused, not installed.
+
+    Raises:
+        RuntimeError: A file could not be downloaded or does not match the manifest.
     """
     catalog = bundled_reaction_catalog()
     template_dir = bundled_reaction_template_dir()
-    if not template_dir.is_dir():
-        raise RuntimeError(
-            "Importing the bundled reaction sources requires a source checkout of BioNeMo-SynClaw"
-        )
+    if catalog_ref is None and template_dir.is_dir():
+        return _install_catalog(db_path, catalog, template_dir)
+    with tempfile.TemporaryDirectory() as tmp:
+        _download_catalog(catalog, Path(tmp), catalog_ref or f"v{__version__}")
+        return _install_catalog(db_path, catalog, Path(tmp))
+
+
+def _download_catalog(catalog: dict[str, Any], destination: Path, ref: str) -> None:
+    for entry in (catalog["families"], *catalog["sources"].values()):
+        url = f"{CATALOG_BASE_URL}/{ref}/data/reaction_templates/{entry['file']}"
+        try:
+            with urllib.request.urlopen(url, timeout=60) as response:
+                data = response.read()
+        except (urllib.error.URLError, TimeoutError) as exc:
+            raise RuntimeError(
+                f"Could not download {url}: {exc}. Check the network, or pass --catalog-ref."
+            ) from exc
+        if hashlib.sha256(data).hexdigest() != entry["sha256"]:
+            raise RuntimeError(
+                f"{url} does not match its SHA-256 in reaction_libraries.json. Pass --catalog-ref "
+                "with the tag or commit this package was built from."
+            )
+        path = destination / entry["file"]
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+
+
+def _install_catalog(
+    db_path: str | Path, catalog: dict[str, Any], template_dir: Path
+) -> dict[str, Any]:
     libraries = list(catalog["sources"])
     families = json.loads(_verified_bundled_file(template_dir, catalog["families"]).read_text())
     records = []

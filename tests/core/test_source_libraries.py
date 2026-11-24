@@ -6,6 +6,7 @@
 import hashlib
 import json
 import re
+import shutil
 import sqlite3
 from contextlib import closing
 from typing import Any
@@ -15,7 +16,7 @@ from rdkit.Chem import rdChemReactions
 
 from synclaw import paths
 from synclaw.cli import build_parser
-from synclaw.core import db, libraries
+from synclaw.core import db, libraries, reactions
 from synclaw.core.libraries import normalize_libraries
 from synclaw.core.reactions import ingest_reaction_libraries, ingest_reaction_templates
 from synclaw.rollout.loop import call_local_tool
@@ -361,3 +362,34 @@ def test_custom_record_fields_cannot_pose_as_curated_annotations(tmp_path):
     assert first["reaction_family"] == "" and "fake" not in first["query_hints"]
     assert stored["custom:X1"][1]["source_fields"]["annotation"]["family"] == "bogus"
     assert stored["custom:X2"][1]["source_fields"]["metadata"] == "free-text note"
+
+
+@pytest.fixture
+def mirrored_catalog(tmp_path, monkeypatch):
+    """The catalog as the repository serves it at a ref, with no source checkout to read."""
+    root = tmp_path / "mirror"
+    shutil.copytree(ASSETS, root / "release-ref" / "data" / "reaction_templates")
+
+    def serve(url, timeout):
+        return (root / url.removeprefix(reactions.CATALOG_BASE_URL + "/")).open("rb")
+
+    monkeypatch.setattr(reactions.urllib.request, "urlopen", serve)
+    monkeypatch.setattr(reactions, "bundled_reaction_template_dir", lambda: tmp_path / "absent")
+    return root / "release-ref" / "data" / "reaction_templates"
+
+
+def test_an_installed_package_downloads_the_catalog_and_installs_the_same_templates(
+    tmp_path, mirrored_catalog
+):
+    stats = ingest_reaction_libraries(tmp_path / "downloaded.sqlite", catalog_ref="release-ref")
+
+    assert stats["inserted"] == stats["records"] == 501
+
+
+def test_a_ref_whose_templates_differ_from_the_manifest_is_refused(tmp_path, mirrored_catalog):
+    path = mirrored_catalog / "nvidia" / "templates.jsonl"
+    path.write_text(path.read_text() + "\n")
+
+    with pytest.raises(RuntimeError, match="does not match its SHA-256"):
+        ingest_reaction_libraries(tmp_path / "refused.sqlite", catalog_ref="release-ref")
+    assert not (tmp_path / "refused.sqlite").exists()

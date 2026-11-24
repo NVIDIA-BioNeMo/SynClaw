@@ -165,7 +165,9 @@ template IDs, attribution and the provenance recorded for each template.
 `synclaw ingest-reactions --db var/synclaw.sqlite` installs the bundled catalog. It replaces each
 bundled library in one transaction and leaves building blocks and search indexes alone. Model runs
 and the MCP server refuse a database whose bundled libraries no longer match this version's
-catalog, and print the command that fixes it. To use your own templates, run
+catalog, and print the command that fixes it. From a checkout it reads the files in `data/`; an
+installed package downloads them from this version's release tag (or `--catalog-ref <tag|commit>`)
+and checks each against the manifest's SHA-256. To use your own templates, run
 `ingest-reactions <file> --library <name> [--annotations <file>]`, which replaces that library.
 
 Every template in the database is available to the tools. To run with fewer sources, remove the

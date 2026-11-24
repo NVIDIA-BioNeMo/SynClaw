@@ -106,6 +106,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--annotations",
         help="Optional JSONL file with curated name/description/search metadata for template IDs",
     )
+    ingest_reactions.add_argument(
+        "--catalog-ref",
+        help=(
+            "Download the bundled sources from this tag, branch or commit instead of reading "
+            "a source checkout (an installed package downloads the release tag by default)"
+        ),
+    )
     ingest_reactions.set_defaults(func=_cmd_ingest_reactions)
 
     taskset = sub.add_parser(
@@ -475,7 +482,11 @@ def _cmd_ingest_reactions(args: argparse.Namespace) -> dict[str, Any]:
             raise RuntimeError(
                 "--library and --annotations require a custom template file; omit them to import bundled sources"
             )
-        return ingest_reaction_libraries(args.db)
+        return ingest_reaction_libraries(args.db, catalog_ref=args.catalog_ref)
+    if args.catalog_ref:
+        raise RuntimeError(
+            "--catalog-ref applies to the bundled sources, not a custom template file"
+        )
     return ingest_reaction_templates(
         args.source,
         db_path=args.db,
