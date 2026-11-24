@@ -1,26 +1,21 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Optional ReaSyn-style watchlist similarity screen.
+"""Optional similarity screen against ReaSyn's public watchlist or a user-supplied file.
 
-This reimplements ReaSyn's optional filter: a molecule is flagged when its
-Morgan/Tanimoto similarity to any watchlist entry exceeds a threshold. The
-watchlist is ReaSyn's public ``data/mols_to_filter.txt``, fetched into ``var/`` by
-``synclaw download-public-data`` and never committed. The screen is off by default;
-enabling it requires a valid watchlist. BioNeMo-SynClaw retains its existing 2,048-bit
-constitutional Morgan fingerprints rather than ReaSyn's 4,096-bit fingerprints.
-
-A watchlist is a denylist of known agents and their close analogues. It is not a
-toxicity model and does not recognise novel hazards.
+The screen flags whole molecules whose Tanimoto similarity to a watchlist entry
+exceeds the configured threshold. It uses SynClaw's 2,048-bit constitutional Morgan
+fingerprints. ReaSyn uses 4,096 bits. Coverage is limited to listed compounds
+and their close structural analogues.
 """
 
 from __future__ import annotations
 
 import argparse
-import functools
 import os
 from collections.abc import Iterable
 from dataclasses import dataclass
+from functools import lru_cache, partial
 from pathlib import Path
 from typing import Any, Final
 
@@ -40,11 +35,11 @@ BLOCK_KEY: Final = "toxicity_screen"
 
 
 class WatchlistUnavailable(RuntimeError):
-    """The screen is on but its watchlist is missing or empty."""
+    """The enabled screen could not read any valid molecules from its watchlist."""
 
 
 class ToxicityConfigError(ValueError, RuntimeError):
-    """A screen setting is invalid; a RuntimeError too, so the CLI reports it without a traceback."""
+    """A screen setting is invalid."""
 
 
 @dataclass(frozen=True)
@@ -82,12 +77,12 @@ class ToxicityConfig:
 
 
 class ToxicityScreen:
-    """Screen SMILES against the watchlist and keep an audit of what was checked."""
+    """Compare SMILES against the watchlist loaded at construction."""
 
     def __init__(self, config: ToxicityConfig | None = None) -> None:
         self.config = config or ToxicityConfig.resolve()
-        self._fingerprints = _load_fingerprints(self.config.watchlist) if self.enabled else ()
-        self._cache: dict[str, tuple[float, int | None]] = {}
+        fingerprints = _load_fingerprints(self.config.watchlist) if self.enabled else ()
+        self._score = lru_cache(maxsize=4096)(partial(_best_match, fingerprints))
 
     @property
     def enabled(self) -> bool:
@@ -109,9 +104,12 @@ class ToxicityScreen:
             smiles = smiles.strip() if isinstance(smiles, str) else None
             if not smiles:
                 continue
-            similarity, index = self._score(smiles)
+            match = self._score(smiles)
+            if match is None:
+                continue
+            similarity, index = match
             screened.append(smiles)
-            if index is not None:
+            if similarity > self.config.threshold:
                 refused.append(
                     {
                         "role": role,
@@ -143,20 +141,6 @@ class ToxicityScreen:
         block = self.check([("target", smiles)])
         return target_screen_event(block, smiles) if block else None
 
-    def _score(self, smiles: str) -> tuple[float, int | None]:
-        if smiles not in self._cache:
-            self._cache[smiles] = self._score_uncached(smiles)
-        return self._cache[smiles]
-
-    def _score_uncached(self, smiles: str) -> tuple[float, int | None]:
-        mol = Chem.MolFromSmiles(smiles)
-        if mol is None:
-            return 0.0, None
-        fingerprint = chem.constitutional_morgan_fingerprint_from_mol(mol)
-        scores = DataStructs.BulkTanimotoSimilarity(fingerprint, self._fingerprints)
-        top = max(scores)
-        return top, scores.index(top) if top > self.config.threshold else None
-
 
 def refused_result(tool: str, block: dict[str, Any]) -> dict[str, Any]:
     """Build the tool result returned when the screen flags a molecule."""
@@ -185,7 +169,7 @@ def add_toxicity_argument(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--toxicity-watchlist",
         default=None,
-        help=f"Watchlist SMILES file (default: ${ENV_WATCHLIST} or var/safety/mols_to_filter.txt)",
+        help=f"Watchlist SMILES file (default: ${ENV_WATCHLIST} or {DEFAULT_WATCHLIST})",
     )
 
 
@@ -223,7 +207,7 @@ def toxicity_summary_fields(events: Iterable[dict[str, Any]], mode: str | None) 
     tool results and target-screening events carry.
     """
 
-    screened: dict[str, None] = {}
+    screened: set[str] = set()
     refused: dict[str, None] = {}
     for event in events:
         payload = event.get("payload") or {}
@@ -233,7 +217,7 @@ def toxicity_summary_fields(events: Iterable[dict[str, Any]], mode: str | None) 
         if not isinstance(block, dict):
             continue
         mode = mode or block.get("mode")
-        screened.update(dict.fromkeys(block.get("screened") or []))
+        screened.update(block.get("screened") or [])
         refused.update(dict.fromkeys(item["smiles"] for item in block.get("refused") or []))
     return {
         "toxicity_screen": mode or "unrecorded",
@@ -243,18 +227,34 @@ def toxicity_summary_fields(events: Iterable[dict[str, Any]], mode: str | None) 
     }
 
 
-@functools.cache
-def _load_fingerprints(path: Path) -> tuple[Any, ...]:
-    if not path.is_file():
+def _fingerprint(smiles: str) -> DataStructs.ExplicitBitVect | None:
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        return None
+    return chem.constitutional_morgan_fingerprint_from_mol(mol)
+
+
+def _load_fingerprints(path: Path) -> tuple[DataStructs.ExplicitBitVect, ...]:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeError) as exc:
         raise WatchlistUnavailable(
-            f"Toxicity watchlist not found at {path}. Run `synclaw download-public-data`, or pass "
-            f"--toxicity-screen off to disable screening."
-        )
-    lines = (line.strip() for line in path.read_text(encoding="utf-8").splitlines())
-    mols = (Chem.MolFromSmiles(line) for line in lines if line)
-    fingerprints = tuple(
-        chem.constitutional_morgan_fingerprint_from_mol(mol) for mol in mols if mol is not None
-    )
+            f"Cannot read toxicity watchlist {path}: {exc}. "
+            "Use --toxicity-watchlist PATH or fetch the default with `synclaw download-public-data`."
+        ) from exc
+    candidates = (_fingerprint(line) for line in map(str.strip, lines) if line)
+    fingerprints = tuple(fp for fp in candidates if fp is not None)
     if not fingerprints:
         raise WatchlistUnavailable(f"Toxicity watchlist {path} holds no valid SMILES")
     return fingerprints
+
+
+def _best_match(
+    fingerprints: tuple[DataStructs.ExplicitBitVect, ...], smiles: str
+) -> tuple[float, int] | None:
+    fingerprint = _fingerprint(smiles)
+    if fingerprint is None:
+        return None
+    scores = DataStructs.BulkTanimotoSimilarity(fingerprint, fingerprints)
+    best = max(scores)
+    return best, scores.index(best)
