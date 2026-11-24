@@ -17,6 +17,7 @@ from pathlib import Path
 
 import pytest
 
+from synclaw import __version__
 from synclaw.core import db
 from synclaw.core.reactions import ingest_reaction_templates
 from synclaw.runners import mcp_server
@@ -122,6 +123,7 @@ def test_mcp_tool_schemas_remain_public_and_wrappers_are_async(
     db.prepare_building_block_search(database)
     server = create_server(database, use_process_pool=False)
 
+    assert server.version == __version__
     tools = server._tool_manager._tools
     assert set(tools) == {
         "search_building_blocks",
