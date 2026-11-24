@@ -4,7 +4,8 @@ Eighteen imported SMARTS are revised for chemical correctness; the other 483 are
 unchanged. Each revised record keeps `metadata.smarts_revision` with the imported
 string (`original_smarts`), a one-line `reason`, and stable `sources` identifiers
 (patent numbers, ORD reaction IDs, PaRoutes reaction hashes, DOIs) for the recorded
-procedure or example that supports the corrected rule.
+procedure or example that supports the corrected rule. An expert chemist reviewed
+every repair listed here.
 
 **Origin** is where the imported rule came from. SynFormer's 115 rules implement the
 January 2022 Enamine REAL reaction set ([Grygorenko et al. 2020](https://doi.org/10.1016/j.isci.2020.101681)),

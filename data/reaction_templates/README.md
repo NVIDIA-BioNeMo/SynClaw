@@ -1,19 +1,20 @@
 # Reaction source libraries
 
-Each executable SMARTS and its inline annotations is stored in one JSONL record;
+Each executable SMARTS and its inline annotations are stored in one JSONL record;
 `metadata.provenance` records where it came from, and `metadata.smarts_revision` any
 local repair ([SMARTS_REPAIRS.md](SMARTS_REPAIRS.md)). Each reaction family's
 description and search terms are stored once in `families.json` and added to every
 template of that family on import.
 [`src/synclaw/reaction_libraries.json`](../../src/synclaw/reaction_libraries.json) lists the
-source files, their template counts, and checksums; it ships in the wheel.
+source files, their template counts, and checksums. The manifest ships in the wheel; the
+template files themselves are read from a source checkout.
 
 | Source | Templates |
 | --- | ---: |
 | SynFormer | 114 |
 | PaRoutes | 176 |
 | ORD | 203 |
-| NVIDIA-authored | 8 |
+| NVIDIA-authored (`nvidia`) | 8 |
 
 No SMARTS appears in more than one source.
 
@@ -44,7 +45,11 @@ sources, e.g. `synclaw db remove-reactions paroutes nvidia --db <path>`.
 | `synformer paroutes ord` | 493 |
 | `synformer paroutes ord nvidia` | 501 |
 
-SMARTS are unchanged from their sources except 18 repaired rules, listed in
+In all four sources, the template annotations (names, families, descriptions, search terms,
+role queries and caveats) are interpretations of the SMARTS, not ground truth. They are
+hybrid human- and LLM-generated.
+
+SMARTS are unchanged from their sources except 18 repaired rules (10 SynFormer, 1 PaRoutes, 7 ORD), listed in
 [SMARTS_REPAIRS.md](SMARTS_REPAIRS.md) with their imported strings kept in
 `metadata.smarts_revision`. Prompt hints are generated from the imported records.
 
@@ -54,7 +59,6 @@ R032) does not exist. Import renumbers every template in the database `R001` onw
 SMARTS-hash order and keeps the source ID as `metadata.source_id`; tools see only the numbered
 ID. Every ORD record's `metadata.provenance` names its source patent and line in Lowe's USPTO
 grants file.
-Records carry their provenance, role queries, and execution caveats.
 
 Attribution and licenses are in [synformer/NOTICE.md](synformer/NOTICE.md),
 [paroutes/NOTICE.md](paroutes/NOTICE.md), [ord/NOTICE.md](ord/NOTICE.md), and

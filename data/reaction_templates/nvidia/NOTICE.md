@@ -28,9 +28,3 @@ SynFormer templates in [../synformer/](../synformer/NOTICE.md).
 | `nvidia:R005` | Carbonyl olefination with a phosphorus-bound carbon | Hartenfeller Wittig; `synformer:R102` | Aldehydes and ketones with phosphonium, phosphonate or phosphine-oxide carbons, as patents record Wittig and Horner-Wadsworth-Emmons reactions. E/Z geometry is not encoded. |
 | `nvidia:R006` | Broad chloride or bromide replacement by a heteroatom donor | `synformer:R009`, `synformer:R056`, `synformer:R031` | General substitution, broader than the published templates; the donor atom is neutral in the product. |
 | `nvidia:R007` | N-carbamate cleavage to the parent nitrogen | Patent-extracted Boc removal, including `ord:R031` | Boc and other acyclic carbamates; cyclic carbamates are excluded. |
-
-Two earlier templates were removed because existing templates already cover
-them: methyl ester cleavage is a subset of `synformer:R085`, and nitro reduction
-to a primary amine equals `paroutes:PR664F7756F752` and
-`paroutes:PR09D37E55A41F` together. Neither produced an outcome those templates
-do not on the 43,745 distinct molecules in the 20,000-reaction sample.

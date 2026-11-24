@@ -44,9 +44,7 @@ third-party packages BioNeMo-SynClaw depends on. No third-party source code is v
   J. Am. Chem. Soc. 2021), from its import of Daniel Lowe, *Chemical reactions
   from US patents (1976-Sep2016)*, figshare (2017),
   <https://doi.org/10.6084/m9.figshare.5104873.v1>. Each record names the patent
-  and line in Lowe's file that reproduces it. NVIDIA-authored templates are in
-  [`data/reaction_templates/nvidia/`](data/reaction_templates/nvidia/NOTICE.md)
-  and are not third-party material.
+  and line in Lowe's file that reproduces it.
 - License: Creative Commons Attribution-ShareAlike 4.0 International
   (CC BY-SA 4.0), <https://creativecommons.org/licenses/by-sa/4.0/legalcode>.
   It covers the templates and the annotations stored with them in that
@@ -76,7 +74,7 @@ licenses. They are not distributed with BioNeMo-SynClaw.
 ## Data downloaded on demand
 
 `synclaw download-public-data` fetches SynFormer files and the ReaSyn watchlist
-(`data/mols_to_filter.txt`) from their respective public repositories, and
+(`var/safety/mols_to_filter.txt`) from their respective public repositories, and
 `synclaw prepare-emolecules-bbs` downloads the eMolecules catalog from
 downloads.emolecules.com. These files are not distributed with BioNeMo-SynClaw and remain under their
 providers' terms.
