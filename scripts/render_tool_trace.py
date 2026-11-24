@@ -111,6 +111,9 @@ def render_trace(
     if similarity is not None:
         lines.append(f"- Active final-molecule similarity to target: `{similarity}`")
     lines.extend(render_similarity_fields(submission, run_summary=run_summary))
+    end_reason = first_present(run_summary, "end_reason")
+    if end_reason:
+        lines.append(f"- Run ended: `{end_reason}`")
     runtime_seconds = first_present(run_summary, "runtime_seconds")
     if runtime_seconds is not None:
         lines.append(f"- Runtime: `{format_runtime(runtime_seconds)}`")

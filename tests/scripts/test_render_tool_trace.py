@@ -734,3 +734,18 @@ def test_a_failed_or_cut_short_run_says_so_in_the_summary():
     assert "- Run ended early by the harness: `max_tokens` at assistant turn 7:" in cut_short
     assert "- Output-limit recoveries: `1`" in cut_short
     assert "Run failed" not in renderer.render_trace([], trace_path=Path("trace.jsonl"))
+
+
+def test_summary_says_why_the_run_ended():
+    renderer = _load_renderer()
+    markdown = renderer.render_trace(
+        [
+            {
+                "event_type": "run_summary",
+                "payload": {"end_reason": "tool_limit_best_accepted_submission"},
+            }
+        ],
+        trace_path=Path("trace.jsonl"),
+    )
+    assert "- Run ended: `tool_limit_best_accepted_submission`" in markdown
+    assert "Run ended" not in renderer.render_trace([], trace_path=Path("trace.jsonl"))

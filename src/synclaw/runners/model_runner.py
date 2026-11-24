@@ -442,7 +442,7 @@ def run_model_from_args(args: argparse.Namespace) -> dict[str, Any]:
         if checkpoint_path is not None:
             write_checkpoint(checkpoint_path, checkpoint_payload(checkpoint_next_turn_index))
 
-    def finish_run(submission: dict[str, Any] | None) -> dict[str, Any]:
+    def finish_run(submission: dict[str, Any] | None, end_reason: str) -> dict[str, Any]:
         runtime_seconds = time.monotonic() - state.session_started_monotonic
         append_run_summary_event(
             trace_events,
@@ -454,6 +454,7 @@ def run_model_from_args(args: argparse.Namespace) -> dict[str, Any]:
             runtime_seconds=runtime_seconds,
             invalid_submissions=state.policy_state.invalid_submissions,
             low_similarity_submissions=state.policy_state.low_similarity_submissions,
+            end_reason=end_reason,
         )
         trace.flush()
         delete_checkpoint(checkpoint_path)
@@ -467,6 +468,7 @@ def run_model_from_args(args: argparse.Namespace) -> dict[str, Any]:
             invalid_submissions=state.policy_state.invalid_submissions,
             low_similarity_submissions=state.policy_state.low_similarity_submissions,
             runtime_seconds=runtime_seconds,
+            end_reason=end_reason,
         )
 
     if not trace_events:
@@ -513,7 +515,7 @@ def run_model_from_args(args: argparse.Namespace) -> dict[str, Any]:
                 event_callback=lambda _event, turn: persist_state(turn),
             )
         )
-        return finish_run(result.submission)
+        return finish_run(result.submission, result.reason)
     except RuntimeError as exc:
         runtime_seconds = time.monotonic() - state.session_started_monotonic
         trace_events.append(
@@ -1637,10 +1639,12 @@ def _run_summary_fields(
     invalid_submissions: int,
     low_similarity_submissions: int,
     runtime_seconds: float,
+    end_reason: str,
 ) -> dict[str, Any]:
     """The fields the trace's ``run_summary`` event and the returned summary share."""
 
     return {
+        "end_reason": end_reason,
         "model": args.model,
         "provider": args.provider,
         "api_mode": args.api_mode,
@@ -1669,6 +1673,7 @@ def summarize_run(
     invalid_submissions: int,
     low_similarity_submissions: int,
     runtime_seconds: float,
+    end_reason: str,
 ) -> dict[str, Any]:
     """Build a run's summary; with ``--summary-output`` also write the evaluated summary CSV."""
 
@@ -1682,6 +1687,7 @@ def summarize_run(
             invalid_submissions=invalid_submissions,
             low_similarity_submissions=low_similarity_submissions,
             runtime_seconds=runtime_seconds,
+            end_reason=end_reason,
         ),
         "target_smiles": task["target_smiles"],
         "trace": str(trace_path),
@@ -1733,6 +1739,7 @@ def append_run_summary_event(
     runtime_seconds: float,
     invalid_submissions: int,
     low_similarity_submissions: int,
+    end_reason: str,
 ) -> None:
     """Append the closing ``run_summary`` event to the trace."""
 
@@ -1750,6 +1757,7 @@ def append_run_summary_event(
                     invalid_submissions=invalid_submissions,
                     low_similarity_submissions=low_similarity_submissions,
                     runtime_seconds=runtime_seconds,
+                    end_reason=end_reason,
                 ),
                 "started_at_unix": session_started_at,
                 "completed_at_unix": session_started_at + runtime_seconds,

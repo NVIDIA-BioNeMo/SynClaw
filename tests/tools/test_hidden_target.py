@@ -242,6 +242,8 @@ def test_hosted_run_records_the_hidden_target(
         hide_target=hide_target,
         similarity_threshold=args.hide_building_block_similarity,
     )
+    run_summary = next(e for e in events if e["event_type"] == "run_summary")
+    assert summary["end_reason"] and summary["end_reason"] == run_summary["payload"]["end_reason"]
     assert summary["target_hidden_from_stock"] is hide_target
     assert summary["hidden_building_block_ids"] == json.dumps(sorted(hidden_ids))
     with Path(args.summary_output).open() as handle:
