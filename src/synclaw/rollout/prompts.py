@@ -5,11 +5,27 @@
 
 from __future__ import annotations
 
+import hashlib
 from typing import Any
 
 from synclaw.rollout.budget import limit_sentences
 from synclaw.rollout.policy import RolloutPolicyConfig
-from synclaw.tasks.datasets import PROMPT_FINGERPRINT
+
+DEFAULT_PROMPT_TEMPLATE = "Target molecule: {target_smiles}"
+
+DEFAULT_SYSTEM_PROMPT = (
+    "You are performing synthesis planning. Return a proposed synthesis pathway for the exact "
+    "target when possible. If exact synthesis is not found, return the highest-similarity "
+    "analogue you can identify. Submit pathways with submit_pathway, which you may call more "
+    "than once; only your best accepted pathway counts. Each must either contain at least one "
+    "reaction step that the validator can reproduce, or a single valid building_block for "
+    "direct purchase."
+)
+
+# Stored on every task row, so a taskset built from older prompt text is refused.
+PROMPT_FINGERPRINT = hashlib.sha256(
+    "\0".join((DEFAULT_PROMPT_TEMPLATE, DEFAULT_SYSTEM_PROMPT)).encode("utf-8")
+).hexdigest()[:12]
 
 
 def require_current_prompt_text(task: dict[str, Any]) -> dict[str, Any]:

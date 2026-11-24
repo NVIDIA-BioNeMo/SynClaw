@@ -32,7 +32,7 @@ from synclaw.tasks.targets import (
     generate_targets,
     line_offsets,
     load_matrix_dir,
-    read_smiles_lines,
+    read_smiles_file,
 )
 
 # Blocks chosen to exercise each policy: a plain amine, an acid chloride, a nitroarene, a
@@ -82,7 +82,7 @@ def test_every_matrix_bit_is_a_substructure_match(catalog: Path, tmp_path: Path)
     loaded = load_matrix_dir(directory)
 
     smarts = [line.strip() for line in open(directory / REACTION_FILE) if line.strip()]
-    blocks = read_smiles_lines(directory / BUILDING_BLOCK_FILE)
+    blocks = read_smiles_file(directory / BUILDING_BLOCK_FILE)
     matrix = np.asarray(loaded.matrix)
 
     for column, template_smarts in enumerate(smarts):
@@ -173,7 +173,7 @@ def test_offsets_address_each_block_line(catalog: Path, tmp_path: Path) -> None:
     directory = tmp_path / "matrix"
     build(catalog, directory)
     path = directory / BUILDING_BLOCK_FILE
-    blocks = read_smiles_lines(path)
+    blocks = read_smiles_file(path)
     stored = np.load(directory / OFFSET_FILE)
     assert np.array_equal(stored, line_offsets(path, skip_header=True))
     raw = path.read_bytes()
@@ -272,3 +272,14 @@ def test_load_template_records_reports_a_missing_template_file(
     monkeypatch.setattr("synclaw.tasks.matrix.bundled_reaction_template_dir", lambda: tmp_path)
     with pytest.raises(FileNotFoundError, match="no template file for library 'synformer'"):
         load_template_records(["synformer"])
+
+
+@pytest.mark.parametrize("salt", ["[Na+].[Cl-]", "[Cl-].[Na+]", "CCO.O", "O.CC(=O)[O-].[K+]"])
+def test_build_matrix_and_emolecules_keep_the_same_major_component(salt):
+    from rdkit import Chem
+
+    from synclaw.tasks.matrix import _canonicalize, major_component
+
+    expected = Chem.MolToSmiles(major_component(Chem.MolFromSmiles(salt)))
+
+    assert _canonicalize(([salt], "major", "drop")) == [(expected, "ok")]

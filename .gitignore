@@ -18,5 +18,4 @@ artifacts/
 # Local or downloaded chemistry data; licensed catalogs must not be committed.
 data/building_blocks/*
 !data/building_blocks/common_reagent_building_blocks.txt
-data/reaction_templates/synformer_comprehensive.txt
 data/synformer_test_sets/*.txt
