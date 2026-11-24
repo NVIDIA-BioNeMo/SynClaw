@@ -11,6 +11,5 @@ commit `bef02bc4481adf3ed792090fc6169331d4d0553a`.
 Apache-2.0; the license terms are the Apache-2.0 terms in the project
 [LICENSE](../../../LICENSE). See also [THIRD_PARTY_NOTICES.md](../../../THIRD_PARTY_NOTICES.md).
 
-Names, families, descriptions, search terms, role queries and caveats are local
-interpretations of the SMARTS, not ground truth, and are hybrid human- and LLM-generated.
-Per-record metadata records source attribution.
+The annotations added in this repository are covered by the project
+[LICENSE](../../../LICENSE) (Apache-2.0). Per-record metadata records source attribution.

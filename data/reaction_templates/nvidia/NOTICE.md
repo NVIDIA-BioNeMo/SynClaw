@@ -11,9 +11,6 @@ exactly the template's. They illustrate each template; none was derived from the
 The templates and their annotations are covered by the project
 [LICENSE](../../../LICENSE) (Apache-2.0).
 
-Names, families, descriptions, search terms, role queries and caveats are local
-interpretations of the SMARTS, not ground truth, and are hybrid human- and LLM-generated.
-
 The table compares each template with the closest published template and
 summarizes its scope. Behavior was checked on reactions from Daniel Lowe's USPTO
 grants data (https://doi.org/10.6084/m9.figshare.5104873.v1). Published
