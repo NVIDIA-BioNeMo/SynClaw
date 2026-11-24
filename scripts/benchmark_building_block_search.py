@@ -156,7 +156,9 @@ def _benchmark_database(
     # Warm both modes so neither timing includes a one-time load (the fingerprint index for near).
     for query in queries[:warmup]:
         for include_near in (False, True):
-            tools.search_building_blocks(query, limit=limit, include_near=include_near)
+            tools.search_building_blocks(
+                query, limit=limit, include_near=include_near, min_similarity=min_similarity
+            )
     return {
         "path": str(path),
         "exact_only": _benchmark_mode(
