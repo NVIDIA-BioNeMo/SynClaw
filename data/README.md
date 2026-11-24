@@ -16,7 +16,9 @@ Download the public target lists (the SynFormer ChEMBL 1k set and the ReaSyn wat
 uv run synclaw download-public-data
 ```
 
-`--name` (repeatable) selects specific files: `synformer-chembl-1k`, `reasyn-mols-to-filter`.
+`--name` (repeatable) downloads only the named files: `synformer-chembl-1k` (the ChEMBL
+targets for `make-taskset`) or `reasyn-mols-to-filter` (the watchlist for the optional
+toxicity screen).
 
 For building-block catalogs, see the "Building-Block Catalogs" section of the top-level
 [README](../README.md).
