@@ -663,7 +663,7 @@ def test_a_rejected_submission_shows_no_similarity():
     assert "similarity to target" not in markdown
 
 
-def test_a_call_with_unparsable_arguments_shows_what_was_sent_and_that_it_did_not_run():
+def test_unparsable_call_shows_sent_arguments_and_not_run():
     renderer = _load_renderer()
     sent = {"query": "CCO", "limit": "ten"}
     events = [
