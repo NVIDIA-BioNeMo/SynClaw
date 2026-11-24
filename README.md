@@ -425,6 +425,7 @@ context warnings. A task's own budgets override the matching options below.
 | `--hide-target-building-block` | Treats the target as out of stock, to benchmark exact-match synthesis without the shortcut of buying it. Every building block scored as the target, including its tautomers and isomers of stereo it leaves open, is hidden from search, reverse-step grounding and submission. The model is not told. Other analogues, including stereoisomers that conflict with stereo the target specifies, can still be bought and are scored by similarity. |
 | `--hide-building-block-id ID` | Hides a catalog BB ID the same way. Repeatable, combines with target hiding, and IDs must exist in the database. |
 | `--hide-building-block-similarity CUTOFF` | Also hides every stock entry whose constitutional Morgan/Tanimoto similarity to the target is at or above the cutoff (0 to 1). Implies target hiding. |
+| `--request-timeout` | Seconds to wait for each model response, default 120. Reasoning models with a large output cap can need far longer. A timed-out request is retried up to `--retries` times (default 3); after that the run ends with a `run_error` event, which the trace report shows under Summary. Pass `--checkpoint PATH` to keep a checkpoint to resume from. |
 | `--summary-output` | Writes an evaluated CSV row after the run. |
 
 The trace records hidden building-block IDs, and summaries report `target_hidden_from_stock` and
