@@ -140,7 +140,7 @@ def _compact_submit_pathway(result: dict[str, Any]) -> dict[str, Any]:
     )
     if result.get("refused"):
         output["refused"] = True
-    output.update(_limited_issues(result))
+    output.update(_problems(result))
     if output.get("error_message"):
         output["error_message"] = _truncate(str(output["error_message"]), MAX_ERROR_MESSAGE_CHARS)
     final = result.get("final_smiles")
@@ -170,6 +170,7 @@ def _compact_simulate_reverse_reaction(result: dict[str, Any]) -> dict[str, Any]
             "product_smiles",
             "product_valid",
             "product_canonical_smiles",
+            "product_error",
             "reaction_executed",
             "candidate_count",
             "returned_candidate_count",
@@ -381,8 +382,7 @@ def _problems(result: dict[str, Any]) -> dict[str, Any]:
     output: dict[str, Any] = {}
     if result.get("valid") is False:
         output["valid"] = False
-    if result.get("issues"):
-        output["issues"] = result["issues"]
+    output.update(_limited_issues(result))
     for key in ("error", "retryable"):
         if result.get(key):
             output[key] = result[key]
@@ -418,7 +418,7 @@ def _generated_products(result: dict[str, Any]) -> dict[str, Any]:
     else:
         key, limit = "generated_products", MAX_RETURNED_PRODUCTS
     values = result.get(key)
-    if values is None:
+    if values is None or result.get("reaction_executed") is False:
         return {}
     output: dict[str, Any] = {key: _limit_list(values, limit)}
     count_key = (

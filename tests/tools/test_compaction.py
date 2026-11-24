@@ -567,3 +567,47 @@ def test_a_successful_simulation_omits_valid_and_empty_reactant_lists():
     )
 
     assert "valid" not in compact and "resolved_reactants" not in compact
+
+
+def test_a_simulation_that_never_ran_reports_no_products_from_a_real_tool_result(tmp_path):
+    from conftest import prepare_minimal_model_db
+
+    from synclaw.tools.synthesis import SynthesisTools
+
+    database = tmp_path / "x.sqlite"
+    prepare_minimal_model_db(database)
+    tools = SynthesisTools(database)
+
+    unknown_ref = compact_tool_result(
+        "simulate_reaction", tools.simulate_reaction("R001", ["BB:999999"])
+    )
+    bad_reaction = compact_tool_result(
+        "simulate_reaction", tools.simulate_reaction("NO-SUCH-ID", ["CO"])
+    )
+
+    assert unknown_ref["valid"] is False and "generated_products" not in unknown_ref
+    assert "generated_products" not in bad_reaction
+
+
+def test_a_rejected_submission_keeps_its_retry_hint():
+    from synclaw.rollout.policy import tool_argument_error
+
+    compact = compact_tool_result(
+        "submit_pathway", tool_argument_error("submit_pathway", "steps must be an array", {})
+    )
+
+    assert compact["retryable"] is True and compact["error"] == "invalid_tool_call"
+    assert compact["accepted"] is False
+
+
+def test_every_tool_caps_issues_and_a_reverse_product_error_is_explained():
+    issues = [f"issue {index}" for index in range(12)]
+
+    simulated = compact_tool_result("simulate_reaction", {"valid": False, "issues": issues})
+    reverse = compact_tool_result(
+        "simulate_reverse_reaction",
+        {"valid": False, "product_valid": False, "product_error": "unclosed ring"},
+    )
+
+    assert len(simulated["issues"]) == 8 and simulated["issue_count"] == 12
+    assert reverse["product_error"] == "unclosed ring"
