@@ -21,7 +21,8 @@ https://doi.org/10.6084/m9.figshare.5104873.v1.
 ## Changes made in this repository
 
 - Extracted a radius-1 template with reaction-utils 1.9.3 from each of 203
-  selected atom-mapped reactions, and removed duplicates.
+  selected atom-mapped reactions, and removed duplicates. A radius-1 template keeps the
+  atoms that change in the reaction plus the atoms bonded directly to them.
 - Repaired the SMARTS of seven templates. The extracted strings are kept in
   `metadata.smarts_revision`; see [SMARTS_REPAIRS.md](../SMARTS_REPAIRS.md).
 - Added names, families, descriptions, search terms, role queries, execution
