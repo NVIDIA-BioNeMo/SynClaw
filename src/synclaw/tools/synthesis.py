@@ -279,10 +279,7 @@ class SynthesisTools:
                     "resolved_reactants": resolved,
                     "product_smiles": product_smiles,
                     "product_matched": False if product_smiles else None,
-                    "generated_products": [],
-                    "generated_product_sets": [],
-                    "generated_product_count": 0,
-                    "generated_product_set_count": 0,
+                    "reaction_executed": False,
                 }
             result = reactions.simulate_reaction(
                 conn,
