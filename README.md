@@ -490,6 +490,7 @@ The server is named `bionemo-synclaw-server` and exposes `search_building_blocks
 `search_reaction_templates`, `similarity`, `mces`, `simulate_reaction`, `simulate_reverse_reaction`
 and `submit_pathway`. Use MCP when another agent or client owns the model loop. Use `run-model` when this
 package should own the hosted-model loop and write traces and results directly.
+The server is stateless: `submit_pathway` only validates, so the client keeps its own record of what it submitted.
 
 ## Results And Reports
 
