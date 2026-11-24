@@ -5,8 +5,10 @@ descriptions, planning notes and provenance records stored with them in
 `templates.jsonl`, are licensed under the Creative Commons
 Attribution-ShareAlike 4.0 International License (CC BY-SA 4.0):
 https://creativecommons.org/licenses/by-sa/4.0/legalcode. See [LICENSE](LICENSE).
-This license covers only this directory. The rest of BioNeMo-SynClaw is under the project
-[LICENSE](../../../LICENSE) (Apache-2.0) or the terms in the other NOTICE files.
+This license covers only this directory. Use of the other data in
+`data/reaction_templates/` is governed by the OpenMDW License Agreement, version 1.1
+([../LICENSE](../LICENSE)), and the BioNeMo-SynClaw code is under the project
+[LICENSE](../../../LICENSE) (Apache-2.0).
 
 ## Source
 
@@ -37,5 +39,3 @@ https://doi.org/10.6084/m9.figshare.5104873.v1.
   d10f8ecb013d3f7bc85abdf6a8c5da8a7dd992931c1fda5db14fbd764343bc4e). Running the
   same extraction on that file reproduces every template as originally extracted,
   before the seven repairs.
-
-These changes are not endorsed by ORD or the original authors.

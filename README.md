@@ -573,8 +573,10 @@ Contributions require a DCO sign-off (`git commit -s`); see [CONTRIBUTING.md](CO
 
 ## License
 
-BioNeMo-SynClaw is licensed under the [Apache License 2.0](LICENSE), except the reaction
-templates in `data/reaction_templates/ord/`, which are licensed under
+The BioNeMo-SynClaw code is licensed under the [Apache License 2.0](LICENSE). Use of the
+reaction-template data in `data/reaction_templates/` is governed by the
+[OpenMDW License Agreement, version 1.1](data/reaction_templates/LICENSE), except for the
+Open Reaction Database data in `data/reaction_templates/ord/`, which is governed by
 [CC BY-SA 4.0](data/reaction_templates/ord/LICENSE). Third-party data in this
 repository, including the reaction-template sources under `data/reaction_templates/`,
 and third-party dependencies are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

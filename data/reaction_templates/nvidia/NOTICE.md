@@ -8,8 +8,8 @@ file that the template reproduces: for each main reaction type, the first one in
 file whose recorded yield is at least 70% and whose atom-contributing reactants are
 exactly the template's. They illustrate each template; none was derived from them.
 
-The templates and their annotations are covered by the project
-[LICENSE](../../../LICENSE) (Apache-2.0).
+Use of the templates and their annotations is governed by the OpenMDW License
+Agreement, version 1.1; see [../LICENSE](../LICENSE).
 
 The table compares each template with the closest published template and
 summarizes its scope. Behavior was checked on reactions from Daniel Lowe's USPTO

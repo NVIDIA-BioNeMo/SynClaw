@@ -60,13 +60,12 @@ SMARTS-hash order and keeps the source ID as `metadata.source_id`; tools see onl
 ID. Every ORD record's `metadata.provenance` names its source patent and line in Lowe's USPTO
 grants file.
 
-Attribution and licenses are in [synformer/NOTICE.md](synformer/NOTICE.md),
-[paroutes/NOTICE.md](paroutes/NOTICE.md), [ord/NOTICE.md](ord/NOTICE.md), and
-[nvidia/NOTICE.md](nvidia/NOTICE.md). SynFormer templates, NVIDIA-authored templates,
-and locally authored annotations outside `ord/` are covered by the Apache-2.0
-text in the project [LICENSE](../../LICENSE). The ORD templates, including their
-annotations, come from Lowe's USPTO grants data as distributed by the Open Reaction
-Database and are licensed under CC BY-SA 4.0; see [ord/LICENSE](ord/LICENSE) and
-[ord/NOTICE.md](ord/NOTICE.md). [THIRD_PARTY_NOTICES.md](../../THIRD_PARTY_NOTICES.md)
-summarizes every source. These are computational planning templates;
-RDKit execution and stock grounding do not establish experimental feasibility.
+Licenses and attribution: [LICENSE](LICENSE), [ord/LICENSE](ord/LICENSE),
+[synformer/NOTICE.md](synformer/NOTICE.md), [paroutes/NOTICE.md](paroutes/NOTICE.md),
+[ord/NOTICE.md](ord/NOTICE.md), [nvidia/NOTICE.md](nvidia/NOTICE.md) and
+[THIRD_PARTY_NOTICES.md](../../THIRD_PARTY_NOTICES.md).
+
+These are computational planning templates; RDKit execution and stock grounding do not
+establish experimental feasibility.
+
+The dataset card for these templates is [DATASET_CARD.md](DATASET_CARD.md).

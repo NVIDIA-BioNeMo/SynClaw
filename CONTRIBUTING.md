@@ -1,7 +1,11 @@
 # Contributing to BioNeMo-SynClaw
 
 We welcome contributions. By submitting a contribution, you agree that it is
-licensed under the [Apache License 2.0](LICENSE) that covers this project.
+licensed under the terms that cover the files it changes: the
+[Apache License 2.0](LICENSE) for code, and
+[data/reaction_templates/LICENSE](data/reaction_templates/LICENSE) (or
+[data/reaction_templates/ord/LICENSE](data/reaction_templates/ord/LICENSE) for files under
+`ord/`) for reaction-template data.
 
 Before opening a pull request, run the lint and test suite:
 

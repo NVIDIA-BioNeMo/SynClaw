@@ -1,9 +1,9 @@
 # Third-Party Notices
 
-BioNeMo-SynClaw is licensed under the [Apache License 2.0](LICENSE), except the reaction
-templates in `data/reaction_templates/ord/`, which are licensed under CC BY-SA 4.0.
-This file lists the third-party material distributed in this repository and the
-third-party packages BioNeMo-SynClaw depends on. No third-party source code is vendored.
+Licensing for this repository is described in the License section of the
+[README](README.md#license). This file lists the third-party material distributed in this
+repository and the third-party packages BioNeMo-SynClaw depends on. No third-party source
+code is vendored.
 
 ## Data distributed in this repository
 
