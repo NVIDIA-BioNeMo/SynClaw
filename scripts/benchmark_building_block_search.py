@@ -16,7 +16,10 @@ from pathlib import Path
 from typing import Any
 
 from synclaw.core import db
+from synclaw.tools.contracts import TOOL_ARGUMENT_DEFAULTS
 from synclaw.tools.synthesis import SynthesisTools
+
+SEARCH_DEFAULTS = TOOL_ARGUMENT_DEFAULTS["search_building_blocks"]
 
 
 def parse_args() -> argparse.Namespace:
@@ -36,8 +39,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--queries", type=int, default=100)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--concurrency", type=int, default=1)
-    parser.add_argument("--limit", type=int, default=20)
-    parser.add_argument("--min-similarity", type=float, default=0.15)
+    parser.add_argument("--limit", type=int, default=SEARCH_DEFAULTS["limit"])
+    parser.add_argument("--min-similarity", type=float, default=SEARCH_DEFAULTS["min_similarity"])
     parser.add_argument("--warmup", type=int, default=5)
     parser.add_argument("--output", type=Path)
     return parser.parse_args()
