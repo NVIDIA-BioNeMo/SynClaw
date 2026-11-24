@@ -74,7 +74,7 @@ licenses. They are not distributed with BioNeMo-SynClaw.
 ## Data downloaded on demand
 
 `synclaw download-public-data` fetches SynFormer files and the ReaSyn watchlist
-(`data/mols_to_filter.txt`) from their respective public repositories, and
+(`var/safety/mols_to_filter.txt`) from their respective public repositories, and
 `synclaw prepare-emolecules-bbs` downloads the eMolecules catalog from
 downloads.emolecules.com. These files are not distributed with BioNeMo-SynClaw and remain under their
 providers' terms.
