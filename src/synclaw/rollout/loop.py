@@ -783,7 +783,8 @@ async def _append_harness_feedback(
     message = {"role": "user", "content": content}
     state.messages.append(message)
     transport.append_user(message)
-    await record(_message_event(message, task.target_smiles))
+    # Marked in the trace only; the message itself is what the model sees.
+    await record({**_message_event(message, task.target_smiles), "harness": True})
 
 
 async def _emit_budget_feedback(

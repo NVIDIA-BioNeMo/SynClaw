@@ -152,8 +152,10 @@ def _benchmark_database(
 ) -> dict[str, Any]:
     db.require_prepared_building_block_search(path)
     tools = SynthesisTools(path)
+    # Warm both modes so neither timing includes a one-time load (the fingerprint index for near).
     for query in queries[:warmup]:
-        tools.search_building_blocks(query, limit=limit, include_near=False)
+        for include_near in (False, True):
+            tools.search_building_blocks(query, limit=limit, include_near=include_near)
     return {
         "path": str(path),
         "exact_only": _benchmark_mode(

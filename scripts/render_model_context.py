@@ -22,18 +22,24 @@ from synclaw.rollout.prompts import build_initial_messages
 from synclaw.runners import model_runner
 from synclaw.tools.contracts import (
     filter_chat_tool_schemas,
+    filter_messages_tool_schemas,
     filter_responses_tool_schemas,
     normalize_excluded_tools,
     task_excluded_tools,
 )
 
-DEFAULT_TASKSET = Path("artifacts/tasksets/chembl_llm_tasks.jsonl")
+# The tool-schema shape each API mode sends, as the runner builds it.
+TOOL_SCHEMAS_BY_API_MODE = {
+    "chat": filter_chat_tool_schemas,
+    "responses": filter_responses_tool_schemas,
+    "messages": filter_messages_tool_schemas,
+}
 DEFAULT_OUTPUT_DIR = Path("artifacts/plots")
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--taskset", type=Path, default=DEFAULT_TASKSET)
+    parser.add_argument("--taskset", type=Path, default=Path(model_runner.DEFAULT_TASKSET))
     parser.add_argument("--task-index", type=int, default=0)
     parser.add_argument(
         "--db",
@@ -48,7 +54,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--api-mode",
-        choices=("chat", "responses"),
+        choices=tuple(TOOL_SCHEMAS_BY_API_MODE),
         default="chat",
         help="Tool-schema transport shape to render.",
     )
@@ -78,7 +84,7 @@ def main() -> int:
             api_mode=args.api_mode,
             exclude_tools=args.exclude_tool,
         )
-    except ValueError as exc:
+    except (OSError, ValueError, RuntimeError) as exc:
         parser.error(str(exc))
     output = args.output or default_output
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -111,9 +117,8 @@ def render_model_context(
             max_model_len=max_model_len,
         ),
     )
-    max_turns, max_tool_calls = budgets.max_turns, budgets.max_tool_calls
     messages = build_initial_messages(task=task, config=budgets)
-    tool_schemas = selected_tool_schemas(api_mode=api_mode, excluded_tools=excluded)
+    tool_schemas = TOOL_SCHEMAS_BY_API_MODE[api_mode](excluded)
     task_id = str(task.get("task_id") or f"task-{task_index:04d}")
     default_output = DEFAULT_OUTPUT_DIR / f"{slugify(task_id)}_model_context.md"
     markdown = render_markdown(
@@ -121,8 +126,7 @@ def render_model_context(
         taskset=taskset,
         task_index=task_index,
         db_path=resolved_db,
-        max_tool_calls=max_tool_calls,
-        max_turns=max_turns,
+        budgets=budgets,
         api_mode=api_mode,
         excluded_tools=excluded,
         messages=messages,
@@ -131,23 +135,16 @@ def render_model_context(
     return markdown, default_output
 
 
-def selected_tool_schemas(api_mode: str, excluded_tools: set[str]) -> list[dict[str, Any]]:
-    if api_mode == "responses":
-        return filter_responses_tool_schemas(excluded_tools)
-    return filter_chat_tool_schemas(excluded_tools)
-
-
 def render_markdown(
     task: dict[str, Any],
     taskset: Path,
     task_index: int,
     db_path: Path,
-    max_tool_calls: int,
+    budgets: RolloutPolicyConfig,
     api_mode: str,
     excluded_tools: set[str],
     messages: list[dict[str, Any]],
     tool_schemas: list[dict[str, Any]],
-    max_turns: int = DEFAULT_MAX_TURNS,
 ) -> str:
     lines: list[str] = [
         f"# Model Context: {task.get('task_id', f'task-{task_index:04d}')}",
@@ -164,8 +161,11 @@ def render_markdown(
         f"- Database: `{db_path}`",
         f"- Target SMILES: `{task.get('target_smiles', '')}`",
         f"- API mode rendered: `{api_mode}`",
-        f"- Max tool calls instruction: `{max_tool_calls}`",
-        f"- Max assistant turns instruction: `{max_turns}`",
+        # A task's "inf" budget is unlimited: no turn cap is None, no tool-call cap is 0.
+        f"- Max tool calls: `{budgets.max_tool_calls or 'unlimited'}`",
+        f"- Max assistant turns: `{budgets.max_turns or 'unlimited'}`",
+        f"- Max output tokens per response: `{budgets.max_tokens or 'unlimited'}`",
+        f"- Context limit stated to the model: `{budgets.stated_max_model_len or 'none'}`",
         f"- Excluded tools: `{', '.join(sorted(excluded_tools)) if excluded_tools else 'none'}`",
         "",
         "## Messages",
