@@ -14,7 +14,7 @@ template files themselves are read from a source checkout.
 | SynFormer | 114 |
 | PaRoutes | 176 |
 | ORD | 203 |
-| Project-authored (`nvidia`) | 8 |
+| NVIDIA-authored (`nvidia`) | 8 |
 
 No SMARTS appears in more than one source.
 
@@ -62,7 +62,7 @@ grants file.
 
 Attribution and licenses are in [synformer/NOTICE.md](synformer/NOTICE.md),
 [paroutes/NOTICE.md](paroutes/NOTICE.md), [ord/NOTICE.md](ord/NOTICE.md), and
-[nvidia/NOTICE.md](nvidia/NOTICE.md). SynFormer templates, project-authored templates,
+[nvidia/NOTICE.md](nvidia/NOTICE.md). SynFormer templates, NVIDIA-authored templates,
 and locally authored annotations outside `ord/` are covered by the Apache-2.0
 text in the project [LICENSE](../../LICENSE). The ORD templates, including their
 annotations, come from Lowe's USPTO grants data as distributed by the Open Reaction

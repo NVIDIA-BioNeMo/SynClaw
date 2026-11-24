@@ -157,9 +157,9 @@ planning runs only across stocks built the same way.
 ## Reaction Templates
 
 The bundled catalog is the union of four sources: SynFormer (114 templates), PaRoutes (176),
-the Open Reaction Database (ORD, 203) and project-authored templates (`nvidia`, 8). It holds
+the Open Reaction Database (ORD, 203) and NVIDIA (`nvidia`, 8). It holds
 **501 unique reactions**, and no SMARTS appears in more than one source. The `nvidia`
-templates are generic ones authored for this project. See the [catalog README](data/reaction_templates/README.md) for composition,
+templates are generic ones written at NVIDIA. See the [catalog README](data/reaction_templates/README.md) for composition,
 template IDs, attribution and the provenance recorded for each template.
 
 `synclaw ingest-reactions --db var/synclaw.sqlite` installs the bundled catalog. It replaces each

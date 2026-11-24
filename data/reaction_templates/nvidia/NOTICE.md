@@ -1,6 +1,6 @@
-# Project-authored (`nvidia`) reaction templates (8 templates)
+# NVIDIA-authored reaction templates (8 templates)
 
-Generic templates for common transformations, authored for this project rather than
+Generic templates for common transformations, written at NVIDIA rather than
 extracted from reaction records. Each record's `metadata.provenance` starts with
 `{"source_id": "nvidia-authored"}`. The remaining entries, marked
 `"relation": "example"`, cite one to five recorded reactions in Lowe's USPTO grants
