@@ -71,11 +71,10 @@ def test_shipped_presets() -> None:
         "anthropic": ("messages", "https://api.anthropic.com/v1/messages", "ANTHROPIC_API_KEY"),
         "openrouter": ("chat", "https://openrouter.ai/api/v1", "OPENROUTER_API_KEY"),
     }
-    field_for_mode = {"chat": "base_url", "responses": "responses_url", "messages": "messages_url"}
     for name, (api_mode, endpoint, key_env) in expected.items():
         preset = config.preset(name)
         assert preset.api_mode == api_mode, name
-        assert getattr(preset, field_for_mode[api_mode]) == endpoint, name
+        assert getattr(preset, providers.ENDPOINT_FIELD_BY_API_MODE[api_mode]) == endpoint, name
         assert preset.api_key_envs[0] == key_env, name
 
     custom = config.preset("custom")
@@ -276,3 +275,30 @@ def test_a_keyless_request_sends_no_credential_header() -> None:
     headers = _sent_headers(None, None)
     assert "authorization" not in headers
     assert "x-api-key" not in headers
+
+
+def test_left_out_preset_fields_take_their_defaults(tmp_path) -> None:
+    path = tmp_path / "providers.json"
+    path.write_text(json.dumps({"default_provider": "x", "providers": {"x": {"api_mode": "chat"}}}))
+
+    preset = providers.load_provider_config(path).preset("x")
+
+    assert all(getattr(preset, field) == "" for field in providers.ENDPOINT_FIELDS)
+    assert preset.responses_state_mode == "previous_id"
+    assert preset.api_key_envs == ()
+
+
+@pytest.mark.parametrize(
+    ("entry", "message"),
+    [
+        ({}, "api_mode must be one of"),
+        ({"api_mode": "completions"}, "api_mode must be one of"),
+        ({"api_mode": "responses", "responses_state_mode": "stored"}, "responses_state_mode"),
+    ],
+)
+def test_a_bad_preset_is_reported_when_the_table_loads(tmp_path, entry, message) -> None:
+    path = tmp_path / "providers.json"
+    path.write_text(json.dumps({"default_provider": "x", "providers": {"x": entry}}))
+
+    with pytest.raises(RuntimeError, match=f"Provider 'x'.*{message}"):
+        providers.load_provider_config(path)

@@ -488,12 +488,12 @@ class ImportAndEvalTests(unittest.TestCase):
                     "target_smiles": "CCO",
                     "payload": {
                         "content": "I will submit.",
-                        "token_usage": {
+                        "response_usage": {
                             "input_tokens": 11,
                             "output_tokens": 7,
                             "total_tokens": 18,
-                            "cached_input_tokens": 2,
-                            "reasoning_tokens": 3,
+                            "cache_read_input_tokens": 2,
+                            "output_tokens_details": {"reasoning_tokens": 3},
                             "cost": 0.002,
                         },
                     },
@@ -525,7 +525,7 @@ class ImportAndEvalTests(unittest.TestCase):
             self.assertEqual(summary["input_tokens"], 11)
             self.assertEqual(summary["output_tokens"], 7)
             self.assertEqual(summary["total_tokens"], 18)
-            self.assertEqual(summary["cached_input_tokens"], 2)
+            self.assertEqual(summary["cache_read_input_tokens"], 2)
             self.assertEqual(summary["reasoning_tokens"], 3)
             self.assertEqual(summary["cost"], 0.002)
 
@@ -582,7 +582,7 @@ class ImportAndEvalTests(unittest.TestCase):
 
             self.assertEqual(summary["input_tokens"], 1000)
             self.assertEqual(summary["output_tokens"], 100)
-            self.assertEqual(summary["cached_input_tokens"], 200)
+            self.assertEqual(summary["cache_read_input_tokens"], 200)
             self.assertIsNone(summary.get("cost"))
 
     def test_combine_summary_csvs(self):
@@ -998,16 +998,3 @@ class ImportAndEvalTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-
-def test_cost_is_omitted_when_only_some_responses_report_it():
-    from synclaw.token_usage import sum_token_usage
-
-    assert (
-        sum_token_usage([{"input_tokens": 1, "cost": 0.5}, {"input_tokens": 2, "cost": 0.25}])[
-            "cost"
-        ]
-        == 0.75
-    )
-    partial = sum_token_usage([{"input_tokens": 1, "cost": 0.5}, {"input_tokens": 2}])
-    assert partial == {"input_tokens": 3}

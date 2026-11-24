@@ -47,24 +47,11 @@ ANTHROPIC_VERSION = "2023-06-01"
 
 
 def attach_response_usage(message: dict[str, Any], response: dict[str, Any]) -> None:
-    """Copy a response's usage onto the message, with normalized counts and whether the output cap was hit."""
+    """Keep a response's provider-reported usage on the message; readers normalize it."""
 
     usage = response.get("usage")
-    if not isinstance(usage, dict):
-        return
-    message["response_usage"] = usage
-    normalized = token_usage.normalize_token_usage(usage)
-    if normalized:
-        message["token_usage"] = normalized
-        max_output_tokens = token_usage.int_or_none(
-            response.get("max_output_tokens", response.get("max_tokens"))
-        )
-        output_tokens = normalized.get("output_tokens")
-        if max_output_tokens is not None:
-            message["max_output_tokens"] = max_output_tokens
-            message["hit_max_output_tokens"] = (
-                isinstance(output_tokens, int) and output_tokens >= max_output_tokens
-            )
+    if isinstance(usage, dict):
+        message["response_usage"] = usage
 
 
 def retry_delay_seconds(attempt: int, body: str = "", headers: Any = None) -> float:
@@ -118,7 +105,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--model", required=True, help="Model ID as the provider names it")
     parser.add_argument(
         "--api-mode",
-        choices=("chat", "responses", "messages"),
+        choices=tuple(providers.ENDPOINT_FIELD_BY_API_MODE),
         help="Override the provider preset's API: Chat Completions, Responses, or Messages",
     )
     parser.add_argument("--base-url", help="Chat-completions API base URL")
@@ -132,7 +119,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--responses-state-mode",
-        choices=("previous_id", "full"),
+        choices=providers.RESPONSES_STATE_MODES,
         help=(
             "Use previous_response_id continuations or resend full Responses input history; "
             "defaults to the provider preset"
@@ -1050,13 +1037,6 @@ def apply_provider_defaults(args: argparse.Namespace) -> None:
     normalize_reasoning_effort(args)
 
 
-_ENDPOINT_FOR_API_MODE = {
-    "chat": ("base_url", "--base-url"),
-    "responses": ("responses_url", "--responses-url"),
-    "messages": ("messages_url", "--messages-url"),
-}
-
-
 def require_endpoint(args: argparse.Namespace) -> None:
     """Fail before any work when the selected API mode has no endpoint.
 
@@ -1064,19 +1044,19 @@ def require_endpoint(args: argparse.Namespace) -> None:
     without this check the first request fails with an opaque URL error.
     """
 
-    field, flag = _ENDPOINT_FOR_API_MODE.get(args.api_mode, ("base_url", "--base-url"))
+    field = providers.ENDPOINT_FIELD_BY_API_MODE[args.api_mode]
     if getattr(args, field, None):
         return
     raise RuntimeError(
         f"No {field} is configured for provider {args.provider!r} ({args.api_mode} API); "
-        f"pass {flag}"
+        f"pass --{field.replace('_', '-')}"
     )
 
 
 def uses_preset_endpoint(args: argparse.Namespace) -> bool:
     """Whether the selected API mode still targets the provider preset's own endpoint."""
 
-    field, _ = _ENDPOINT_FOR_API_MODE.get(args.api_mode, ("base_url", "--base-url"))
+    field = providers.ENDPOINT_FIELD_BY_API_MODE[args.api_mode]
     preset = providers.load_provider_config().preset(args.provider)
     return getattr(args, field, None) == getattr(preset, field)
 
@@ -1206,7 +1186,7 @@ def chat_completion(
     return _post_json(
         f"{base_url.rstrip('/')}/chat/completions",
         payload,
-        providers.auth_headers(api_key, auth_header or "bearer"),
+        providers.auth_headers(api_key, auth_header or providers.default_auth_header("chat")),
         api_name="Chat Completions",
         retries=retries,
         request_timeout=request_timeout,
@@ -1307,7 +1287,9 @@ def anthropic_completion(
         messages_url,
         payload,
         {
-            **providers.auth_headers(api_key, auth_header or "x-api-key"),
+            **providers.auth_headers(
+                api_key, auth_header or providers.default_auth_header("messages")
+            ),
             "anthropic-version": ANTHROPIC_VERSION,
         },
         api_name="Messages",
@@ -1358,7 +1340,7 @@ def responses_completion(
     return _post_json(
         responses_url,
         payload,
-        providers.auth_headers(api_key, auth_header or "bearer"),
+        providers.auth_headers(api_key, auth_header or providers.default_auth_header("responses")),
         api_name="Responses",
         retries=retries,
         request_timeout=request_timeout,

@@ -40,6 +40,7 @@ from synclaw.runners.model_runner import (
     run_model_from_args,
 )
 from synclaw.tasks.datasets import PROMPT_FINGERPRINT, build_adhoc_task, build_llm_task
+from synclaw.token_usage import usage_from_payload
 
 
 def _hosted_transport(api_mode: str, **state):
@@ -919,7 +920,7 @@ class ModelRunnerTests(unittest.TestCase):
 
         self.assertEqual(message["content"], "I will search.")
         self.assertEqual(message["anthropic_stop_reason"], "tool_use")
-        self.assertEqual(message["token_usage"]["reasoning_tokens"], 2)
+        self.assertEqual(usage_from_payload(message)["reasoning_tokens"], 2)
         self.assertEqual(message["tool_calls"][0]["id"], "toolu_123")
         self.assertEqual(message["tool_calls"][0]["function"]["name"], "search_building_blocks")
         self.assertEqual(
@@ -1484,38 +1485,19 @@ class ModelRunnerTests(unittest.TestCase):
 
         message = responses_to_chat_message(response)
 
-        self.assertEqual(message["response_usage"]["total_tokens"], 15)
+        self.assertEqual(message["response_usage"], response["usage"])
         self.assertEqual(
-            message["token_usage"],
+            usage_from_payload(message),
             {
                 "input_tokens": 10,
                 "output_tokens": 5,
                 "total_tokens": 15,
-                "cached_input_tokens": 3,
                 "cache_creation_input_tokens": 7,
                 "cache_read_input_tokens": 3,
                 "reasoning_tokens": 2,
                 "cost": 0.001,
             },
         )
-
-    def test_responses_parser_marks_max_output_token_hit(self):
-        response = {
-            "id": "resp-test",
-            "status": "completed",
-            "max_output_tokens": 16,
-            "usage": {
-                "input_tokens": 10,
-                "output_tokens": 16,
-                "total_tokens": 26,
-            },
-            "output": [{"type": "reasoning", "summary": []}],
-        }
-
-        message = responses_to_chat_message(response)
-
-        self.assertEqual(message["max_output_tokens"], 16)
-        self.assertTrue(message["hit_max_output_tokens"])
 
     def test_responses_transport_propagates_incomplete_output_limit(self):
         transport = _hosted_transport("responses")
@@ -1555,8 +1537,8 @@ class ModelRunnerTests(unittest.TestCase):
         message = responses_to_chat_message(response)
 
         self.assertEqual(message["response_usage"]["cost"], None)
-        self.assertEqual(message["token_usage"]["cached_input_tokens"], 200)
-        self.assertNotIn("cost", message["token_usage"])
+        self.assertEqual(usage_from_payload(message)["cache_read_input_tokens"], 200)
+        self.assertNotIn("cost", usage_from_payload(message))
 
     def test_model_runner_defers_repair_until_after_all_tool_outputs(self):
         import argparse
