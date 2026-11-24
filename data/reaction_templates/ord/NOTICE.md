@@ -39,5 +39,3 @@ https://doi.org/10.6084/m9.figshare.5104873.v1.
   d10f8ecb013d3f7bc85abdf6a8c5da8a7dd992931c1fda5db14fbd764343bc4e). Running the
   same extraction on that file reproduces every template as originally extracted,
   before the seven repairs.
-
-These changes are not endorsed by ORD or the original authors.
