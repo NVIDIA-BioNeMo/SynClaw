@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import json
 import os
 import shutil
 import signal
@@ -141,11 +142,26 @@ def test_mcp_tool_schemas_remain_public_and_wrappers_are_async(
         contract = contracts[tool.name]
         parameters = inspect.signature(tool.fn).parameters
         assert list(parameters) == list(contract["properties"]), tool.name
-        required = set(contract.get("required") or ())
-        for key, parameter in parameters.items():
-            # Optional arguments default to "not given", so the contract's own default applies.
-            expected = inspect.Parameter.empty if key in required else None
-            assert parameter.default is expected, (tool.name, key)
+        # MCP does not validate: every argument defaults to "not given", so the contract's own
+        # default applies and call_local_tool rejects what is missing or malformed.
+        assert all(parameter.default is None for parameter in parameters.values()), tool.name
+
+
+def test_a_malformed_call_returns_the_loops_error_result_flagged_as_an_error(
+    tmp_path: Path, bundled_db: Path
+) -> None:
+    database = Path(shutil.copy(bundled_db, tmp_path / "synclaw.sqlite"))
+    db.prepare_building_block_search(database)
+    server = create_server(database, use_process_pool=False)
+
+    for name, arguments in [
+        ("similarity", {"smiles_a": "CCO"}),
+        ("search_building_blocks", {"query": "CCO", "limit": "ten"}),
+        ("search_building_blocks", {"query": "not-a-smiles"}),
+    ]:
+        result = asyncio.run(server.call_tool(name, arguments))
+        assert result.is_error, (name, arguments)
+        assert json.loads(result.content[0].text)["error"] == "invalid_tool_call"
 
 
 def test_an_omitted_argument_reaches_the_tool_with_the_contract_default(

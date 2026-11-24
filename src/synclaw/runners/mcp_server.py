@@ -7,11 +7,9 @@ from __future__ import annotations
 
 import asyncio
 import atexit
-import functools
 import inspect
 import json
 import multiprocessing
-import operator
 import os
 import queue
 import sys
@@ -41,14 +39,6 @@ MAX_RETAINED_TOOL_CALLS = 2048
 PROCESS_POOL_STARTUP_TIMEOUT_SECONDS = 120.0
 
 _WORKER_TOOLS: SynthesisTools | None = None
-# The Python type MCP validates each JSON Schema type in a tool contract against.
-_JSON_TYPES: dict[str, type] = {
-    "string": str,
-    "integer": int,
-    "number": float,
-    "boolean": bool,
-    "object": dict,
-}
 
 
 class ToolWorkerPoolBroken(RuntimeError):
@@ -329,45 +319,38 @@ class AsyncToolExecutor:
                 raise self._replace_broken_pool(pool, exc) from exc
 
 
-def _annotation(schema: dict[str, Any]) -> Any:
-    """The Python type MCP validates a tool-contract property against."""
-
-    if "anyOf" in schema:
-        return functools.reduce(operator.or_, (_annotation(option) for option in schema["anyOf"]))
-    if schema["type"] == "array":
-        return list[_annotation(schema["items"])]
-    return _JSON_TYPES[schema["type"]]
-
-
 def _register_tool(
     server: MCPServer, executor: AsyncToolExecutor, function: dict[str, Any]
 ) -> None:
-    """Register one contract tool, taking its arguments and defaults from the contract alone."""
+    """Register one contract tool, taking its arguments and defaults from the contract alone.
+
+    MCP does not validate the arguments: every parameter is untyped and optional here, and
+    ``call_local_tool`` rejects a bad call with the same ``invalid_tool_call`` result the rollout
+    loop returns, which the client receives flagged as an error.
+    """
+
+    from mcp_types import CallToolResult, TextContent
 
     name = function["name"]
-    parameters = function["parameters"]
-    required = set(parameters.get("required") or ())
 
-    async def call(**arguments: Any) -> dict:
+    async def call(**arguments: Any) -> Any:
         # An omitted optional argument arrives as None; the contract default takes its place, so a
         # call that spells out a default shares its result with one that leaves it out.
         given = {key: value for key, value in arguments.items() if value is not None}
-        return await executor.execute(name, **{**TOOL_ARGUMENT_DEFAULTS.get(name, {}), **given})
+        result = await executor.execute(name, **{**TOOL_ARGUMENT_DEFAULTS.get(name, {}), **given})
+        if result.get("error") == "invalid_tool_call":
+            return CallToolResult(
+                content=[TextContent(type="text", text=json.dumps(result, indent=2))], is_error=True
+            )
+        return result
 
     call.__name__ = call.__qualname__ = name
     call.__signature__ = inspect.Signature(  # type: ignore[attr-defined]
         [
-            inspect.Parameter(key, inspect.Parameter.KEYWORD_ONLY, annotation=_annotation(schema))
-            if key in required
-            else inspect.Parameter(
-                key,
-                inspect.Parameter.KEYWORD_ONLY,
-                annotation=_annotation(schema) | None,
-                default=None,
-            )
-            for key, schema in parameters["properties"].items()
+            inspect.Parameter(key, inspect.Parameter.KEYWORD_ONLY, annotation=Any, default=None)
+            for key in function["parameters"]["properties"]
         ],
-        return_annotation=dict,
+        return_annotation=Any,
     )
     server.tool(name=name, description=function["description"])(call)
 
