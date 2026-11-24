@@ -532,6 +532,9 @@ def run_model_from_args(args: argparse.Namespace) -> dict[str, Any]:
             },
         )
         persist_state(checkpoint_next_turn_index)
+        # A failed run still gets its row (``run_success`` false, with the error), so a batch
+        # shows it instead of silently shrinking; a retry to the same path replaces it.
+        write_summary_row(args, policy_config, task, trace_path, trace_events)
         if checkpoint_path is not None:
             raise RuntimeError(f"{exc} Checkpoint saved to {checkpoint_path}") from exc
         raise
@@ -1701,26 +1704,41 @@ def summarize_run(
         ),
         **hidden_target_summary_fields(trace_events),
     }
-    summary_output = getattr(args, "summary_output", None)
-    if summary_output:
-        from synclaw.evaluation.evaluate import evaluate_trace_file, write_summary_csv
-
-        evaluated = evaluate_trace_file(
-            trace_path,
-            db_path=args.db,
-            model=args.model,
-            prompt_version=getattr(args, "prompt_version", None),
-            target_smiles=task["target_smiles"],
-            tool_config={
-                "trace_file": str(trace_path),
-                "stop_condition": config.stop_condition,
-                "toxicity_screen": summary["toxicity_screen"],
-            },
-        )
-        write_summary_csv([evaluated], summary_output)
-        summary["summary_output"] = summary_output
+    evaluated = write_summary_row(args, config, task, trace_path, trace_events)
+    if evaluated is not None:
+        summary["summary_output"] = args.summary_output
         summary["evaluation_summary"] = evaluated
     return summary
+
+
+def write_summary_row(
+    args: argparse.Namespace,
+    config: policy.RolloutPolicyConfig,
+    task: dict[str, Any],
+    trace_path: Path,
+    trace_events: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    """With ``--summary-output``, score the trace and write its one-row results CSV."""
+
+    summary_output = getattr(args, "summary_output", None)
+    if not summary_output:
+        return None
+    from synclaw.evaluation.evaluate import evaluate_trace_file, write_summary_csv
+
+    evaluated = evaluate_trace_file(
+        trace_path,
+        db_path=args.db,
+        model=args.model,
+        prompt_version=getattr(args, "prompt_version", None),
+        target_smiles=task["target_smiles"],
+        tool_config={
+            "trace_file": str(trace_path),
+            "stop_condition": config.stop_condition,
+            "toxicity_screen": toxicity_summary(args, trace_events)["toxicity_screen"],
+        },
+    )
+    write_summary_csv([evaluated], summary_output)
+    return evaluated
 
 
 def toxicity_summary(args: argparse.Namespace, events: list[dict[str, Any]]) -> dict[str, Any]:

@@ -385,3 +385,60 @@ def test_hidden_ids_cover_open_stereo_isomers_and_unmerged_tautomers(tmp_path: P
     assert _tools(path, "O=C1CCC(F)C(Cl)C1").hidden_building_block_ids == {8}
     # A wildcard target has no InChI, so only an entry with its exact SMILES is hidden.
     assert _tools(path, "*CC").hidden_building_block_ids == frozenset()
+
+
+def test_a_failed_hosted_run_writes_a_failed_row_that_a_retry_replaces(
+    tmp_path: Path, db_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    taskset = tmp_path / "tasks.jsonl"
+    taskset.write_text(
+        json.dumps(
+            {
+                "task_id": "fixture",
+                "target_smiles": TARGET,
+                "system_prompt": "Plan syntheses.",
+                "question": "Make the target.",
+                "prompt_fingerprint": PROMPT_FINGERPRINT,
+            }
+        )
+        + "\n"
+    )
+    parser = argparse.ArgumentParser()
+    model_runner.add_arguments(parser)
+    args = parser.parse_args(
+        [
+            "--model", "fixture", "--api-mode", "chat", "--taskset", str(taskset),
+            "--db", str(db_path), "--trace", str(tmp_path / "trace.jsonl"),
+            "--summary-output", str(tmp_path / "summary.csv"), "--max-turns", "1",
+        ]
+    )  # fmt: skip
+    monkeypatch.setattr(model_runner, "resolve_api_key", lambda *args, **kwargs: "fixture-key")
+    monkeypatch.setattr(
+        model_runner.db, "validate_model_run_database", lambda *args, **kwargs: None
+    )
+
+    def timed_out(**kwargs):
+        raise RuntimeError("Chat Completions API request timed out or failed: read timed out")
+
+    monkeypatch.setattr(model_runner, "chat_completion", timed_out)
+    with pytest.raises(RuntimeError, match="timed out"):
+        model_runner.run_model_from_args(args)
+    with (tmp_path / "summary.csv").open() as handle:
+        row = next(csv.DictReader(handle))
+    assert row["run_success"] == "False"
+    assert "read timed out" in row["run_error"]
+
+    monkeypatch.setattr(
+        model_runner,
+        "chat_completion",
+        lambda **kwargs: {
+            "choices": [
+                {"message": {"role": "assistant", "content": "Done."}, "finish_reason": "stop"}
+            ]
+        },
+    )
+    model_runner.run_model_from_args(args)
+    with (tmp_path / "summary.csv").open() as handle:
+        rows = list(csv.DictReader(handle))
+    assert len(rows) == 1
+    assert rows[0]["run_error"] == ""

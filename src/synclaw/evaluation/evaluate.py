@@ -100,7 +100,17 @@ def evaluate_trace_file(
         similarity_floor,
         identical_to_target=identical_to_target,
     )
-    run_success = accepted is True
+    run_error = next(
+        (
+            (event.get("payload") or {}).get("error_message")
+            for event in events
+            if event.get("event_type") == "run_error"
+        ),
+        None,
+    )
+    # A run that died after an accepted partial answer keeps that answer's columns, but did
+    # not succeed.
+    run_success = accepted is True and run_error is None
 
     summary = {
         "trace_file": str(path),
@@ -121,6 +131,7 @@ def evaluate_trace_file(
         "similarity_floor": similarity_floor,
         "meets_similarity_floor": meets_similarity_floor,
         "run_success": run_success,
+        "run_error": run_error,
         "has_final_submission": bool(final),
         "has_pathway_text": bool(final.get("pathway_text")),
         "similarity_to_target": similarity_to_target,
@@ -385,6 +396,7 @@ def write_summary_csv(summaries: list[dict[str, Any]], output_path: str | Path) 
         "similarity_floor",
         "meets_similarity_floor",
         "run_success",
+        "run_error",
         "has_final_submission",
         "has_pathway_text",
         "similarity_to_target",
