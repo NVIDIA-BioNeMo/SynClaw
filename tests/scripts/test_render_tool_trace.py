@@ -34,6 +34,7 @@ def test_report_shows_budget_snapshots_separately_from_billing_and_feedback():
         {
             "event_type": "token_budget",
             "payload": {
+                "content": reminder,
                 "turn_index": 0,
                 "context_window_tokens": 1_050_000,
                 "input_tokens": 10_000,
@@ -67,7 +68,7 @@ def test_report_shows_budget_snapshots_separately_from_billing_and_feedback():
     assert "| 2 | 1,050,000 | — | — | 32,768 |" in markdown
     assert "- Token usage:" not in markdown
     assert "## Harness Interventions" in markdown
-    assert f"- {reminder}" in markdown
+    assert markdown.count(f"- {reminder}") == 1
     assert renderer.render_harness_interventions(
         [
             {
@@ -660,3 +661,34 @@ def test_a_rejected_submission_shows_no_similarity():
     markdown = renderer.render_trace(events, trace_path=Path("trace.jsonl"))
 
     assert "similarity to target" not in markdown
+
+
+def test_unparsable_call_shows_sent_arguments_and_not_run():
+    renderer = _load_renderer()
+    sent = {"query": "CCO", "limit": "ten"}
+    events = [
+        {
+            "event_type": "tool_call",
+            "tool_name": "search_building_blocks",
+            "payload": {
+                "arguments": sent,
+                "dispatch_arguments": {"query": None, "limit": 10, "include_near": True},
+                "argument_error": "limit must be an integer",
+            },
+        },
+        {
+            "event_type": "tool_result",
+            "tool_name": "search_building_blocks",
+            "payload": {
+                "result": {
+                    "valid": False,
+                    "error": "invalid_tool_call",
+                    "issues": ["limit must be an integer"],
+                }
+            },
+        },
+    ]
+    markdown = renderer.render_trace(events, trace_path=Path("trace.jsonl"))
+    assert "- Query: `CCO`" in markdown
+    assert "**Result:** not run (invalid tool call)" in markdown
+    assert '- Issues: `["limit must be an integer"]`' in markdown

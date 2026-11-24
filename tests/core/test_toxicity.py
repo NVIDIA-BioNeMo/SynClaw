@@ -50,6 +50,52 @@ def test_screen_normalises_whitespace_and_ignores_non_strings() -> None:
     assert screen.check([("target", 123), ("target", ["C=O"])]) is None
 
 
+def test_screen_audit_only_counts_molecules_that_were_compared() -> None:
+    screen = toxicity.ToxicityScreen()
+
+    assert screen.screen_target("invalid") is None
+    block = screen.check([("product", "invalid"), ("product", "CCN"), ("product", FLAGGED)])
+    assert block["screened"] == ["CCN", FLAGGED]
+    assert [item["smiles"] for item in block["refused"]] == [FLAGGED]
+
+
+def test_new_screen_loads_the_current_watchlist(tmp_path: Path) -> None:
+    path = tmp_path / "custom.txt"
+    config = toxicity.ToxicityConfig(mode="on", watchlist=path)
+    path.write_text("CCO\n")
+    first = toxicity.ToxicityScreen(config)
+    path.write_text("CCN\n")
+    second = toxicity.ToxicityScreen(config)
+    molecules = [("target", "CCO"), ("product", "CCN")]
+
+    assert [item["smiles"] for item in first.check(molecules)["refused"]] == ["CCO"]
+    assert [item["smiles"] for item in second.check(molecules)["refused"]] == ["CCN"]
+    path.write_text("SMILES\ninvalid\n")
+    with pytest.raises(toxicity.WatchlistUnavailable, match="no valid SMILES"):
+        toxicity.ToxicityScreen(config)
+    path.unlink()
+    with pytest.raises(toxicity.WatchlistUnavailable, match="download-public-data"):
+        toxicity.ToxicityScreen(config)
+
+
+def test_screens_built_from_an_unchanged_watchlist_parse_it_once(
+    tmp_path: Path, monkeypatch
+) -> None:
+    path = tmp_path / "unchanged.txt"
+    path.write_text("CCOCC\nCCNCC\n")
+    config = toxicity.ToxicityConfig(mode="on", watchlist=path)
+    parsed = []
+    real = toxicity._fingerprint
+    monkeypatch.setattr(
+        toxicity, "_fingerprint", lambda smiles: parsed.append(smiles) or real(smiles)
+    )
+
+    toxicity.ToxicityScreen(config)
+    toxicity.ToxicityScreen(config)
+
+    assert parsed == ["CCOCC", "CCNCC"]
+
+
 def test_screen_is_opt_in_and_requires_a_watchlist_only_when_enabled(monkeypatch) -> None:
     monkeypatch.delenv(toxicity.ENV_MODE)
     monkeypatch.setenv(toxicity.ENV_WATCHLIST, "/nonexistent/watchlist.txt")

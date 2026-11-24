@@ -352,19 +352,21 @@ def render_token_budgets(events: list[dict[str, Any]]) -> list[str]:
 
 def render_harness_interventions(events: list[dict[str, Any]]) -> list[str]:
     lines: list[str] = []
-    last_budget = None
+    last_message = None
     for event in events:
         payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
         content = payload.get("content")
-        if event.get("event_type") in {"token_budget", "harness_feedback"}:
-            if content:
-                lines.append(f"- {content}")
-                if event.get("event_type") == "token_budget":
-                    last_budget = content
-        elif event.get("event_type") == "message" and event.get("harness") and content:
-            # Budget feedback sent as a new message is already listed from its budget event.
-            if content != last_budget:
-                lines.append(f"- {content}")
+        event_type = event.get("event_type")
+        if not content:
+            continue
+        if event_type == "message" and event.get("harness"):
+            lines.append(f"- {content}")
+            last_message = content
+        # Budget feedback sent as a new message is recorded just before its budget event.
+        elif event_type == "harness_feedback" or (
+            event_type == "token_budget" and content != last_message
+        ):
+            lines.append(f"- {content}")
     return lines
 
 
@@ -520,6 +522,12 @@ def render_call(name: str, arguments: dict[str, Any]) -> list[str]:
 
 
 def render_result(name: str, result: dict[str, Any], max_results: int) -> list[str]:
+    # A call rejected before it ran; submit_pathway renders its rejection below.
+    if result.get("error") == "invalid_tool_call" and name != "submit_pathway":
+        return [
+            "**Result:** not run (invalid tool call)",
+            f"- Issues: `{json.dumps(result.get('issues') or [], sort_keys=True)}`",
+        ]
     if name == "similarity":
         lines = [
             f"**Result:** valid `{str(bool(result.get('valid'))).lower()}`, "
@@ -751,8 +759,11 @@ def collect_tool_exchanges(events: list[dict[str, Any]]) -> list[dict[str, Any]]
         if event_type == "tool_call":
             exchange = {
                 "name": name,
-                # What the tool received, after defaults and with harness-owned fields removed.
-                "arguments": payload.get("dispatch_arguments", payload.get("arguments", {})),
+                # What the tool received, after defaults and with harness-owned fields removed;
+                # a call whose arguments failed to parse never ran, so show what was sent.
+                "arguments": payload.get("arguments", {})
+                if payload.get("argument_error")
+                else payload.get("dispatch_arguments", payload.get("arguments", {})),
                 "argument_coercions": payload.get("argument_coercions") or [],
                 "result": None,
             }
