@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from synclaw import __version__
 from synclaw.core import db
 from synclaw.core.toxicity import ToxicityConfig
 from synclaw.rollout.loop import call_local_tool
@@ -382,7 +383,7 @@ def create_server(
     except ImportError as exc:
         raise RuntimeError(
             "The MCP SDK is not installed. Install this package with the 'mcp' "
-            "extra, for example: pip install -e '.[mcp]'."
+            "extra, for example: pip install 'synclaw[mcp]'."
         ) from exc
 
     db.require_prepared_building_block_search(db_path)
@@ -410,7 +411,7 @@ def create_server(
                 for tool in await super().list_tools()
             ]
 
-    server = SynClawMCP("bionemo-synclaw-server")
+    server = SynClawMCP("bionemo-synclaw-server", version=__version__)
     for tool in TOOL_SCHEMAS:
         _register_tool(server, executor, tool["function"])
     return server
