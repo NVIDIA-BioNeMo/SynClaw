@@ -21,12 +21,19 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from rdkit import Chem
+
 from synclaw.core import chem, fingerprint_index
 from synclaw.core.libraries import (
     BUNDLED_REACTION_SOURCE,
     LibrarySelection,
     bundled_reaction_library_versions,
     normalize_libraries,
+)
+from synclaw.core.structures import (
+    apply_multicomponent,
+    check_multicomponent_policy,
+    open_structures,
 )
 
 # Search tuning.
@@ -586,13 +593,19 @@ def ingest_building_blocks(
     source_path: str | Path,
     db_path: str | Path,
     batch_size: int = 1000,
+    *,
+    file_format: str = "text",
+    multicomponent: str = "keep",
 ) -> dict[str, int | str]:
-    """Load a SMILES text file into SQLite.
+    """Load a building-block file into SQLite.
 
-    The expected file shape is one SMILES per line with an optional `SMILES`
-    header. Invalid rows are recorded in `import_errors`.
+    ``file_format`` is ``text`` (one SMILES per line, optional ``SMILES`` header), ``smi`` (a
+    SMILES then an optional ID) or ``sdf``; a ``.gz`` file is read compressed. ``multicomponent``
+    keeps salts and mixtures as given, reduces each to its ``major`` component, or ``drop``s it.
+    Unreadable rows are recorded in `import_errors`.
     """
 
+    check_multicomponent_policy(multicomponent)
     init_db(db_path)
     source = Path(source_path)
     source_name = str(source)
@@ -602,19 +615,30 @@ def ingest_building_blocks(
         "inserted": 0,
         "duplicates": 0,
         "invalid": 0,
+        "multicomponent_dropped": 0,
     }
     rows: list[tuple[str, str, str | None, int | None, str, str]] = []
     errors: list[tuple[str, int, str, str, str]] = []
 
-    with session(db_path) as conn, source.open("r", encoding="utf-8") as handle:
-        for line_number, raw_line in enumerate(handle, start=1):
-            value = raw_line.strip()
-            if not value:
-                continue
-            if line_number == 1 and value.lower() == "smiles":
-                continue
+    with (
+        session(db_path) as conn,
+        open_structures(source, file_format) as (_, _, structures),
+    ):
+        for line_number, _source_id, mol, text in structures:
             stats["read"] = int(stats["read"]) + 1
-            result = chem.validate_smiles(value)
+            if mol is not None:
+                reduced, _ = apply_multicomponent(mol, multicomponent)
+                if reduced is None:
+                    stats["multicomponent_dropped"] = int(stats["multicomponent_dropped"]) + 1
+                    continue
+                # The SMILES as supplied, unless a reduction or the SDF format leaves none.
+                value = text if reduced is mol and text else Chem.MolToSmiles(reduced)
+                result = chem.validate_smiles(value)
+            else:
+                value, result = (
+                    text,
+                    {"valid": False, "error": "RDKit could not read the structure"},
+                )
             if not result["valid"]:
                 stats["invalid"] = int(stats["invalid"]) + 1
                 errors.append((source_name, line_number, value, str(result["error"]), now_iso()))

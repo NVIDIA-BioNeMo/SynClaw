@@ -15,6 +15,7 @@ from typing import Any
 from synclaw import __version__, paths
 from synclaw.core import chem, db, toxicity
 from synclaw.core.reactions import ingest_reaction_libraries, ingest_reaction_templates
+from synclaw.core.structures import MULTICOMPONENT_POLICIES, STRUCTURE_FORMATS
 from synclaw.evaluation.evaluate import evaluate_trace_file, write_summary_csv
 from synclaw.evaluation.results import combine_summary_csvs
 from synclaw.rollout import policy
@@ -22,12 +23,7 @@ from synclaw.rollout.loop import call_local_tool
 from synclaw.runners import model_runner
 from synclaw.tasks.datasets import generate_llm_taskset, parse_budget_set
 from synclaw.tasks.emolecules import prepare_emolecules_building_blocks
-from synclaw.tasks.matrix import (
-    ATOM_MAP_POLICIES,
-    DEFAULT_CHUNK_SIZE,
-    MULTICOMPONENT_POLICIES,
-    build_matrix_directory,
-)
+from synclaw.tasks.matrix import ATOM_MAP_POLICIES, DEFAULT_CHUNK_SIZE, build_matrix_directory
 from synclaw.tasks.public_data import (
     PUBLIC_DATA_FILES,
     download_public_data,
@@ -91,9 +87,28 @@ def build_parser() -> argparse.ArgumentParser:
     )
     db_prepare_search.set_defaults(func=_cmd_db_prepare_search)
 
-    ingest = sub.add_parser("ingest-bbs", help="Import building-block SMILES into SQLite")
-    ingest.add_argument("source")
+    ingest = sub.add_parser("ingest-bbs", help="Import building blocks into SQLite")
+    ingest.add_argument("source", help="Building-block file; a .gz file is read compressed")
     _add_db_argument(ingest)
+    ingest.add_argument(
+        "--format",
+        dest="file_format",
+        choices=STRUCTURE_FORMATS,
+        default="text",
+        help=(
+            "text: one SMILES per line, optional SMILES header (default); smi: a SMILES then an "
+            "optional ID, as in vendor catalogs; sdf: mol blocks, other fields ignored"
+        ),
+    )
+    ingest.add_argument(
+        "--multicomponent",
+        choices=MULTICOMPONENT_POLICIES,
+        default="keep",
+        help=(
+            "Salts and mixtures: keep as given (default), keep the largest component by heavy "
+            "atoms, or drop them"
+        ),
+    )
     ingest.set_defaults(func=_cmd_ingest_bbs)
 
     ingest_reactions = sub.add_parser("ingest-reactions", help="Import reaction templates")
@@ -490,7 +505,9 @@ def _cmd_db_stats(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def _cmd_ingest_bbs(args: argparse.Namespace) -> dict[str, Any]:
-    return db.ingest_building_blocks(args.source, args.db)
+    return db.ingest_building_blocks(
+        args.source, args.db, file_format=args.file_format, multicomponent=args.multicomponent
+    )
 
 
 def _cmd_ingest_reactions(args: argparse.Namespace) -> dict[str, Any]:

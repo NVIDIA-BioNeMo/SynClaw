@@ -87,8 +87,8 @@ uv run synclaw ingest-bbs data/building_blocks/common_reagent_building_blocks.tx
 uv run synclaw db prepare-search --db var/synclaw.sqlite
 ```
 
-**For real runs**, prepare and import the eMolecules catalog, or import any file of one SMILES per
-line with `ingest-bbs`. `--release` names a dated eMolecules release. See
+**For real runs**, prepare and import the eMolecules catalog, or import your own file with
+`ingest-bbs` (`--format text|smi|sdf`, and `--multicomponent` to reduce or drop salts; see `--help`). `--release` names a dated eMolecules release. See
 [Building-Block Catalogs](#building-block-catalogs) for details:
 
 ```bash

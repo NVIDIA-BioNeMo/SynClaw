@@ -316,7 +316,7 @@ class EmoleculesTests(unittest.TestCase):
             with gzip.open(source, "wt", encoding="utf-8", newline="\n") as handle:
                 handle.write("isosmiles version_id parent_id\n")
 
-            with self.assertRaisesRegex(RuntimeError, "no compounds"):
+            with self.assertRaisesRegex(RuntimeError, "no readable compounds"):
                 convert_emolecules_archive(source, root / "out.txt", invalid_path=root / "i.tsv")
             self.assertFalse((root / "out.txt").exists())
 
