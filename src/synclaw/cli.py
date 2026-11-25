@@ -275,8 +275,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Dated eMolecules release to download; releases are retired over time, so there is no default",
     )
     emolecules.add_argument(
+        "--archive",
+        choices=["parent", "version"],
+        help=(
+            "Which archive to convert: parent (salts and solvates stripped) or version (as "
+            "supplied). Default: parent, or version for a release with no parent file"
+        ),
+    )
+    emolecules.add_argument(
         "--source-url",
-        help="Override the release's parent.smi.gz URL",
+        help="Override the archive's download URL (no fallback is tried)",
     )
     emolecules.add_argument(
         "--dest-root",
@@ -572,6 +580,7 @@ def _cmd_prepare_emolecules_bbs(args: argparse.Namespace) -> dict[str, Any]:
     return prepare_emolecules_building_blocks(
         dest_root=args.dest_root,
         release=args.release,
+        archive=args.archive,
         source_url=args.source_url,
         multicomponent=args.multicomponent,
         force=args.force,
