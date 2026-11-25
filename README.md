@@ -88,8 +88,8 @@ uv run synclaw db prepare-search --db var/synclaw.sqlite
 ```
 
 **For real runs**, prepare and import the eMolecules catalog, or import your own file with
-`ingest-bbs` (SMILES or SDF, detected from the file, and `--multicomponent` to reduce or drop salts; see `--help`). `--release` names a dated eMolecules release. Then add the
-[common reagents](#common-reagents), which purchasable catalogs omit. See
+`ingest-bbs` (SMILES or SDF, detected from the file, and `--multicomponent` to reduce or drop salts; see `--help`). `--release` names a dated eMolecules release. We recommend adding
+[common reagents](#common-reagents), which purchasable catalogs typically omit. See
 [Building-Block Catalogs](#building-block-catalogs) for details:
 
 ```bash
