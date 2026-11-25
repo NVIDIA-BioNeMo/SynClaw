@@ -13,6 +13,7 @@ from rdkit import Chem
 
 from synclaw.core import db
 from synclaw.tasks.emolecules import (
+    EmptyArchive,
     convert_emolecules_archive,
     prepare_emolecules_building_blocks,
 )
@@ -310,9 +311,23 @@ class EmoleculesTests(unittest.TestCase):
             root = Path(tmp)
             source = _write_gz(root / "version.smi.gz", "isosmiles version_id parent_id\n")
 
-            with self.assertRaisesRegex(RuntimeError, "no readable compounds"):
+            with self.assertRaises(EmptyArchive):
                 convert_emolecules_archive(source, root / "out.txt", invalid_path=root / "i.tsv")
             self.assertFalse((root / "out.txt").exists())
+
+    def test_an_archive_of_unreadable_rows_is_an_error_not_a_fallback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            parent = _write_gz(root / "parent.smi.gz", "isosmiles parent_id\nnot-a-smiles 1\n")
+            requested = []
+            with patch(URLOPEN, side_effect=_release({"parent.smi.gz": parent}, requested)):
+                with self.assertRaisesRegex(RuntimeError, "no readable compounds") as caught:
+                    prepare_emolecules_building_blocks(
+                        dest_root=root / "destination", release="2026-10-01"
+                    )
+
+            self.assertNotIsInstance(caught.exception, EmptyArchive)
+            self.assertEqual(requested, ["parent.smi.gz"])
 
 
 if __name__ == "__main__":

@@ -16,6 +16,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 # RDKit directly rather than synclaw.core.chem: validate_smiles also computes an
 # InChIKey per molecule, which this catalog-sized stream discards.
@@ -92,7 +93,9 @@ def prepare_emolecules_building_blocks(
     formats = (file_format,) if file_format else STRUCTURE_FORMATS
     if source_url:
         kinds = (archive or "parent",)
-        formats = (file_format or ("sdf" if source_url.endswith(".sdf.gz") else "smiles"),)
+        formats = (
+            file_format or ("sdf" if urlsplit(source_url).path.endswith(".sdf.gz") else "smiles"),
+        )
     candidates = [(kind, fmt) for fmt in formats for kind in kinds]
     destination_dir = Path(dest_root) / "data" / "building_blocks" / "emolecules"
     destination_dir.mkdir(parents=True, exist_ok=True)
@@ -287,8 +290,10 @@ def convert_emolecules_archive(
             # A boundary that falls on the last row has no next iteration to report it.
             if source_rows and source_rows % CONVERT_PROGRESS_INTERVAL == 0:
                 report()
-            if valid_rows == 0:
-                raise EmptyArchive(f"{source} has no readable compounds")
+            if source_rows == 0:
+                raise EmptyArchive(f"{source} has no compounds")
+            if valid_rows == 0:  # Not a fallback case: the archive is there but unusable.
+                raise RuntimeError(f"{source} has no readable compounds")
 
         os.replace(output_temporary, destination)
         os.replace(invalid_temporary, invalid_destination)

@@ -114,9 +114,13 @@ def _sdf_rows(handle: Any) -> tuple[str, str, Iterator[Row]]:
     def rows() -> Iterator[Row]:
         lines: list[str] = []
         first_line = 1
-        for number, line in enumerate(handle, start=1):
+        # A closing "$$$$" ends a final record whose file omits it; an empty buffer is no record.
+        for number, line in enumerate(itertools.chain(handle, ["$$$$\n"]), start=1):
             if not line.startswith("$$$$"):
                 lines.append(line)
+                continue
+            if not any(text.strip() for text in lines):
+                lines, first_line = [], number + 1
                 continue
             end = next((i for i, text in enumerate(lines) if text.startswith("M  END")), None)
             mol = Chem.MolFromMolBlock("".join(lines[: end + 1])) if end is not None else None

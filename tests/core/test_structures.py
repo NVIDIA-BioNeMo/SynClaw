@@ -72,3 +72,11 @@ def test_ingest_applies_the_salt_policy_whatever_the_format(tmp_path, files, pol
         stored = {row[0] for row in conn.execute("SELECT canonical_smiles FROM building_blocks")}
     assert stored == expected
     assert stats["multicomponent_dropped"] == (1 if policy == "drop" else 0)
+
+
+def test_a_final_sdf_record_without_its_terminator_is_still_read(tmp_path):
+    unterminated = tmp_path / "unterminated.sdf"
+    unterminated.write_text(_sdf(SMILES).removesuffix("$$$$\n"))
+
+    with open_structures(unterminated) as (_, _, rows):
+        assert [Chem.MolToSmiles(mol) for _, _, mol, _ in rows] == ["CCO", "CCN.Cl"]
