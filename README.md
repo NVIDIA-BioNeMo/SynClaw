@@ -88,13 +88,16 @@ uv run synclaw db prepare-search --db var/synclaw.sqlite
 ```
 
 **For real runs**, prepare and import the eMolecules catalog, or import your own file with
-`ingest-bbs` (SMILES or SDF, detected from the file, and `--multicomponent` to reduce or drop salts; see `--help`). `--release` names a dated eMolecules release. See
+`ingest-bbs` (SMILES or SDF, detected from the file, and `--multicomponent` to reduce or drop salts; see `--help`). `--release` names a dated eMolecules release. Then add the
+[common reagents](#common-reagents), which purchasable catalogs omit. See
 [Building-Block Catalogs](#building-block-catalogs) for details:
 
 ```bash
 uv run synclaw prepare-emolecules-bbs --release <YYYY-MM-DD>
 uv run synclaw ingest-bbs \
   data/building_blocks/emolecules/emolecules_<YYYY-MM-DD>.txt \
+  --db var/synclaw.sqlite
+uv run synclaw ingest-bbs data/building_blocks/common_reagent_building_blocks.txt \
   --db var/synclaw.sqlite
 uv run synclaw db prepare-search --db var/synclaw.sqlite
 ```
@@ -151,8 +154,9 @@ instead, use the [MCP server](#mcp-server).
 Purchasable catalogs omit commodity reagents such as water, methyl iodide and acetic anhydride, so
 templates that need them cannot be grounded. `data/building_blocks/common_reagent_building_blocks.txt`
 supplies 37 of them as neutral forms (hydrazine for its hydrate, for example). Import it like any
-building-block file, with `ingest-bbs` and then `db prepare-search`. It is opt-in, so compare
-planning runs only across stocks built the same way.
+building-block file, with `ingest-bbs` and then `db prepare-search`. The real-run commands above
+include it; leave it out for a catalog-only stock, and compare planning runs only across stocks
+built the same way.
 
 ## Reaction Templates
 
