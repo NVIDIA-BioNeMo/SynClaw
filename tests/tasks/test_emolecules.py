@@ -253,11 +253,61 @@ class EmoleculesTests(unittest.TestCase):
                         prepare_emolecules_building_blocks(
                             dest_root=root, release="2026-10-01", archive=archive
                         )
-            self.assertEqual(requested, ["parent.smi.gz", "version.smi.gz"])
-            with self.assertRaisesRegex(RuntimeError, "archive must be one of"):
-                prepare_emolecules_building_blocks(
-                    dest_root=root, release="2026-10-01", archive="bogus"
+            self.assertEqual(
+                requested, ["parent.smi.gz", "parent.sdf.gz", "version.smi.gz", "version.sdf.gz"]
+            )
+            for bad in ({"archive": "bogus"}, {"file_format": "bogus"}):
+                with self.assertRaisesRegex(RuntimeError, "must be one of"):
+                    prepare_emolecules_building_blocks(dest_root=root, release="2026-10-01", **bad)
+
+    def test_a_release_with_only_an_sdf_archive_is_read_from_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sdf = root / "version.sdf.gz"
+            with gzip.open(sdf, "wt", encoding="utf-8", newline="\n") as handle:
+                for smiles, identifier in [("CCN.Cl", "1"), ("CCN", "2"), ("C[C@H](O)F", "3")]:
+                    block = Chem.MolToMolBlock(Chem.MolFromSmiles(smiles))
+                    handle.write(
+                        f"{block}>  <EMOL_VERSION_ID>\n{identifier}\n\n"
+                        f"> <EMOL_PARENT_ID>\n{identifier}\n\n$$$$\n"
+                    )
+                # A record whose mol block cannot be read is logged, not fatal.
+                handle.write("broken\nM  END\n>  <EMOL_VERSION_ID>\n4\n\n$$$$\n")
+            stub = root / "stub.smi.gz"
+            with gzip.open(stub, "wt", encoding="utf-8", newline="\n") as handle:
+                handle.write("isosmiles version_id parent_id\n")
+            requested = []
+
+            def serve(request, **_kwargs):
+                name = request.full_url.rsplit("/", 1)[1]
+                requested.append(name)
+                if name == "version.smi.gz":
+                    return stub.open("rb")  # published, but empty
+                if name == "version.sdf.gz":
+                    return sdf.open("rb")
+                raise urllib.error.HTTPError(request.full_url, 404, "Not Found", {}, None)
+
+            with patch("synclaw.tasks.emolecules.urllib.request.urlopen", side_effect=serve):
+                result = prepare_emolecules_building_blocks(
+                    dest_root=root / "destination", release="2026-10-01"
                 )
+
+            self.assertEqual(
+                requested,
+                ["parent.smi.gz", "version.smi.gz", "parent.sdf.gz", "version.sdf.gz"],
+            )
+            self.assertEqual((result["archive"], result["file_format"]), ("version", "sdf"))
+            expected = Chem.MolToSmiles(Chem.MolFromSmiles("C[C@H](O)F"))
+            self.assertEqual(
+                Path(result["output"]).read_text(encoding="utf-8").splitlines(),
+                ["SMILES", "CCN", expected],
+            )
+            self.assertEqual(
+                (result["source_rows"], result["invalid_rows"], result["duplicate_rows"]), (4, 1, 1)
+            )
+            invalid = Path(result["invalid_output"]).read_text(encoding="utf-8").splitlines()
+            self.assertEqual(invalid[0], "source_line\tid\tstructure")
+            self.assertTrue(invalid[1].endswith("\t4\t<unreadable mol block>"))
 
     def test_an_archive_with_a_header_but_no_compounds_is_an_error(self):
         with tempfile.TemporaryDirectory() as tmp:

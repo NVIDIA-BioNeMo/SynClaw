@@ -279,12 +279,21 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["parent", "version"],
         help=(
             "Which archive to convert: parent (salts and solvates stripped) or version (as "
-            "supplied). Default: parent, or version for a release with no parent file"
+            "supplied). Default: parent, then version if the release has no usable parent file"
+        ),
+    )
+    emolecules.add_argument(
+        "--format",
+        dest="file_format",
+        choices=["smi", "sdf"],
+        help=(
+            "Which file format: smi (small) or sdf (about twenty times larger). Default: smi, "
+            "then sdf if the release has no usable smi file"
         ),
     )
     emolecules.add_argument(
         "--source-url",
-        help="Override the archive's download URL (no fallback is tried)",
+        help="Override the archive's download URL (nothing else is tried)",
     )
     emolecules.add_argument(
         "--dest-root",
@@ -581,6 +590,7 @@ def _cmd_prepare_emolecules_bbs(args: argparse.Namespace) -> dict[str, Any]:
         dest_root=args.dest_root,
         release=args.release,
         archive=args.archive,
+        file_format=args.file_format,
         source_url=args.source_url,
         multicomponent=args.multicomponent,
         force=args.force,
