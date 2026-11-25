@@ -87,14 +87,17 @@ uv run synclaw ingest-bbs data/building_blocks/common_reagent_building_blocks.tx
 uv run synclaw db prepare-search --db var/synclaw.sqlite
 ```
 
-**For real runs**, prepare and import the eMolecules catalog, or import any file of one SMILES per
-line with `ingest-bbs`. `--release` names a dated eMolecules release. See
+**For real runs**, prepare and import the eMolecules catalog, or import your own file with
+`ingest-bbs` (SMILES or SDF, detected from the file, and `--multicomponent` to reduce or drop salts; see `--help`). `--release` names a dated eMolecules release. We recommend adding
+[common reagents](#common-reagents), which purchasable catalogs typically omit. See
 [Building-Block Catalogs](#building-block-catalogs) for details:
 
 ```bash
 uv run synclaw prepare-emolecules-bbs --release <YYYY-MM-DD>
 uv run synclaw ingest-bbs \
-  data/building_blocks/emolecules/emolecules_parent_<YYYY-MM-DD>.txt \
+  data/building_blocks/emolecules/emolecules_<YYYY-MM-DD>.txt \
+  --db var/synclaw.sqlite
+uv run synclaw ingest-bbs data/building_blocks/common_reagent_building_blocks.txt \
   --db var/synclaw.sqlite
 uv run synclaw db prepare-search --db var/synclaw.sqlite
 ```
@@ -214,12 +217,16 @@ file after editing it. A library used in a model run must have family metadata f
 
 See the [Quick Start](#2-add-building-blocks) for instructions to create a building-block database.
 
-`prepare-emolecules-bbs` downloads the eMolecules parent archive, validates and canonicalizes
+`prepare-emolecules-bbs` downloads an eMolecules archive, validates and canonicalizes
 each structure with RDKit (keeping isomeric SMILES), removes duplicates, and writes hashes and
-rejected rows (`_invalid.tsv`) beside the output. Salts and other multi-component SMILES (about 1%
-of a recent release) are reduced by default to their largest component by heavy atoms (`--multicomponent major`);
+rejected rows (`_invalid.tsv`) beside the output. Salts and other multi-component SMILES
+are reduced by default to their largest component by heavy atoms (`--multicomponent major`);
 `--multicomponent keep` leaves them as shipped and `--multicomponent drop` removes them. The policy applies
-before de-duplication, and changing it reconverts the release. Raw and derived files stay under the
+before de-duplication, and changing it reconverts the release. The archive is the `parent` file
+(salts and solvates stripped), or the `version` file (as supplied) for a release that publishes
+no usable parent file, and the SMILES file (`.smi.gz`) or, failing that, the SDF file
+(`.sdf.gz`). `--archive parent|version`
+and `--format smiles|sdf` choose explicitly; anything left unset is tried in that order. Raw and derived files stay under the
 git-ignored `data/building_blocks/`; do not commit or redistribute them. De-duplication holds every
 canonical SMILES in memory, so preparation is CPU- and memory-hungry. Catalog size varies between
 releases, and converting the same release twice gives the same `output_sha256`.
@@ -300,7 +307,7 @@ headed `SMILES` (or `isosmiles`), optionally gzipped, whose first column is the 
 ```bash
 uv run synclaw prepare-emolecules-bbs --release <YYYY-MM-DD>
 uv run synclaw build-matrix \
-  --building-blocks data/building_blocks/emolecules/emolecules_parent_<YYYY-MM-DD>.txt \
+  --building-blocks data/building_blocks/emolecules/emolecules_<YYYY-MM-DD>.txt \
   --output var/reactant_template_matrix
 ```
 

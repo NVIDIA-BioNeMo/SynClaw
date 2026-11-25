@@ -50,6 +50,7 @@ from synclaw.core.libraries import (
     normalize_libraries,
 )
 from synclaw.core.reactions import _rdkit_reaction_modules
+from synclaw.core.structures import apply_multicomponent, check_multicomponent_policy
 from synclaw.tasks.targets import (
     BUILDING_BLOCK_FILE,
     MATRIX_FILE,
@@ -68,7 +69,6 @@ DROPPED_TEMPLATE_FILE = "dropped_templates.tsv"
 COMMON_REAGENT_FILE = paths.DATA_DIR / "building_blocks" / "common_reagent_building_blocks.txt"
 DEFAULT_CHUNK_SIZE = 20_000
 
-MULTICOMPONENT_POLICIES = ("drop", "major", "keep")
 ATOM_MAP_POLICIES = ("drop", "strip", "keep")
 
 
@@ -91,24 +91,6 @@ def sha256_file(path: Path) -> str:
     """Hex SHA-256 of a file's bytes."""
     with open(path, "rb") as handle:
         return hashlib.file_digest(handle, "sha256").hexdigest()
-
-
-def check_multicomponent_policy(policy: str) -> None:
-    """Raise ``ValueError`` unless ``policy`` is one of ``MULTICOMPONENT_POLICIES``."""
-    if policy not in MULTICOMPONENT_POLICIES:
-        raise ValueError(f"multicomponent must be one of {MULTICOMPONENT_POLICIES}")
-
-
-def major_component(mol: Any) -> Any:
-    """The component the ``major`` policy keeps: most heavy atoms, ties broken by canonical SMILES.
-
-    Ties are common (about a quarter of the multi-component rows in eMolecules), so they are broken
-    by canonical SMILES rather than by component order.
-    """
-    from rdkit import Chem
-
-    components = Chem.GetMolFrags(mol, asMols=True)
-    return min(components, key=lambda part: (-part.GetNumHeavyAtoms(), Chem.MolToSmiles(part)))
 
 
 # --------------------------------------------------------------------------- templates
@@ -211,13 +193,11 @@ def _canonicalize(task: tuple[list[str], str, str]) -> list[tuple[str, str]]:
             if atom_maps == "strip":
                 for atom in mol.GetAtoms():
                     atom.SetAtomMapNum(0)
-        canonical = Chem.MolToSmiles(mol, canonical=True, isomericSmiles=True)
-        if "." in canonical and multicomponent != "keep":
-            if multicomponent == "drop":
-                out.append(("", "multicomponent"))
-                continue
-            canonical = Chem.MolToSmiles(major_component(mol), canonical=True, isomericSmiles=True)
-        out.append((canonical, "ok"))
+        mol, _ = apply_multicomponent(mol, multicomponent)
+        if mol is None:
+            out.append(("", "multicomponent"))
+            continue
+        out.append((Chem.MolToSmiles(mol, canonical=True, isomericSmiles=True), "ok"))
     return out
 
 

@@ -68,11 +68,15 @@ def validate_smiles(smiles: str | None) -> dict[str, Any]:
             "properties": {},
         }
 
-    canonical = Chem.MolToSmiles(mol, canonical=True)
+    return validate_mol(mol, raw)
+
+
+def validate_mol(mol: Any, raw: str = "") -> dict[str, Any]:
+    """The ``validate_smiles`` result for a molecule that has already parsed."""
     return {
         "input": raw,
         "valid": True,
-        "canonical_smiles": canonical,
+        "canonical_smiles": Chem.MolToSmiles(mol, canonical=True),
         "error": None,
         "properties": {
             "heavy_atom_count": int(mol.GetNumHeavyAtoms()),

@@ -16,52 +16,124 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 # RDKit directly rather than synclaw.core.chem: validate_smiles also computes an
 # InChIKey per molecule, which this catalog-sized stream discards.
 from rdkit import Chem, RDLogger, rdBase
 
-from synclaw.tasks.matrix import check_multicomponent_policy, major_component, sha256_file
+from synclaw.core.structures import (
+    STRUCTURE_FORMATS,
+    apply_multicomponent,
+    check_multicomponent_policy,
+    open_structures,
+)
+from synclaw.tasks.matrix import sha256_file
 
 EMOLECULES_DOWNLOAD_ROOT = "https://downloads.emolecules.com/orderbb"
+ARCHIVE_KINDS = ("parent", "version")
+_EXTENSION = {"smiles": "smi", "sdf": "sdf"}  # eMolecules' file names
 _RELEASE_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}")
-
-ProgressCallback = Callable[[dict[str, Any]], None]
 CONVERT_PROGRESS_INTERVAL = 100_000
 RDLogger.DisableLog("rdApp.*")
+
+ProgressCallback = Callable[[dict[str, Any]], None]
+
+
+class ArchiveNotFound(RuntimeError):
+    """The release has no such archive (HTTP 404)."""
+
+
+class EmptyArchive(RuntimeError):
+    """The archive holds no compounds."""
 
 
 def prepare_emolecules_building_blocks(
     *,
     dest_root: str | Path = ".",
     release: str,
+    archive: str | None = None,
+    file_format: str | None = None,
     source_url: str | None = None,
     multicomponent: str = "major",
     force: bool = False,
     timeout: float = 60.0,
     progress: ProgressCallback | None = None,
 ) -> dict[str, Any]:
-    """Download and convert an eMolecules parent archive for ``synclaw ingest-bbs``.
+    """Download and convert an eMolecules archive for ``synclaw ingest-bbs``.
+
+    ``archive`` picks ``parent`` or ``version`` (the supplier's compounds with salts and solvates
+    kept) and ``file_format`` picks ``smiles`` or ``sdf``. Whatever is left unset is tried in turn:
+    parent before version, and the SMILES files before the much larger SDF files. A candidate
+    that the release does not have (HTTP 404) or that holds no compounds is skipped for the next;
+    the last one's failure is raised. ``source_url`` replaces the download URL and tries nothing
+    else.
 
     The derived file contains a ``SMILES`` header followed by one canonical
-    isomeric SMILES per line. Parent IDs are intentionally omitted because the
+    isomeric SMILES per line. The IDs are intentionally omitted because the
     BioNeMo-SynClaw importer expects the complete line to be a SMILES value.
     ``multicomponent`` sets how salts and mixtures are handled: ``keep`` them as
     shipped, reduce each to its ``major`` (largest by heavy atoms) component, or
     ``drop`` them.
+
+    Raises:
+        RuntimeError: A bad release, archive or policy; a download failure; or no archive with
+            compounds.
     """
 
     check_multicomponent_policy(multicomponent)
     if _RELEASE_PATTERN.fullmatch(release) is None:
         raise RuntimeError("eMolecules release must use YYYY-MM-DD format")
+    if archive is not None and archive not in ARCHIVE_KINDS:
+        raise RuntimeError(f"eMolecules archive must be one of {', '.join(ARCHIVE_KINDS)}")
+    if file_format is not None and file_format not in STRUCTURE_FORMATS:
+        raise RuntimeError(f"eMolecules file format must be one of {', '.join(STRUCTURE_FORMATS)}")
 
-    url = source_url or f"{EMOLECULES_DOWNLOAD_ROOT}/{release}/parent.smi.gz"
+    kinds = (archive,) if archive else ARCHIVE_KINDS
+    formats = (file_format,) if file_format else STRUCTURE_FORMATS
+    if source_url:
+        kinds = (archive or "parent",)
+        formats = (
+            file_format or ("sdf" if urlsplit(source_url).path.endswith(".sdf.gz") else "smiles"),
+        )
+    candidates = [(kind, fmt) for fmt in formats for kind in kinds]
     destination_dir = Path(dest_root) / "data" / "building_blocks" / "emolecules"
-    archive_path = destination_dir / f"parent_{release}.smi.gz"
-    output_path = destination_dir / f"emolecules_parent_{release}.txt"
-    invalid_path = destination_dir / f"emolecules_parent_{release}_invalid.tsv"
-    manifest_path = destination_dir / f"emolecules_parent_{release}_manifest.json"
     destination_dir.mkdir(parents=True, exist_ok=True)
+
+    options = {"multicomponent": multicomponent, "force": force, "timeout": timeout}
+    for kind, fmt in candidates[:-1]:
+        try:
+            return _prepare_archive(
+                destination_dir, release, kind, fmt, source_url, progress=progress, **options
+            )
+        except (ArchiveNotFound, EmptyArchive) as exc:
+            _emit(
+                progress, phase="skipped", archive=f"{kind}.{_EXTENSION[fmt]}.gz", reason=str(exc)
+            )
+    kind, fmt = candidates[-1]
+    return _prepare_archive(
+        destination_dir, release, kind, fmt, source_url, progress=progress, **options
+    )
+
+
+def _prepare_archive(
+    destination_dir: Path,
+    release: str,
+    kind: str,
+    fmt: str,
+    source_url: str | None,
+    *,
+    multicomponent: str,
+    force: bool,
+    timeout: float,
+    progress: ProgressCallback | None,
+) -> dict[str, Any]:
+    name = f"{kind}.{_EXTENSION[fmt]}.gz"
+    url = source_url or f"{EMOLECULES_DOWNLOAD_ROOT}/{release}/{name}"
+    archive_path = destination_dir / f"{kind}_{release}.{_EXTENSION[fmt]}.gz"
+    output_path = destination_dir / f"emolecules_{release}.txt"
+    invalid_path = destination_dir / f"emolecules_{release}_invalid.tsv"
+    manifest_path = destination_dir / f"emolecules_{release}_manifest.json"
 
     downloaded = False
     if force or not archive_path.exists():
@@ -93,7 +165,7 @@ def prepare_emolecules_building_blocks(
 
     if not downloaded:
         _validate_gzip(archive_path)  # A download was validated before it replaced the archive.
-    stats = convert_emolecules_parent_archive(
+    stats = convert_emolecules_archive(
         archive_path,
         output_path,
         invalid_path=invalid_path,
@@ -102,6 +174,8 @@ def prepare_emolecules_building_blocks(
     )
     manifest = {
         "release": release,
+        "archive": kind,
+        "file_format": fmt,
         "source_url": url,
         "source_archive": str(archive_path),
         "source_sha256": source_sha256,
@@ -123,7 +197,7 @@ def prepare_emolecules_building_blocks(
     }
 
 
-def convert_emolecules_parent_archive(
+def convert_emolecules_archive(
     archive_path: str | Path,
     output_path: str | Path,
     *,
@@ -131,10 +205,16 @@ def convert_emolecules_parent_archive(
     multicomponent: str = "major",
     progress: ProgressCallback | None = None,
 ) -> dict[str, int]:
-    """Convert ``parent.smi.gz`` to one validated, de-duplicated SMILES per line.
+    """Convert an eMolecules ``.smi.gz`` or ``.sdf.gz`` archive to one SMILES per line.
 
-    The multicomponent policy applies before canonical de-duplication, so a salt reduced
+    A SMILES row is a SMILES followed by its IDs (a parent ID, or a version ID and a parent ID).
+    An SDF record is a mol block with ``EMOL_VERSION_ID`` and ``EMOL_PARENT_ID`` tags. The
+    multicomponent policy applies before canonical de-duplication, so a salt reduced
     to a component that is already a row counts as a duplicate.
+
+    Raises:
+        EmptyArchive: The archive has no compounds.
+        RuntimeError: The archive is malformed.
     """
 
     check_multicomponent_policy(multicomponent)
@@ -158,16 +238,16 @@ def convert_emolecules_parent_archive(
 
     try:
         with (
-            gzip.open(source, "rt", encoding="utf-8") as source_handle,
+            open_structures(source) as (
+                id_column,
+                structure_column,
+                rows,
+            ),
             output_temporary.open("w", encoding="utf-8", newline="\n") as output_handle,
             invalid_temporary.open("w", encoding="utf-8", newline="\n") as invalid_handle,
         ):
-            header = source_handle.readline().strip().split()
-            if not header or header[0].lower() not in {"smiles", "isosmiles"}:
-                raise RuntimeError(f"Unexpected eMolecules parent header: {header!r}")
-
             output_handle.write("SMILES\n")
-            invalid_handle.write("source_line\tparent_id\tisosmiles\n")
+            invalid_handle.write(f"source_line\t{id_column}\t{structure_column}\n")
 
             def report() -> None:
                 _emit(
@@ -179,35 +259,23 @@ def convert_emolecules_parent_archive(
                     duplicate_rows=duplicate_rows,
                 )
 
-            for source_line, raw_line in enumerate(source_handle, start=2):
+            for source_line, source_id, mol, text in rows:
                 # Report before the row is classified so invalid and duplicate rows,
                 # which `continue` below, cannot skip a boundary.
                 if source_rows and source_rows % CONVERT_PROGRESS_INTERVAL == 0:
                     report()
                 source_rows += 1
-                fields = raw_line.strip().split()
-                if len(fields) < 2:
-                    invalid_rows += 1
-                    invalid_handle.write(f"{source_line}\t\t{raw_line.strip()}\n")
-                    continue
-
-                input_smiles, parent_id = fields[0], fields[1]
-                mol = Chem.MolFromSmiles(input_smiles)
                 if mol is None:
                     invalid_rows += 1
-                    invalid_handle.write(f"{source_line}\t{parent_id}\t{input_smiles}\n")
+                    invalid_handle.write(f"{source_line}\t{source_id}\t{text}\n")
                     continue
 
                 valid_rows += 1
-                if "." in input_smiles:
-                    components = Chem.GetMolFrags(mol, asMols=True)
-                    if len(components) > 1:
-                        multicomponent_rows += 1
-                        if multicomponent == "drop":
-                            multicomponent_dropped += 1
-                            continue
-                        if multicomponent == "major":
-                            mol = major_component(mol)
+                mol, multicomponent_row = apply_multicomponent(mol, multicomponent)
+                multicomponent_rows += multicomponent_row
+                if mol is None:
+                    multicomponent_dropped += 1
+                    continue
                 canonical_smiles = Chem.MolToSmiles(
                     mol,
                     canonical=True,
@@ -222,6 +290,10 @@ def convert_emolecules_parent_archive(
             # A boundary that falls on the last row has no next iteration to report it.
             if source_rows and source_rows % CONVERT_PROGRESS_INTERVAL == 0:
                 report()
+            if source_rows == 0:
+                raise EmptyArchive(f"{source} has no compounds")
+            if valid_rows == 0:  # Not a fallback case: the archive is there but unusable.
+                raise RuntimeError(f"{source} has no readable compounds")
 
         os.replace(output_temporary, destination)
         os.replace(invalid_temporary, invalid_destination)
@@ -252,7 +324,8 @@ def _download_archive(url: str, destination: Path, *, timeout: float) -> None:
         os.replace(temporary, destination)
     except Exception as exc:
         temporary.unlink(missing_ok=True)
-        raise RuntimeError(f"Could not download eMolecules archive from {url}: {exc}") from exc
+        failure = ArchiveNotFound if getattr(exc, "code", None) == 404 else RuntimeError
+        raise failure(f"Could not download eMolecules archive from {url}: {exc}") from exc
 
 
 def _validate_gzip(path: Path) -> None:

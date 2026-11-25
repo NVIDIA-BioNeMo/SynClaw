@@ -15,19 +15,15 @@ from typing import Any
 from synclaw import __version__, paths
 from synclaw.core import chem, db, toxicity
 from synclaw.core.reactions import ingest_reaction_libraries, ingest_reaction_templates
+from synclaw.core.structures import MULTICOMPONENT_POLICIES, STRUCTURE_FORMATS
 from synclaw.evaluation.evaluate import evaluate_trace_file, write_summary_csv
 from synclaw.evaluation.results import combine_summary_csvs
 from synclaw.rollout import policy
 from synclaw.rollout.loop import call_local_tool
 from synclaw.runners import model_runner
 from synclaw.tasks.datasets import generate_llm_taskset, parse_budget_set
-from synclaw.tasks.emolecules import prepare_emolecules_building_blocks
-from synclaw.tasks.matrix import (
-    ATOM_MAP_POLICIES,
-    DEFAULT_CHUNK_SIZE,
-    MULTICOMPONENT_POLICIES,
-    build_matrix_directory,
-)
+from synclaw.tasks.emolecules import ARCHIVE_KINDS, prepare_emolecules_building_blocks
+from synclaw.tasks.matrix import ATOM_MAP_POLICIES, DEFAULT_CHUNK_SIZE, build_matrix_directory
 from synclaw.tasks.public_data import (
     PUBLIC_DATA_FILES,
     download_public_data,
@@ -91,9 +87,27 @@ def build_parser() -> argparse.ArgumentParser:
     )
     db_prepare_search.set_defaults(func=_cmd_db_prepare_search)
 
-    ingest = sub.add_parser("ingest-bbs", help="Import building-block SMILES into SQLite")
-    ingest.add_argument("source")
+    ingest = sub.add_parser("ingest-bbs", help="Import building blocks into SQLite")
+    ingest.add_argument("source", help="Building-block file; a .gz file is read compressed")
     _add_db_argument(ingest)
+    ingest.add_argument(
+        "--format",
+        dest="file_format",
+        choices=STRUCTURE_FORMATS,
+        help=(
+            "smiles: one SMILES per line, optionally followed by an ID, with an optional header; "
+            "sdf: mol blocks, other fields ignored. Default: detected from the file"
+        ),
+    )
+    ingest.add_argument(
+        "--multicomponent",
+        choices=MULTICOMPONENT_POLICIES,
+        default="keep",
+        help=(
+            "Salts and mixtures: keep as given (default), keep the largest component by heavy "
+            "atoms, or drop them"
+        ),
+    )
     ingest.set_defaults(func=_cmd_ingest_bbs)
 
     ingest_reactions = sub.add_parser("ingest-reactions", help="Import reaction templates")
@@ -275,8 +289,25 @@ def build_parser() -> argparse.ArgumentParser:
         help="Dated eMolecules release to download; releases are retired over time, so there is no default",
     )
     emolecules.add_argument(
+        "--archive",
+        choices=ARCHIVE_KINDS,
+        help=(
+            "Which archive to convert: parent (salts and solvates stripped) or version (as "
+            "supplied). Default: parent, then version if the release has no usable parent file"
+        ),
+    )
+    emolecules.add_argument(
+        "--format",
+        dest="file_format",
+        choices=STRUCTURE_FORMATS,
+        help=(
+            "Which file format: smiles or sdf. Default: smiles, then sdf if the release has "
+            "no usable smiles file"
+        ),
+    )
+    emolecules.add_argument(
         "--source-url",
-        help="Override the release's parent.smi.gz URL",
+        help="Override the archive's download URL (nothing else is tried)",
     )
     emolecules.add_argument(
         "--dest-root",
@@ -473,7 +504,9 @@ def _cmd_db_stats(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def _cmd_ingest_bbs(args: argparse.Namespace) -> dict[str, Any]:
-    return db.ingest_building_blocks(args.source, args.db)
+    return db.ingest_building_blocks(
+        args.source, args.db, file_format=args.file_format, multicomponent=args.multicomponent
+    )
 
 
 def _cmd_ingest_reactions(args: argparse.Namespace) -> dict[str, Any]:
@@ -572,6 +605,8 @@ def _cmd_prepare_emolecules_bbs(args: argparse.Namespace) -> dict[str, Any]:
     return prepare_emolecules_building_blocks(
         dest_root=args.dest_root,
         release=args.release,
+        archive=args.archive,
+        file_format=args.file_format,
         source_url=args.source_url,
         multicomponent=args.multicomponent,
         force=args.force,
