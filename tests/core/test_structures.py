@@ -11,7 +11,7 @@ import pytest
 from rdkit import Chem
 
 from synclaw.core import db
-from synclaw.core.structures import open_structures
+from synclaw.core.structures import detect_format, open_structures
 
 SMILES = ["CCO", "CCN.Cl"]
 
@@ -41,28 +41,33 @@ def files(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "name, file_format, ids",
-    [
-        ("text", "text", ["", ""]),
-        ("gz", "text", ["", ""]),
-        ("smi", "smi", ["1", "2"]),
-        ("sdf", "sdf", ["1", "2"]),
-    ],
+    "name, ids",
+    [("text", ["", ""]), ("gz", ["", ""]), ("smi", ["1", "2"]), ("sdf", ["1", "2"])],
 )
-def test_every_format_reads_the_same_molecules(files, name, file_format, ids):
-    with open_structures(files[name], file_format) as (_, _, rows):
+def test_every_format_is_detected_and_reads_the_same_molecules(files, name, ids):
+    with open_structures(files[name]) as (_, _, rows):
         read = [(source_id, Chem.MolToSmiles(mol)) for _, source_id, mol, _ in rows]
 
     assert read == list(zip(ids, ["CCO", "CCN.Cl"], strict=True))
+
+
+def test_an_sdf_is_recognised_by_its_content_and_a_wrong_choice_is_loud(tmp_path, files):
+    misnamed = tmp_path / "catalog.txt"
+    misnamed.write_text(files["sdf"].read_text())
+    assert detect_format(misnamed) == "sdf"
+    assert detect_format(files["text"]) == "smiles"
+
+    stats = db.ingest_building_blocks(misnamed, tmp_path / "bb.sqlite")
+    assert stats["inserted"] == 2
+    with pytest.raises(RuntimeError, match="unreadable"):
+        db.ingest_building_blocks(misnamed, tmp_path / "wrong.sqlite", file_format="smiles")
 
 
 @pytest.mark.parametrize(
     "policy, expected", [("keep", {"CCO", "CCN.Cl"}), ("major", {"CCO", "CCN"}), ("drop", {"CCO"})]
 )
 def test_ingest_applies_the_salt_policy_whatever_the_format(tmp_path, files, policy, expected):
-    stats = db.ingest_building_blocks(
-        files["sdf"], tmp_path / "bb.sqlite", file_format="sdf", multicomponent=policy
-    )
+    stats = db.ingest_building_blocks(files["sdf"], tmp_path / "bb.sqlite", multicomponent=policy)
 
     with closing(sqlite3.connect(tmp_path / "bb.sqlite")) as conn:
         stored = {row[0] for row in conn.execute("SELECT canonical_smiles FROM building_blocks")}

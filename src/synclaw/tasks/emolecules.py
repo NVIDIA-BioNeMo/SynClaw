@@ -243,7 +243,7 @@ def convert_emolecules_archive(
 
     try:
         with (
-            open_structures(source, "sdf" if source.name.endswith(".sdf.gz") else "smi") as (
+            open_structures(source) as (
                 id_column,
                 structure_column,
                 rows,

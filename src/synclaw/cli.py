@@ -94,10 +94,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--format",
         dest="file_format",
         choices=STRUCTURE_FORMATS,
-        default="text",
         help=(
-            "text: one SMILES per line, optional SMILES header (default); smi: a SMILES then an "
-            "optional ID, as in vendor catalogs; sdf: mol blocks, other fields ignored"
+            "smiles: one SMILES per line, optionally followed by an ID, with an optional header; "
+            "sdf: mol blocks, other fields ignored. Default: detected from the file"
         ),
     )
     ingest.add_argument(

@@ -17,7 +17,7 @@ from rdkit import Chem, RDLogger
 
 RDLogger.DisableLog("rdApp.*")
 
-STRUCTURE_FORMATS = ("text", "smi", "sdf")
+STRUCTURE_FORMATS = ("smiles", "sdf")
 MULTICOMPONENT_POLICIES = ("drop", "major", "keep")
 
 # One input row: its line number, the supplier's ID, the molecule (None if unreadable), and its
@@ -52,26 +52,45 @@ def apply_multicomponent(mol: Any, policy: str) -> tuple[Any, bool]:
     return (major_component(mol) if policy == "major" else mol), True
 
 
-@contextmanager
-def open_structures(path: str | Path, file_format: str) -> Iterator[tuple[str, str, Iterator[Row]]]:
-    """Open a ``text``, ``smi`` or ``sdf`` file (read compressed if it ends in ``.gz``).
-
-    Yields the ID column's name, the structure column's name and the rows. ``text`` is one SMILES
-    per line; ``smi`` is a SMILES then an optional ID; either may start with a ``SMILES`` or
-    ``isosmiles`` header. ``sdf`` is mol blocks, whose ``EMOL_VERSION_ID`` or ``EMOL_PARENT_ID``
-    field is the ID.
-    """
-    if file_format not in STRUCTURE_FORMATS:
-        raise ValueError(f"file format must be one of {STRUCTURE_FORMATS}")
-    with (
+def _open(path: str | Path) -> Any:
+    return (
         gzip.open(path, "rt", encoding="utf-8")
         if str(path).endswith(".gz")
-        else open(path, encoding="utf-8") as handle
-    ):
-        yield _sdf_rows(handle) if file_format == "sdf" else _smiles_rows(handle, file_format)
+        else open(path, encoding="utf-8")
+    )
 
 
-def _smiles_rows(handle: Any, file_format: str) -> tuple[str, str, Iterator[Row]]:
+def detect_format(path: str | Path) -> str:
+    """``sdf`` if the name says so or the first lines hold a mol-block marker, else ``smiles``."""
+    if re.search(r"\.sdf(\.gz)?$", str(path), re.IGNORECASE):
+        return "sdf"
+    with _open(path) as handle:
+        head = list(itertools.islice(handle, 40))
+    marked = any(
+        "V2000" in line or "V3000" in line or line.startswith(("M  END", "$$$$")) for line in head
+    )
+    return "sdf" if marked else "smiles"
+
+
+@contextmanager
+def open_structures(
+    path: str | Path, file_format: str | None = None
+) -> Iterator[tuple[str, str, Iterator[Row]]]:
+    """Open a ``smiles`` or ``sdf`` file, read compressed if it ends in ``.gz``.
+
+    ``file_format`` is detected from the file if unset. Yields the ID column's name, the
+    structure column's name and the rows. A ``smiles`` row is a SMILES then an optional ID, and
+    the file may start with a ``SMILES`` or ``isosmiles`` header. An ``sdf`` record is a mol block
+    whose ``EMOL_VERSION_ID`` or ``EMOL_PARENT_ID`` field is the ID.
+    """
+    file_format = file_format or detect_format(path)
+    if file_format not in STRUCTURE_FORMATS:
+        raise ValueError(f"file format must be one of {STRUCTURE_FORMATS}")
+    with _open(path) as handle:
+        yield _sdf_rows(handle) if file_format == "sdf" else _smiles_rows(handle)
+
+
+def _smiles_rows(handle: Any) -> tuple[str, str, Iterator[Row]]:
     first = handle.readline()
     head = first.split()
     has_header = bool(head) and head[0].lower() in {"smiles", "isosmiles"}
@@ -81,11 +100,15 @@ def _smiles_rows(handle: Any, file_format: str) -> tuple[str, str, Iterator[Row]
             fields = line.split()
             if not fields or (number == 1 and has_header):
                 continue
-            source_id = fields[1] if file_format == "smi" and len(fields) > 1 else ""
-            yield number, source_id, Chem.MolFromSmiles(fields[0]), fields[0]
+            yield (
+                number,
+                fields[1] if len(fields) > 1 else "",
+                Chem.MolFromSmiles(fields[0]),
+                fields[0],
+            )
 
-    id_column = head[1] if has_header and file_format == "smi" and len(head) > 1 else "id"
-    return id_column, "isosmiles" if file_format == "smi" else "smiles", rows()
+    id_column = head[1] if has_header and len(head) > 1 else "id"
+    return id_column, head[0] if has_header else "smiles", rows()
 
 
 def _sdf_rows(handle: Any) -> tuple[str, str, Iterator[Row]]:

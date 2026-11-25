@@ -594,15 +594,18 @@ def ingest_building_blocks(
     db_path: str | Path,
     batch_size: int = 1000,
     *,
-    file_format: str = "text",
+    file_format: str | None = None,
     multicomponent: str = "keep",
 ) -> dict[str, int | str]:
     """Load a building-block file into SQLite.
 
-    ``file_format`` is ``text`` (one SMILES per line, optional ``SMILES`` header), ``smi`` (a
-    SMILES then an optional ID) or ``sdf``; a ``.gz`` file is read compressed. ``multicomponent``
-    keeps salts and mixtures as given, reduces each to its ``major`` component, or ``drop``s it.
-    Unreadable rows are recorded in `import_errors`.
+    ``file_format`` is ``smiles`` (one SMILES per line, optional ID and header) or ``sdf``, found
+    from the file if unset; a ``.gz`` file is read compressed. ``multicomponent`` keeps salts and
+    mixtures as given, reduces each to its ``major`` component, or ``drop``s it. Unreadable rows
+    are recorded in `import_errors`.
+
+    Raises:
+        RuntimeError: Every row was unreadable, which usually means the wrong format.
     """
 
     check_multicomponent_policy(multicomponent)
@@ -682,6 +685,11 @@ def ingest_building_blocks(
                 """,
                 errors,
             )
+    if stats["read"] and stats["invalid"] == stats["read"]:
+        raise RuntimeError(
+            f"Every row of {source_name} was unreadable; is it a SMILES or SDF file? "
+            "Pass --format if it was misdetected."
+        )
     return stats
 
 
