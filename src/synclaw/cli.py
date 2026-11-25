@@ -22,7 +22,7 @@ from synclaw.rollout import policy
 from synclaw.rollout.loop import call_local_tool
 from synclaw.runners import model_runner
 from synclaw.tasks.datasets import generate_llm_taskset, parse_budget_set
-from synclaw.tasks.emolecules import prepare_emolecules_building_blocks
+from synclaw.tasks.emolecules import ARCHIVE_KINDS, prepare_emolecules_building_blocks
 from synclaw.tasks.matrix import ATOM_MAP_POLICIES, DEFAULT_CHUNK_SIZE, build_matrix_directory
 from synclaw.tasks.public_data import (
     PUBLIC_DATA_FILES,
@@ -290,7 +290,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     emolecules.add_argument(
         "--archive",
-        choices=["parent", "version"],
+        choices=ARCHIVE_KINDS,
         help=(
             "Which archive to convert: parent (salts and solvates stripped) or version (as "
             "supplied). Default: parent, then version if the release has no usable parent file"
@@ -299,10 +299,10 @@ def build_parser() -> argparse.ArgumentParser:
     emolecules.add_argument(
         "--format",
         dest="file_format",
-        choices=["smi", "sdf"],
+        choices=STRUCTURE_FORMATS,
         help=(
-            "Which file format: smi (small) or sdf (about twenty times larger). Default: smi, "
-            "then sdf if the release has no usable smi file"
+            "Which file format: smiles (small) or sdf (about twenty times larger). Default: "
+            "smiles, then sdf if the release has no usable smiles file"
         ),
     )
     emolecules.add_argument(

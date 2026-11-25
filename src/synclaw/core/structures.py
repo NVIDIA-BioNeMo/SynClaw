@@ -94,21 +94,20 @@ def _smiles_rows(handle: Any) -> tuple[str, str, Iterator[Row]]:
     first = handle.readline()
     head = first.split()
     has_header = bool(head) and head[0].lower() in {"smiles", "isosmiles"}
+    lines = handle if has_header else itertools.chain([first], handle)
 
     def rows() -> Iterator[Row]:
-        for number, line in enumerate(itertools.chain([first], handle), start=1):
+        for number, line in enumerate(lines, start=2 if has_header else 1):
             fields = line.split()
-            if not fields or (number == 1 and has_header):
-                continue
-            yield (
-                number,
-                fields[1] if len(fields) > 1 else "",
-                Chem.MolFromSmiles(fields[0]),
-                fields[0],
-            )
+            if fields:
+                source_id = fields[1] if len(fields) > 1 else ""
+                yield number, source_id, Chem.MolFromSmiles(fields[0]), fields[0]
 
-    id_column = head[1] if has_header and len(head) > 1 else "id"
-    return id_column, head[0] if has_header else "smiles", rows()
+    return (
+        head[1] if has_header and len(head) > 1 else "id",
+        head[0] if has_header else "smiles",
+        rows(),
+    )
 
 
 def _sdf_rows(handle: Any) -> tuple[str, str, Iterator[Row]]:
@@ -121,14 +120,12 @@ def _sdf_rows(handle: Any) -> tuple[str, str, Iterator[Row]]:
                 continue
             end = next((i for i, text in enumerate(lines) if text.startswith("M  END")), None)
             mol = Chem.MolFromMolBlock("".join(lines[: end + 1])) if end is not None else None
-            # The version ID if the record has one, else the parent ID.
-            record_id = ""
-            for index, text in enumerate(lines[end or 0 :], start=end or 0):
-                tag = _SDF_ID_TAG.match(text)
-                if tag and (tag.group(1) == "VERSION" or not record_id):
-                    record_id = lines[index + 1].strip()
-                    if tag.group(1) == "VERSION":
-                        break
+            ids = {
+                m[1]: lines[i + 1].strip()
+                for i, t in enumerate(lines)
+                if (m := _SDF_ID_TAG.match(t))
+            }
+            record_id = ids.get("VERSION") or ids.get("PARENT", "")
             yield first_line, record_id, mol, "" if mol else "<unreadable mol block>"
             lines = []
             first_line = number + 1

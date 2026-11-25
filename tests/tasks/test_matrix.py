@@ -278,7 +278,8 @@ def test_load_template_records_reports_a_missing_template_file(
 def test_build_matrix_and_emolecules_keep_the_same_major_component(salt):
     from rdkit import Chem
 
-    from synclaw.tasks.matrix import _canonicalize, major_component
+    from synclaw.core.structures import major_component
+    from synclaw.tasks.matrix import _canonicalize
 
     expected = Chem.MolToSmiles(major_component(Chem.MolFromSmiles(salt)))
 

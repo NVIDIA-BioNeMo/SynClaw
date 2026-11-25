@@ -226,7 +226,7 @@ before de-duplication, and changing it reconverts the release. The archive is th
 (salts and solvates stripped), or the `version` file (as supplied) for a release that publishes
 no usable parent file, and the SMILES file (`.smi.gz`) or, failing that, the much larger SDF file
 (`.sdf.gz`, about twenty times the size and several minutes to read). `--archive parent|version`
-and `--format smi|sdf` choose explicitly; anything left unset is tried in that order. Raw and derived files stay under the
+and `--format smiles|sdf` choose explicitly; anything left unset is tried in that order. Raw and derived files stay under the
 git-ignored `data/building_blocks/`; do not commit or redistribute them. De-duplication holds every
 canonical SMILES in memory, so preparation is CPU- and memory-hungry. Catalog size varies between
 releases, and converting the same release twice gives the same `output_sha256`.

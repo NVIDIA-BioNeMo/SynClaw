@@ -50,7 +50,7 @@ from synclaw.core.libraries import (
     normalize_libraries,
 )
 from synclaw.core.reactions import _rdkit_reaction_modules
-from synclaw.core.structures import check_multicomponent_policy, major_component
+from synclaw.core.structures import apply_multicomponent, check_multicomponent_policy
 from synclaw.tasks.targets import (
     BUILDING_BLOCK_FILE,
     MATRIX_FILE,
@@ -193,13 +193,11 @@ def _canonicalize(task: tuple[list[str], str, str]) -> list[tuple[str, str]]:
             if atom_maps == "strip":
                 for atom in mol.GetAtoms():
                     atom.SetAtomMapNum(0)
-        canonical = Chem.MolToSmiles(mol, canonical=True, isomericSmiles=True)
-        if "." in canonical and multicomponent != "keep":
-            if multicomponent == "drop":
-                out.append(("", "multicomponent"))
-                continue
-            canonical = Chem.MolToSmiles(major_component(mol), canonical=True, isomericSmiles=True)
-        out.append((canonical, "ok"))
+        mol, _ = apply_multicomponent(mol, multicomponent)
+        if mol is None:
+            out.append(("", "multicomponent"))
+            continue
+        out.append((Chem.MolToSmiles(mol, canonical=True, isomericSmiles=True), "ok"))
     return out
 
 

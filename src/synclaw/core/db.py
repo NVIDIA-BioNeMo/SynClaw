@@ -21,8 +21,6 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from rdkit import Chem
-
 from synclaw.core import chem, fingerprint_index
 from synclaw.core.libraries import (
     BUNDLED_REACTION_SOURCE,
@@ -629,19 +627,18 @@ def ingest_building_blocks(
     ):
         for line_number, _source_id, mol, text in structures:
             stats["read"] = int(stats["read"]) + 1
-            if mol is not None:
-                reduced, _ = apply_multicomponent(mol, multicomponent)
-                if reduced is None:
-                    stats["multicomponent_dropped"] = int(stats["multicomponent_dropped"]) + 1
-                    continue
-                # The SMILES as supplied, unless a reduction or the SDF format leaves none.
-                value = text if reduced is mol and text else Chem.MolToSmiles(reduced)
-                result = chem.validate_smiles(value)
-            else:
+            if mol is None:
                 value, result = (
                     text,
                     {"valid": False, "error": "RDKit could not read the structure"},
                 )
+            elif (reduced := apply_multicomponent(mol, multicomponent)[0]) is None:
+                stats["multicomponent_dropped"] = int(stats["multicomponent_dropped"]) + 1
+                continue
+            else:
+                result = chem.validate_mol(reduced)
+                # The SMILES as supplied, unless a salt reduction or the SDF format leaves none.
+                value = text if reduced is mol and text else result["canonical_smiles"]
             if not result["valid"]:
                 stats["invalid"] = int(stats["invalid"]) + 1
                 errors.append((source_name, line_number, value, str(result["error"]), now_iso()))

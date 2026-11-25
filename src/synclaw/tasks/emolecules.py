@@ -22,6 +22,7 @@ from typing import Any
 from rdkit import Chem, RDLogger, rdBase
 
 from synclaw.core.structures import (
+    STRUCTURE_FORMATS,
     apply_multicomponent,
     check_multicomponent_policy,
     open_structures,
@@ -29,13 +30,11 @@ from synclaw.core.structures import (
 from synclaw.tasks.matrix import sha256_file
 
 EMOLECULES_DOWNLOAD_ROOT = "https://downloads.emolecules.com/orderbb"
-# "parent" is the supplier's compound with salts and solvates stripped; "version" keeps them. The
-# SMILES files are small and the SDF files about twenty times larger. Unless told otherwise, the
-# first of parent.smi, version.smi, parent.sdf and version.sdf that exists and holds compounds is
-# used.
 ARCHIVE_KINDS = ("parent", "version")
-ARCHIVE_FORMATS = ("smi", "sdf")
+_EXTENSION = {"smiles": "smi", "sdf": "sdf"}  # eMolecules' file names
 _RELEASE_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}")
+CONVERT_PROGRESS_INTERVAL = 100_000
+RDLogger.DisableLog("rdApp.*")
 
 ProgressCallback = Callable[[dict[str, Any]], None]
 
@@ -46,10 +45,6 @@ class ArchiveNotFound(RuntimeError):
 
 class EmptyArchive(RuntimeError):
     """The archive holds no compounds."""
-
-
-CONVERT_PROGRESS_INTERVAL = 100_000
-RDLogger.DisableLog("rdApp.*")
 
 
 def prepare_emolecules_building_blocks(
@@ -67,7 +62,7 @@ def prepare_emolecules_building_blocks(
     """Download and convert an eMolecules archive for ``synclaw ingest-bbs``.
 
     ``archive`` picks ``parent`` or ``version`` (the supplier's compounds with salts and solvates
-    kept) and ``file_format`` picks ``smi`` or ``sdf``. Whatever is left unset is tried in turn:
+    kept) and ``file_format`` picks ``smiles`` or ``sdf``. Whatever is left unset is tried in turn:
     parent before version, and the SMILES files before the much larger SDF files. A candidate
     that the release does not have (HTTP 404) or that holds no compounds is skipped for the next;
     the last one's failure is raised. ``source_url`` replaces the download URL and tries nothing
@@ -90,52 +85,49 @@ def prepare_emolecules_building_blocks(
         raise RuntimeError("eMolecules release must use YYYY-MM-DD format")
     if archive is not None and archive not in ARCHIVE_KINDS:
         raise RuntimeError(f"eMolecules archive must be one of {', '.join(ARCHIVE_KINDS)}")
-    if file_format is not None and file_format not in ARCHIVE_FORMATS:
-        raise RuntimeError(f"eMolecules file format must be one of {', '.join(ARCHIVE_FORMATS)}")
+    if file_format is not None and file_format not in STRUCTURE_FORMATS:
+        raise RuntimeError(f"eMolecules file format must be one of {', '.join(STRUCTURE_FORMATS)}")
 
+    kinds = (archive,) if archive else ARCHIVE_KINDS
+    formats = (file_format,) if file_format else STRUCTURE_FORMATS
     if source_url:
         kinds = (archive or "parent",)
-        formats = (file_format or ("sdf" if source_url.endswith(".sdf.gz") else "smi"),)
-    else:
-        kinds = (archive,) if archive else ARCHIVE_KINDS
-        formats = (file_format,) if file_format else ARCHIVE_FORMATS
+        formats = (file_format or ("sdf" if source_url.endswith(".sdf.gz") else "smiles"),)
     candidates = [(kind, fmt) for fmt in formats for kind in kinds]
     destination_dir = Path(dest_root) / "data" / "building_blocks" / "emolecules"
     destination_dir.mkdir(parents=True, exist_ok=True)
 
-    for kind, fmt in candidates:
+    options = {"multicomponent": multicomponent, "force": force, "timeout": timeout}
+    for kind, fmt in candidates[:-1]:
         try:
             return _prepare_archive(
-                destination_dir,
-                release=release,
-                kind=kind,
-                fmt=fmt,
-                url=source_url or f"{EMOLECULES_DOWNLOAD_ROOT}/{release}/{kind}.{fmt}.gz",
-                multicomponent=multicomponent,
-                force=force,
-                timeout=timeout,
-                progress=progress,
+                destination_dir, release, kind, fmt, source_url, progress=progress, **options
             )
         except (ArchiveNotFound, EmptyArchive) as exc:
-            if (kind, fmt) == candidates[-1]:
-                raise
-            _emit(progress, phase="skipped", archive=f"{kind}.{fmt}.gz", reason=str(exc))
-    raise AssertionError("unreachable")  # candidates is never empty
+            _emit(
+                progress, phase="skipped", archive=f"{kind}.{_EXTENSION[fmt]}.gz", reason=str(exc)
+            )
+    kind, fmt = candidates[-1]
+    return _prepare_archive(
+        destination_dir, release, kind, fmt, source_url, progress=progress, **options
+    )
 
 
 def _prepare_archive(
     destination_dir: Path,
-    *,
     release: str,
     kind: str,
     fmt: str,
-    url: str,
+    source_url: str | None,
+    *,
     multicomponent: str,
     force: bool,
     timeout: float,
     progress: ProgressCallback | None,
 ) -> dict[str, Any]:
-    archive_path = destination_dir / f"{kind}_{release}.{fmt}.gz"
+    name = f"{kind}.{_EXTENSION[fmt]}.gz"
+    url = source_url or f"{EMOLECULES_DOWNLOAD_ROOT}/{release}/{name}"
+    archive_path = destination_dir / f"{kind}_{release}.{_EXTENSION[fmt]}.gz"
     output_path = destination_dir / f"emolecules_{release}.txt"
     invalid_path = destination_dir / f"emolecules_{release}_invalid.tsv"
     manifest_path = destination_dir / f"emolecules_{release}_manifest.json"
@@ -210,7 +202,7 @@ def convert_emolecules_archive(
     multicomponent: str = "major",
     progress: ProgressCallback | None = None,
 ) -> dict[str, int]:
-    """Convert an eMolecules ``.smi.gz`` or ``.sdf.gz`` archive to one validated, de-duplicated SMILES per line.
+    """Convert an eMolecules ``.smi.gz`` or ``.sdf.gz`` archive to one SMILES per line.
 
     A SMILES row is a SMILES followed by its IDs (a parent ID, or a version ID and a parent ID).
     An SDF record is a mol block with ``EMOL_VERSION_ID`` and ``EMOL_PARENT_ID`` tags. The

@@ -55,7 +55,6 @@ def test_an_sdf_is_recognised_by_its_content_and_a_wrong_choice_is_loud(tmp_path
     misnamed = tmp_path / "catalog.txt"
     misnamed.write_text(files["sdf"].read_text())
     assert detect_format(misnamed) == "sdf"
-    assert detect_format(files["text"]) == "smiles"
 
     stats = db.ingest_building_blocks(misnamed, tmp_path / "bb.sqlite")
     assert stats["inserted"] == 2

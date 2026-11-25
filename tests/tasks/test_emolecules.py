@@ -17,6 +17,27 @@ from synclaw.tasks.emolecules import (
     prepare_emolecules_building_blocks,
 )
 
+URLOPEN = "synclaw.tasks.emolecules.urllib.request.urlopen"
+
+
+def _write_gz(path, text):
+    with gzip.open(path, "wt", encoding="utf-8", newline="\n") as handle:
+        handle.write(text)
+    return path
+
+
+def _release(files, requested):
+    """A ``urlopen`` stand-in serving the named files, and a 404 for any other name."""
+
+    def serve(request, **_kwargs):
+        name = request.full_url.rsplit("/", 1)[1]
+        requested.append(name)
+        if name not in files:
+            raise urllib.error.HTTPError(request.full_url, 404, "Not Found", {}, None)
+        return files[name].open("rb")
+
+    return serve
+
 
 class EmoleculesTests(unittest.TestCase):
     def test_convert_progress_reports_every_boundary_including_the_last_row(self):
@@ -210,21 +231,13 @@ class EmoleculesTests(unittest.TestCase):
     def test_a_release_without_a_parent_archive_falls_back_to_the_version_archive(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            fixture = root / "version.smi.gz"
-            with gzip.open(fixture, "wt", encoding="utf-8", newline="\n") as handle:
-                handle.write(
-                    "isosmiles version_id parent_id\nCCN.Cl 1 1\nCCN 2 1\nnot-a-smiles 3 2\n"
-                )
+            version = _write_gz(
+                root / "version.smi.gz",
+                "isosmiles version_id parent_id\nCCN.Cl 1 1\nCCN 2 1\nnot-a-smiles 3 2\n",
+            )
             requested = []
-
-            def serve(request, **_kwargs):
-                requested.append(request.full_url.rsplit("/", 1)[1])
-                if request.full_url.endswith("/parent.smi.gz"):
-                    raise urllib.error.HTTPError(request.full_url, 404, "Not Found", {}, None)
-                return fixture.open("rb")
-
             options = {"dest_root": root / "destination", "release": "2026-10-01"}
-            with patch("synclaw.tasks.emolecules.urllib.request.urlopen", side_effect=serve):
+            with patch(URLOPEN, side_effect=_release({"version.smi.gz": version}, requested)):
                 first = prepare_emolecules_building_blocks(**options)
                 second = prepare_emolecules_building_blocks(**options)
 
@@ -238,63 +251,46 @@ class EmoleculesTests(unittest.TestCase):
             self.assertTrue(invalid.startswith("source_line\tversion_id\tisosmiles\n"))
             self.assertIn("4\t3\tnot-a-smiles", invalid)
 
-    def test_an_explicit_archive_is_never_replaced_by_another(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            requested = []
-
-            def missing(request, **_kwargs):
-                requested.append(request.full_url.rsplit("/", 1)[1])
-                raise urllib.error.HTTPError(request.full_url, 404, "Not Found", {}, None)
-
+    def test_an_explicit_choice_is_never_replaced_by_another_archive(self):
+        requested = []
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            patch(URLOPEN, side_effect=_release({}, requested)),
+        ):
             for archive in ("parent", "version"):
-                with patch("synclaw.tasks.emolecules.urllib.request.urlopen", side_effect=missing):
-                    with self.assertRaisesRegex(RuntimeError, "Could not download"):
-                        prepare_emolecules_building_blocks(
-                            dest_root=root, release="2026-10-01", archive=archive
-                        )
+                with self.assertRaisesRegex(RuntimeError, "Could not download"):
+                    prepare_emolecules_building_blocks(
+                        dest_root=tmp, release="2026-10-01", archive=archive
+                    )
             self.assertEqual(
                 requested, ["parent.smi.gz", "parent.sdf.gz", "version.smi.gz", "version.sdf.gz"]
             )
             for bad in ({"archive": "bogus"}, {"file_format": "bogus"}):
                 with self.assertRaisesRegex(RuntimeError, "must be one of"):
-                    prepare_emolecules_building_blocks(dest_root=root, release="2026-10-01", **bad)
+                    prepare_emolecules_building_blocks(dest_root=tmp, release="2026-10-01", **bad)
 
     def test_a_release_with_only_an_sdf_archive_is_read_from_it(self):
+        records = [
+            f"{Chem.MolToMolBlock(Chem.MolFromSmiles(smiles))}>  <EMOL_VERSION_ID>\n{i}\n\n$$$$\n"
+            for i, smiles in [(1, "CCN.Cl"), (2, "CCN"), (3, "C[C@H](O)F")]
+        ]
+        # A record whose mol block cannot be read is logged, not fatal.
+        records.append("broken\nM  END\n>  <EMOL_VERSION_ID>\n4\n\n$$$$\n")
+        requested = []
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            sdf = root / "version.sdf.gz"
-            with gzip.open(sdf, "wt", encoding="utf-8", newline="\n") as handle:
-                for smiles, identifier in [("CCN.Cl", "1"), ("CCN", "2"), ("C[C@H](O)F", "3")]:
-                    block = Chem.MolToMolBlock(Chem.MolFromSmiles(smiles))
-                    handle.write(
-                        f"{block}>  <EMOL_VERSION_ID>\n{identifier}\n\n"
-                        f"> <EMOL_PARENT_ID>\n{identifier}\n\n$$$$\n"
-                    )
-                # A record whose mol block cannot be read is logged, not fatal.
-                handle.write("broken\nM  END\n>  <EMOL_VERSION_ID>\n4\n\n$$$$\n")
-            stub = root / "stub.smi.gz"
-            with gzip.open(stub, "wt", encoding="utf-8", newline="\n") as handle:
-                handle.write("isosmiles version_id parent_id\n")
-            requested = []
-
-            def serve(request, **_kwargs):
-                name = request.full_url.rsplit("/", 1)[1]
-                requested.append(name)
-                if name == "version.smi.gz":
-                    return stub.open("rb")  # published, but empty
-                if name == "version.sdf.gz":
-                    return sdf.open("rb")
-                raise urllib.error.HTTPError(request.full_url, 404, "Not Found", {}, None)
-
-            with patch("synclaw.tasks.emolecules.urllib.request.urlopen", side_effect=serve):
+            files = {
+                "version.sdf.gz": _write_gz(root / "version.sdf.gz", "".join(records)),
+                # Published, but empty.
+                "version.smi.gz": _write_gz(root / "stub.gz", "isosmiles version_id parent_id\n"),
+            }
+            with patch(URLOPEN, side_effect=_release(files, requested)):
                 result = prepare_emolecules_building_blocks(
                     dest_root=root / "destination", release="2026-10-01"
                 )
 
             self.assertEqual(
-                requested,
-                ["parent.smi.gz", "version.smi.gz", "parent.sdf.gz", "version.sdf.gz"],
+                requested, ["parent.smi.gz", "version.smi.gz", "parent.sdf.gz", "version.sdf.gz"]
             )
             self.assertEqual((result["archive"], result["file_format"]), ("version", "sdf"))
             expected = Chem.MolToSmiles(Chem.MolFromSmiles("C[C@H](O)F"))
@@ -312,9 +308,7 @@ class EmoleculesTests(unittest.TestCase):
     def test_an_archive_with_a_header_but_no_compounds_is_an_error(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            source = root / "version.smi.gz"
-            with gzip.open(source, "wt", encoding="utf-8", newline="\n") as handle:
-                handle.write("isosmiles version_id parent_id\n")
+            source = _write_gz(root / "version.smi.gz", "isosmiles version_id parent_id\n")
 
             with self.assertRaisesRegex(RuntimeError, "no readable compounds"):
                 convert_emolecules_archive(source, root / "out.txt", invalid_path=root / "i.tsv")
