@@ -301,8 +301,8 @@ def build_parser() -> argparse.ArgumentParser:
         dest="file_format",
         choices=STRUCTURE_FORMATS,
         help=(
-            "Which file format: smiles (small) or sdf (about twenty times larger). Default: "
-            "smiles, then sdf if the release has no usable smiles file"
+            "Which file format: smiles or sdf. Default: smiles, then sdf if the release has "
+            "no usable smiles file"
         ),
     )
     emolecules.add_argument(

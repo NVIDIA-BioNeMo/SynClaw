@@ -36,8 +36,7 @@ def check_multicomponent_policy(policy: str) -> None:
 def major_component(mol: Any) -> Any:
     """The component the ``major`` policy keeps: most heavy atoms, ties broken by canonical SMILES.
 
-    Ties are common (about a quarter of the multi-component rows in eMolecules), so they are broken
-    by canonical SMILES rather than by component order.
+    Ties are common, so they are broken by canonical SMILES rather than by component order.
     """
     components = Chem.GetMolFrags(mol, asMols=True)
     return min(components, key=lambda part: (-part.GetNumHeavyAtoms(), Chem.MolToSmiles(part)))

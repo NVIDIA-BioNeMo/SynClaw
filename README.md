@@ -219,13 +219,13 @@ See the [Quick Start](#2-add-building-blocks) for instructions to create a build
 
 `prepare-emolecules-bbs` downloads an eMolecules archive, validates and canonicalizes
 each structure with RDKit (keeping isomeric SMILES), removes duplicates, and writes hashes and
-rejected rows (`_invalid.tsv`) beside the output. Salts and other multi-component SMILES (about 1%
-of a recent release) are reduced by default to their largest component by heavy atoms (`--multicomponent major`);
+rejected rows (`_invalid.tsv`) beside the output. Salts and other multi-component SMILES
+are reduced by default to their largest component by heavy atoms (`--multicomponent major`);
 `--multicomponent keep` leaves them as shipped and `--multicomponent drop` removes them. The policy applies
 before de-duplication, and changing it reconverts the release. The archive is the `parent` file
 (salts and solvates stripped), or the `version` file (as supplied) for a release that publishes
-no usable parent file, and the SMILES file (`.smi.gz`) or, failing that, the much larger SDF file
-(`.sdf.gz`, about twenty times the size and several minutes to read). `--archive parent|version`
+no usable parent file, and the SMILES file (`.smi.gz`) or, failing that, the SDF file
+(`.sdf.gz`). `--archive parent|version`
 and `--format smiles|sdf` choose explicitly; anything left unset is tried in that order. Raw and derived files stay under the
 git-ignored `data/building_blocks/`; do not commit or redistribute them. De-duplication holds every
 canonical SMILES in memory, so preparation is CPU- and memory-hungry. Catalog size varies between
