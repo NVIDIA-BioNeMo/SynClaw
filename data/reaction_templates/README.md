@@ -46,8 +46,7 @@ sources, e.g. `synclaw db remove-reactions paroutes nvidia --db <path>`.
 | `synformer paroutes ord nvidia` | 501 |
 
 In all four sources, the template annotations (names, families, descriptions, search terms,
-role queries and caveats) are interpretations of the SMARTS, not ground truth. They are
-hybrid human- and LLM-generated.
+role queries and caveats) are interpretations of the SMARTS, not ground truth.
 
 SMARTS are unchanged from their sources except 18 repaired rules (10 SynFormer, 1 PaRoutes, 7 ORD), listed in
 [SMARTS_REPAIRS.md](SMARTS_REPAIRS.md) with their imported strings kept in
